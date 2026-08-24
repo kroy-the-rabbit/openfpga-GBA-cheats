@@ -6,9 +6,9 @@
         "gba"
       ],
       "shortname": "GBA",
-      "description": "Game Boy Advance",
-      "author": "mincer_ray",
-      "url": "https://github.com/mincer-ray/openfpga-GBA",
+      "description": "Game Boy Advance (cheats)",
+      "author": "kroy",
+      "url": "https://github.com/kroy-the-rabbit/openfpga-GBA-cheats",
       "version": "0.6.2",
       "date_release": "2026-06-16"
     },

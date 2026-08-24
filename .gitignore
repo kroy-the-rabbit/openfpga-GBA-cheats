@@ -26,7 +26,7 @@ src/fpga/apf/build_id.mif
 
 # Build outputs
 bitstream.rbf_r
-pkg/Cores/mincer_ray.GBA/bitstream.rbf_r
+pkg/Cores/kroy.GBA/bitstream.rbf_r
 build_output/
 test_results.txt
 

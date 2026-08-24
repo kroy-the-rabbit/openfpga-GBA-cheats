@@ -20,14 +20,14 @@ jobs:
         run: docker run --rm -v ${{ github.workspace }}:/build -w /build raetro/quartus:21.1 quartus_sh -t generate.tcl
 
       - name: Reverse bitstream
-        run: python3 scripts/reverse_bitstream.py src/fpga/build/output_files/ap_core.rbf pkg/Cores/mincer_ray.GBA/bitstream.rbf_r
+        run: python3 scripts/reverse_bitstream.py src/fpga/build/output_files/ap_core.rbf pkg/Cores/kroy.GBA/bitstream.rbf_r
 
       - name: Package build zip
         run: |
-          VERSION=$(jq -r '.core.metadata.version' pkg/Cores/mincer_ray.GBA/core.json)
+          VERSION=$(jq -r '.core.metadata.version' pkg/Cores/kroy.GBA/core.json)
           BRANCH_NAME="${GITHUB_REF_NAME:-${GITHUB_REF#refs/heads/}}"
           SAFE_BRANCH=$(printf '%s' "$BRANCH_NAME" | sed 's#[^A-Za-z0-9._-]#-#g')
-          PACKAGE_ZIP="mincer_ray.GBA_${SAFE_BRANCH}_${VERSION}.zip"
+          PACKAGE_ZIP="kroy.GBA_${SAFE_BRANCH}_${VERSION}.zip"
           cd pkg
           zip -r "../${PACKAGE_ZIP}" .
           echo "PACKAGE_BRANCH=${SAFE_BRANCH}" >> "$GITHUB_ENV"
