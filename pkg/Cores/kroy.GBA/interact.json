@@ -103,11 +103,26 @@
         "id": 40,
         "type": "check",
         "enabled": true,
-        "address": "0x90",
-        "persist": true,
+        "persist": false,
         "writeonly": true,
-        "defaultval": 1,
-        "value": 1
+        "address": "0x90",
+        "defaultval": "0x00000001",
+        "mask": "0xFFFFFFFE",
+        "value": "0x00000001"
+      },
+      {
+        "name": "CL:",
+        "id": 41,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF3000000"
+      },
+      {
+        "name": "CD:",
+        "id": 42,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF3000004"
       }
     ],
     "messages": []

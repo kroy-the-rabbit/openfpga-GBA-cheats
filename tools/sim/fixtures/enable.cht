@@ -1,0 +1,12 @@
+cheats = 3
+
+cheat0_desc = "switched off in the file"
+cheat0_code = "32001000+0001"
+cheat0_enable = false
+
+cheat1_desc = "switched on in the file"
+cheat1_code = "32001001+0002"
+cheat1_enable = true
+
+cheat2_desc = "no enable key at all, and last in the file"
+cheat2_code = "32001002+0003"

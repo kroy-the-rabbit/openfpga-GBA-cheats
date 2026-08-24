@@ -1,0 +1,17 @@
+cheats = 4
+
+cheat0_desc = "every byte lane of one word"
+cheat0_code = "32000000+0011+32000001+0022+32000002+0033+32000003+0044"
+cheat0_enable = true
+
+cheat1_desc = "both halfword lanes"
+cheat1_code = "82000100+ABCD+82000102+1234"
+cheat1_enable = true
+
+cheat2_desc = "iwram, misaligned byte"
+cheat2_code = "33001235+00FE"
+cheat2_enable = true
+
+cheat3_desc = "io register"
+cheat3_code = "84000004+0055"
+cheat3_enable = true

@@ -1,0 +1,25 @@
+cheats = 6
+
+cheat0_desc = "encrypted GameShark v3"
+cheat0_code = "8212A4CD+CA2569BD+2E8537F2+3D2E74C3+91067FF5+34C9F7CC"
+cheat0_enable = true
+
+cheat1_desc = "CodeBreaker types gba_cheats cannot express"
+cheat1_code = "22000D00+0001+62000D00+0002+E2000D00+0003+F2000D00+0004"
+cheat1_enable = true
+
+cheat2_desc = "master and hook codes"
+cheat2_code = "000084F5+000A+100193C0+0007"
+cheat2_enable = true
+
+cheat3_desc = "ROM, BIOS and save addresses"
+cheat3_code = "38000000+0001+30000100+0002+3E000000+0003"
+cheat3_enable = true
+
+cheat4_desc = "past the end of EWRAM and IWRAM"
+cheat4_code = "32040000+0001+33008000+0002"
+cheat4_enable = true
+
+cheat5_desc = "not hex, and wrong lengths"
+cheat5_code = "N/A+32005CF8XX+3201500+0001"
+cheat5_enable = true

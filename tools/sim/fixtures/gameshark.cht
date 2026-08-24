@@ -1,0 +1,17 @@
+cheats = 4
+
+cheat0_desc = "raw GameShark 8-bit write"
+cheat0_code = "02000900 00000012"
+cheat0_enable = true
+
+cheat1_desc = "raw GameShark 16-bit write"
+cheat1_code = "12000A00 00003456"
+cheat1_enable = true
+
+cheat2_desc = "raw GameShark 32-bit write"
+cheat2_code = "22000B00 89ABCDEF"
+cheat2_enable = true
+
+cheat3_desc = "raw GameShark conditional"
+cheat3_code = "D2000C00 00000077+02000C04 00000009"
+cheat3_enable = true
