@@ -35,3 +35,6 @@ references/*
 reference/*
 
 stresstest.txt
+
+# Local build harness
+build/
