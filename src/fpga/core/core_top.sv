@@ -1344,6 +1344,7 @@ reg [1:0] ff_mode = 0;    // 0 = Hold, 1 = Toggle, 2 = Disabled
 reg force_rtc = 0;        // 0 = Off, 1 = Force enable RTC/GPIO
 reg [1:0] turbo_mode = 0; // 0 = Disabled, 1 = Turbo A, 2 = Turbo B
 reg ff_video_stable = 1'b1; // 0 = Classic FF, 1 = wait for complete rendered lines
+reg cheats_enabled = 1'b1;  // 0 = cheat engine idle, 1 = apply loaded codes each vblank
 
 reg [13:0] reset_counter = 0;
 wire       core_reset = (reset_counter != 0);
@@ -1359,6 +1360,7 @@ always @(posedge clk_74a) begin
         32'h84: force_rtc      <= bridge_wr_data[0];
         32'h88: turbo_mode     <= bridge_wr_data[1:0];
         32'h8C: ff_video_stable <= bridge_wr_data[0];
+        32'h90: cheats_enabled <= bridge_wr_data[0];
         endcase
     end
 end
@@ -1375,6 +1377,69 @@ synch_3 #(.WIDTH(2)) turbo_mode_sync(turbo_mode, turbo_mode_s, clk_sys);
 
 wire ff_video_stable_s;
 synch_3 ff_video_stable_sync(ff_video_stable, ff_video_stable_s, clk_sys);
+
+wire cheats_enabled_s;
+synch_3 cheats_enabled_sync(cheats_enabled, cheats_enabled_s, clk_sys);
+
+// ============================================================
+// Cheat engine feed (gba_cheats.vhd)
+//
+// TEMPORARY P1 SCAFFOLDING. There is no cheat file loader yet; phase P2
+// replaces everything between here and the end of this block with a real
+// data_loader plus cheat_loader.sv. Until then exactly one hardcoded code is
+// pushed into the engine after every reset so a hardware build can answer
+// "did the poke land" and a fit report can answer "is there room".
+//
+// 128-bit cheat word layout, read off src/fpga/gba/gba_cheats.vhd:
+//   [ 31: 0]  replacement value, and the operand for a compare entry
+//   [ 63:32]  not read by the engine
+//   [ 91:64]  28-bit GBA bus address
+//   [ 95:92]  not read
+//   [ 99:96]  optype: 0 always, 1 ==, 2 >, 3 <, 4 >=, 5 <=, 6 !=, F empty slot
+//   [103:100] byte enables for the four bytes of the value
+//   [127:104] not read
+//
+// The hardcoded word below decodes as:
+//   bytemask F  -> all four bytes written
+//   optype   0  -> OPTYPE_ALWAYS, unconditional, no paired compare entry
+//   address  0x5000000 -> BG palette RAM dword 0
+//   value    0x7C1F7C1F -> BGR555 0x7C1F twice, that is R=31 G=0 B=31 magenta
+//
+// So it forces BG palette entries 0 and 1 to magenta once per vblank. That is
+// deliberately not a game specific code: it needs no particular ROM, it proves
+// a real read-modify-write went out over the debug bus into gba_memorymux, and
+// magenta cannot be confused with the black or white screen a hung core gives.
+// Palette entry 0 is the backdrop, entry 1 is the first real colour of the
+// first BG palette, so the effect shows in essentially any common game.
+localparam [127:0] P1_CHEAT_WORD = 128'h000000F0_05000000_00000000_7C1F7C1F;
+
+wire [127:0] cheat_in = P1_CHEAT_WORD;
+
+reg         cheat_clear = 1'b1;
+reg         cheat_on    = 1'b0;
+reg  [9:0]  cheat_boot_cnt = 10'd0;
+
+// reset_gba covers ROM load (dataslot_allcomplete), the interact reset action
+// and PLL loss, so codes never survive a game change.
+always @(posedge clk_sys) begin
+    cheat_on <= 1'b0;
+
+    if (reset_gba) begin
+        cheat_clear    <= 1'b1;
+        cheat_boot_cnt <= 10'd0;
+    end else begin
+        if (cheat_boot_cnt != 10'h3FF)
+            cheat_boot_cnt <= cheat_boot_cnt + 10'd1;
+
+        // hold cheat_clear a while past reset so gba_cheats walks its whole
+        // RESET_CLEAR pass (CHEATCOUNT = 32 cycles) before anything is loaded
+        cheat_clear <= (cheat_boot_cnt < 10'd256);
+
+        // single rising edge on cheat_on clocks P1_CHEAT_WORD into the engine
+        if (cheat_boot_cnt == 10'd512)
+            cheat_on <= 1'b1;
+    end
+end
 
 // ============================================================
 // Section 4: Video Output — framebuffer + raster scan
@@ -1602,6 +1667,12 @@ gba_top #(
     .RTC_timestampOut    ( rtc_timestamp_out ),
     .RTC_savedtimeOut    ( rtc_savedtime_out ),
     .RTC_inuse           ( rtc_inuse ),
+    // Cheats
+    .cheat_clear         ( cheat_clear ),
+    .cheats_enabled      ( cheats_enabled_s ),
+    .cheat_on            ( cheat_on ),
+    .cheat_in            ( cheat_in ),
+    .cheats_active       (),
     // SDRAM (ROM reads — muxed with staging in sdram_pocket section)
     .sdram_read_ena      ( sdram_read_req_gba ),
     .sdram_read_done     ( ss_serving_active ? 1'b0 : sdram_rd_ready ),

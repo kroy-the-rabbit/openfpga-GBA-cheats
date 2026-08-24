@@ -897,6 +897,7 @@ set_global_assignment -name VHDL_FILE ../gba/gba_sound_dma.vhd
 set_global_assignment -name VHDL_FILE ../gba/gba_timer.vhd
 set_global_assignment -name VHDL_FILE ../gba/gba_timer_module.vhd
 set_global_assignment -name VHDL_FILE ../gba/gba_savestates.vhd
+set_global_assignment -name VHDL_FILE ../gba/gba_cheats.vhd
 set_global_assignment -name VHDL_FILE ../gba/gba_gpioRTCSolarGyro.vhd
 set_global_assignment -name VHDL_FILE ../gba/cache.vhd
 
