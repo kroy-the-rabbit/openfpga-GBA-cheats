@@ -136,6 +136,26 @@ occupancy that growth may cost more in routing congestion than the duplication
 buys. If that reasoning holds, H beats G despite disabling a timing
 optimisation. If not, H is clearly worse and the question is closed.
 
+
+## Worktree and branch map
+
+All worktrees are committed and clean. Nothing is pushed to any remote;
+`origin` holds only upstream's `master` and `rumble-support`.
+
+| Worktree (in `~/Desktop/repos/`) | Branch | Tip | Holds |
+|---|---|---|---|
+| `pocket-gba` | `cheats` | (tip) | harness, docs, P1. The integration branch. |
+| `pocket-gba-loader` | `p2-cheat-loader` | `c7aebd5` | P1+P2 merged. The design that fails timing. |
+| `pocket-gba-nolink` | `exp-nolink` | `e3c6d64` | P2 plus the link cable strip. |
+| `pocket-gba-g` | `exp-nolink-g` | `40ac38c` | as `exp-nolink`, run at STANDARD FIT. |
+| `pocket-gba-h` | `exp-nolink-h` | `0e807d6` | as G, plus area-biased physical synthesis. |
+| `pocket-gba-exp-c` | `exp-standard-16` | `47496dc` | the dead 16-entry lever, kept for reproducibility. |
+| `pocket-gba-exp-d` | `exp-seed2` | `fcc3fae` | seed 2 roll, superseded by the STANDARD FIT finding. |
+| `pocket-gba-p1` | `exp-16entries` | `fcc3fae` | misleading name, now clean at 32 entries; used for the seed 5 roll. |
+
+Each worktree keeps its own `build/gba/report.txt`, `build.log` and, on
+failure, a `TIMING_FAILED` marker. Those are the raw results.
+
 ## Next steps, in order
 
 1. Read G and H (`build/gba/report.txt` in each worktree).
