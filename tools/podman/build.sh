@@ -55,6 +55,21 @@ sed -i 's/^set_global_assignment -name NUM_PARALLEL_PROCESSORS 4$/set_global_ass
 # upstream's own build, so placement variance alone can decide a marginal path.
 # Re-running with another seed is the right first move there, not a design
 # change. Upstream keeps SEED 8 in the qsf; SEED= overrides it here only.
+# Fitter effort. Upstream leaves this at AUTO FIT, which lowers effort once the
+# fitter thinks timing is achievable. Near the device ceiling that judgement is
+# worth overriding: STANDARD FIT costs compile time and buys placement quality.
+if [[ -n "${FITTER_EFFORT:-}" ]]; then
+  printf '\nset_global_assignment -name FITTER_EFFORT "%s"\n' "$FITTER_EFFORT" >> "$QSF"
+  printf '\nset_global_assignment -name OPTIMIZE_HOLD_TIMING "ALL PATHS"\n' >> "$QSF"
+  echo "== fitter effort $FITTER_EFFORT"
+fi
+
+# NPROC caps Quartus's parallelism, so two experiments can share the machine.
+if [[ -n "${NPROC:-}" ]]; then
+  sed -i "s/^set_global_assignment -name NUM_PARALLEL_PROCESSORS .*$/set_global_assignment -name NUM_PARALLEL_PROCESSORS $NPROC/" "$WORK/generate.tcl"
+  echo "== parallel processors $NPROC"
+fi
+
 if [[ -n "${SEED:-}" ]]; then
   printf '\nset_global_assignment -name SEED %s\n' "$SEED" >> "$QSF"
   echo "== fitter seed $SEED"
