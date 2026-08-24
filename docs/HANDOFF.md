@@ -40,6 +40,8 @@ is the GBA domain and carries every worst-case path.
 | H | P1+P2 | STANDARD | 3 | 17,871 (97 %) | 284 | −0.453 | fail |
 | I | P1+P2 | AUTO | 5 | 17,961 (97 %) | 284 | −0.887 | fail |
 | J | P1+P2, **link stripped** | AUTO | 8 | 17,686 (96 %) | 284 | −0.445 | fail |
+| K | link stripped | STANDARD | 8 | 17,594 (95 %) | 284 | −0.711 | fail |
+| L | link stripped, dup OFF, combo-for-area ON | STANDARD | 8 | 17,594 (95 %) | 284 | −0.711 | fail, **identical to K** |
 
 ## What those numbers establish
 
@@ -68,9 +70,20 @@ is the GBA domain and carries every worst-case path.
    itself is not on any critical path. `gba_cpu` gained 369 ALMs with no
    source change at all, purely from physical-synthesis register duplication
    under pressure.
-8. **Rough conversion: ~135 ALMs per 0.1 ns**, derived from our own points.
-   Treat as a sighting shot, not a law; it was fitted on AUTO FIT data. It
-   puts the 0.45 ns gap at roughly 600 ALMs, call it 700-800 for margin.
+8. **Area does not buy slack here, and the "135 ALMs per 0.1 ns" rule was
+   wrong.** Run K removed 309 ALMs from run D and *lost* 0.26 ns
+   (−0.452 to −0.711). At AUTO FIT the same strip gained 0.40 ns (C to J). The
+   two fitter modes disagree on the sign of the same change. Do not size a cut
+   by expected slack return; there is no reliable conversion.
+9. **Runs K and L are identical to the digit** despite L disabling register
+   duplication and enabling combinational-logic-for-area. The fitter settings
+   tables confirm the options differed, so those two settings changed nothing.
+   The build log shows why: only **register retiming** and **combinational
+   resynthesis** ever execute. No duplication pass runs at all in Quartus Lite,
+   whatever the qsf says. Do not spend another build on those two knobs.
+10. **Correction: `gba_cpu`'s +369 ALMs are not from register duplication.**
+   Duplication never runs (finding 9). The growth is retiming, which the log
+   credits with 4,129 ps of estimated improvement.
 
 ## Area budget
 
@@ -157,6 +170,49 @@ buys. If that reasoning holds, H beats G despite disabling a timing
 optimisation. If not, H is clearly worse and the question is closed.
 
 
+## The most promising lead: constrain `cheat_loader` instead of cutting features
+
+Counting every node physical synthesis modified, retimed or created in run L:
+
+| Module | nodes touched | share | share of area |
+|---|---|---|---|
+| `gba_top` (the whole emulator) | 6,267 | 85 % | ~95 % |
+| **`cheat_loader`** | **930** | **12.7 %** | **2.5 %** |
+| `save_type_detector`, `sdram_pocket`, `data_loader`, others | 139 | 2 % | |
+
+`cheat_loader` absorbs five times its share of optimisation effort. The named
+nodes are its parser arithmetic: `Add4`, `Add6`, `Add7`, `Decoder0`, each
+spawning `_OTERM` retimed registers and `_RESYN*_BDD*` resynthesised nodes.
+
+This explains the amplification that has been the real problem all along. P1
+alone was free (16,624 ALMs, +0.090 ns). Adding P2 took it to 17,909, a jump of
+**1,285 ALMs for a module that measures 506**, and registers rose only 433, so
+the growth is combinational.
+
+**The effort is being spent on something that does not need it.**
+`cheat_loader` parses a `.cht` file once at load time. It has no gameplay
+timing requirement, it is not in the video or CPU path, and none of the 44
+violating paths touch it. The fitter has not been told any of that, so it
+retimes a file parser as though it were critical, manufacturing area that
+congests the paths that genuinely are.
+
+So the next move is a constraint, not a cut. In the SDC, declare
+`cheat_loader`'s internal paths false or multicycle and let the fitter stop
+paying for speed nobody needs. Ranked by how much it gives up:
+
+1. **`set_multicycle_path` on `cheat_loader` internals.** Costs nothing, the
+   parser has hundreds of idle cycles per byte. Try this first.
+2. **`set_false_path`**, if the parser is fully self-timed and its outputs are
+   only sampled after a done handshake. Verify the handshake before claiming
+   it, since a wrong false path is a silent hardware bug rather than a build
+   error.
+3. **Restructure the parser RTL** to shorten the combinational adder and
+   decoder chains, so there is less for retiming to find.
+
+If this works it preserves **every** feature, and the link cable strip on
+branch `exp-nolink` may not be needed at all. Do not merge the strip until this
+has been tried; run K shows it does not help timing at STANDARD FIT anyway.
+
 ## Worktree and branch map
 
 All worktrees are committed and clean. Nothing is pushed to any remote;
@@ -178,15 +234,18 @@ failure, a `TIMING_FAILED` marker. Those are the raw results.
 
 ## Next steps, in order
 
-1. Read G and H (`build/gba/report.txt` in each worktree).
-2. **If G or H closes:** merge `exp-nolink` into `cheats`, then P2, then record
-   the run in `BASELINE.md`'s phase log and update `PLAN.md`. Flash and
-   validate on hardware, which has never been done for P1 or P2.
-3. **If neither closes**, report the residual gap before cutting anything else.
-   The next candidates in preference order are `gba_savestates` +
-   `save_state_controller` (536 ALMs together, costs save states) and
-   `gba_gpioRTCSolarGyro` (341, costs Pokémon RTC events and two niche
-   sensors). Both are user calls, not ours.
+1. **Constrain `cheat_loader` in the SDC** and rebuild at STANDARD FIT. See the
+   section above. This is the only lead that costs no feature, and the evidence
+   for it is the strongest of anything measured.
+2. If that closes: merge P2 into `cheats`, record in `BASELINE.md`'s phase log,
+   update `PLAN.md`, and **reconsider whether the link strip is needed** before
+   merging `exp-nolink`. Then flash and validate on hardware, which has never
+   been done for P1 or P2.
+3. Only if constraining fails, discuss cutting features. Candidates are
+   `gba_savestates` + `save_state_controller` (attributed 536 together, expect
+   roughly 300 back, costs save states) and `gba_gpioRTCSolarGyro` (341, costs
+   Pokémon RTC events, Boktai solar and WarioWare Twisted gyro). Both are user
+   calls, not ours, and note finding 8: a cut is not guaranteed to help.
 4. Unstarted: hardware validation of P1/P2, P5-P7 cartridge work (import
    Wokann's controller plus Rai's APF plumbing), P8 release and docs. P4 (OSD)
    is authorised to drop.
