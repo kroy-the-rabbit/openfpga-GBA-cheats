@@ -211,7 +211,7 @@ The APF caveat from the GBC work applies unchanged: in Play Cartridge mode slot
 | Module in `openfpga-GBC-cheats` | Fate here |
 |---|---|
 | `cheat_loader.sv` (379 lines, ASCII `.cht` parser) | ports, back end retargeted to emit 128-bit words instead of the GB code table |
-| `cheat_titles.sv`, `cheat_font.sv`, `cheat_osd.sv` | port, but the OSD has to re-attach to `video_adapter.sv`'s framebuffer, and the font ROM is a fit risk at 90 % RAM blocks |
+| `cheat_titles.sv`, `cheat_font.sv`, `cheat_osd.sv` | on hold, and probably never. The OSD has to re-attach to `video_adapter.sv`'s framebuffer, and the measured budget does not have room for it. See P4. |
 | `cheatcodes.sv` (`CODES`, Game Genie read override) | dropped, `gba_cheats.vhd` replaces it |
 | `cheat_poker.sv` (GameShark vblank poker) | dropped, `gba_cheats.vhd` does this properly and through the real bus |
 | data slot + interact entries | port, slot 7, `0x50000000`, master switch on `0x90` |
@@ -248,7 +248,7 @@ it works" property the GBC core has. Decide before writing the emitter.
 | **P1** | Restore the cheat engine: `gba_cheats.vhd` and `SyncFifo` wiring, the five `gba_top` ports, the third debug-bus branch, `sleep_cheats` in the run condition, qsf entries. Feed it one hardcoded 128-bit word. | A hardcoded code visibly takes effect on hardware, and the fit report still closes. This is the phase that answers whether there is room at all. |
 | **P2** | Data slot 7, a fourth `data_loader`, `cheat_loader.sv` ported with the 128-bit emitter, master switch on `0x90`. | A `.cht` next to the ROM applies its codes. Verified in simulation against the libretro GBA cheat database before it goes near hardware. |
 | **P3** | Code-format decision from §3 implemented: raw forms in RTL, encrypted forms handled in the picker or explicitly unsupported and documented. | `docs/CHEATS.md` describes exactly what a user can paste in, with no asterisks. |
-| **P4** | OSD readout (`CL:` equivalent) re-attached to `video_adapter.sv`, or dropped if RAM blocks say no. | Parsed count visible in the menu or on screen. |
+| **P4** | On-screen readout re-attached to `video_adapter.sv`. **Authorised to drop outright if the fit proves there is no room**, which is where the evidence currently points: the P1+P2 build carries no OSD at all and still misses setup by 0.846 ns at 97 % ALMs. Dropping it therefore saves nothing today; it means the phase does not happen unless the budget recovers first. The `CL:`/`CD:` menu readouts already cover the diagnostics the OSD existed for. | Parsed count visible on screen, or the phase is closed as not affordable. |
 | **P5** | Cartridge bring-up: import Wokann's controller and Rai's APF plumbing, cart detected, header read, `cartridge_adapter` enabled. | The core boots with a cart inserted and reads a correct header, on hardware. |
 | **P6** | ROM from cart as the boot path, source mux, save routing to the cart. | A real cart boots and plays, saves land on the cart. |
 | **P7** | Cheats on cart games, cart-mode `.cht` loading via parameter bit 9. | Both features work together in one session. |
@@ -262,13 +262,18 @@ timing, and it should not block a feature that is a re-port of working code.
 
 ## 5. Risks
 
-- **Fit, and this time it is real.** 90 % ALMs, 90 % RAM blocks, 0.102 ns worst
-  setup slack on `clk_sys`. `gba_cheats` alone is 32 x 128 bits of cheat storage
-  in registers (4,096 registers if Quartus does not infer MLABs) plus a 128-bit
-  FIFO plus an FSM. If P1 does not close, the options are: force `cheatmem` into
-  MLABs, cut `CHEATCOUNT` to 16, drop the OSD and its font ROM, or take the
-  savestate route upstream already took and trade a feature out. Decide by
-  measuring at P1, not by guessing now.
+- **Fit, and it has already bitten.** Measured, not predicted: P1 alone closes
+  (16,624 ALMs, +3 RAM blocks, setup +0.090 ns) because `cheatmem` infers as
+  `altsyncram` and the hardcoded cheat word lets Quartus fold most of the engine
+  away. P1 plus the loader does not: 17,909 ALMs (97 %), setup **-0.846 ns**.
+  The violating paths are all pre-existing core paths, `gba_memorymux` into
+  `gba_cpu` and into `gba_dma`, which met timing at 90 % and stop meeting it at
+  97 %. `cheat_loader` itself is only 441 ALMs and its buffer already infers as
+  RAM; the rest is physical synthesis duplicating registers in modules nobody
+  touched (`gba_cpu` alone gained 369 ALMs) as it chases the timing it is
+  losing. So the lever is total area, not the loader's own logic. In order:
+  fitter effort, placement seed, `CHEATCOUNT` and `MAX_ENTRIES` at 16, no OSD,
+  and only then anything that costs an upstream feature.
 - **Do not casually bump Quartus.** Upstream tuned constraints, seeds and custom
   STA reports against 21.1. The GBC harness uses 25.1; keep them separate.
 - **Upstream is moving.** v0.6.2 is two months old and mincer-ray is active.
@@ -292,8 +297,9 @@ timing, and it should not block a feature that is a re-port of working code.
 1. Which code formats ship in P3, and does the picker take on decryption?
 2. Is `CHEATCOUNT` 32 affordable here, or does the entry-pair encoding of
    conditional codes make 16 too small in practice?
-3. Does the OSD survive the fit, and is a menu-only readout enough if it does
-   not?
+3. ~~Does the OSD survive the fit?~~ Answered by measurement: no, and it is
+   authorised to be dropped. The `CL:`/`CD:` menu readouts carry the
+   diagnostics instead.
 4. Cart mode and savestates: does a savestate taken in cart mode mean anything,
    or is it disabled there?
 5. Do we contribute the cartridge work back to mincer-ray, or keep it here? Rai
