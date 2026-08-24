@@ -75,3 +75,39 @@ with 0.09 ns to spare against a 9.93 ns period.
 | Upstream v0.6.2, upstream CI | `b08568f` | 16,648 | 278 | 0.102 ns (85C) | mincer-ray's release |
 | P0 local baseline | `98c04b2` | 16,648 | 278 | 0.090 ns (0C) | not yet flashed |
 | P1 cheat engine restored | `1df58a0` | 16,624 | 281 | 0.090 ns (0C) | built, not yet flashed |
+| P1+P2 merged, AUTO FIT | `fcc3fae` | 17,909 | 284 | **-0.846 ns** | fails timing, not built |
+| P1+P2, STANDARD FIT | `fcc3fae` | 17,903 | 284 | **-0.452 ns** | fails timing, not built |
+| P1+P2, 16 entries | `fcc3fae` (dirty) | 17,980 | 284 | **-0.711 ns** | lever is dead, see below |
+| P1+P2, AUTO FIT seed 2 | `fcc3fae` | 17,988 | 284 | **-1.321 ns** | seed variance, not a result |
+| P1+P2, STANDARD FIT seed 3 | `fcc3fae` | 17,871 | 284 | **-0.453 ns** | confirms the -0.45 floor |
+
+## The fit problem, and how to measure it
+
+P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on
+`clk_sys` at 97 % ALM occupancy. Three things about measuring it:
+
+**Only STANDARD FIT measures the design.** At AUTO FIT, changing the placement
+seed moved slack by half a nanosecond (-0.846 at seed 8, -1.321 at seed 2). At
+STANDARD FIT it moved by one picosecond (-0.452 at seed 8, -0.453 at seed 3).
+AUTO FIT was measuring placement luck, not the design. Run comparisons at
+STANDARD FIT or the delta is noise. STANDARD FIT is also worth ~0.39 ns over
+AUTO at the same seed, at no area cost.
+
+**The fitter is deterministic.** Two independent runs of the 16-entry
+configuration returned -0.711 ns and 17,980 ALMs to the digit, so numbers are
+comparable across worktrees.
+
+**It is congestion, not a slow new path.** All 44 violating paths are
+pre-existing core paths (`gba_memorymux|vram_cycle` to `gba_cpu`,
+`gba_cpu|new_cycles_valid`, `gba_memorymux` to `gba_dma`). No cheat logic
+appears on any of them. `gba_cpu` gained 369 ALMs with no source change,
+purely from physical-synthesis register duplication under pressure. Roughly
+135 ALMs buys 0.1 ns, so the gap is about 600 ALMs.
+
+**Shrinking the cheat table does not help.** Halving `CHEATCOUNT` and
+`MAX_ENTRIES` to 16 made the design larger (17,980 vs 17,909) and slower. Both
+tables already live in RAM blocks, so fewer entries buys no ALMs and only
+perturbs placement. Do not retry it.
+
+See `HANDOFF.md` for the full experiment log, the area budget, and what is
+still in flight.
