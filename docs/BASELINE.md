@@ -50,11 +50,17 @@ with 0.09 ns to spare against a 9.93 ns period.
   could say "fit is not a concern". Here there are about 1,830 ALMs and 30 M10K
   blocks left, and both the cheat engine and the cartridge bus controller have
   to come out of that.
-- **`gba_cheats.vhd` is the cheap half but not free.** 32 entries x 128 bits is
-  4,096 bits of cheat storage plus a 128-bit `SyncFifo`. If Quartus infers M10Ks
-  that is roughly 2 more blocks on 278/308; if `cheatmem` falls back to
-  registers it is about 4,096 registers plus a 32-way 128-bit read mux. Read the
-  inference lines in the fit report, not just the summary.
+- **`gba_cheats.vhd` turned out to be nearly free, which P1 settled.** `cheatmem`
+  infers as `altsyncram` rather than registers (the fit report shows
+  `gba_cheats:igba_cheats|altsyncram:cheatmem_rtl_0`), so the engine costs 3 RAM
+  blocks and 14 registers, and ALMs came out 24 lower than the baseline, which is
+  placement noise rather than a saving. That leaves about 27 RAM blocks and 1,850
+  ALMs for the loader, the OSD and the cartridge controller.
+- **Hold slack is now the number to watch, not setup.** P1 left setup untouched
+  at 0.090 ns but took hold from 0.077 ns to 0.035 ns, on the same
+  Quartus-managed path inside the PLL output counter. That is the path the GBC
+  fork once failed by 0.001 ns, and the answer there was a different seed rather
+  than a design change.
 - **The OSD is the expensive half.** `cheat_font.sv` in the GBC fork is a
   595-line font ROM. At 90 % RAM blocks that is the first thing to lose, and the
   menu readout may have to carry the whole diagnostic story.
@@ -68,4 +74,4 @@ with 0.09 ns to spare against a 9.93 ns period.
 |---|---|---|---|---|---|
 | Upstream v0.6.2, upstream CI | `b08568f` | 16,648 | 278 | 0.102 ns (85C) | mincer-ray's release |
 | P0 local baseline | `98c04b2` | 16,648 | 278 | 0.090 ns (0C) | not yet flashed |
-| P1 cheat engine restored | `a0370cb` | pending | pending | pending | |
+| P1 cheat engine restored | `1df58a0` | 16,624 | 281 | 0.090 ns (0C) | built, not yet flashed |
