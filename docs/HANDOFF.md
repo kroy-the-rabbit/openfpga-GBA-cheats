@@ -39,6 +39,7 @@ is the GBA domain and carries every worst-case path.
 | G | P1+P2 | AUTO | 2 | 17,988 (97 %) | 284 | −1.321 | fail |
 | H | P1+P2 | STANDARD | 3 | 17,871 (97 %) | 284 | −0.453 | fail |
 | I | P1+P2 | AUTO | 5 | 17,961 (97 %) | 284 | −0.887 | fail |
+| J | P1+P2, **link stripped** | AUTO | 8 | 17,686 (96 %) | 284 | −0.445 | fail |
 
 ## What those numbers establish
 
@@ -75,6 +76,10 @@ is the GBA domain and carries every worst-case path.
 
 Measured module costs from the fit reports:
 
+Numbers are as attributed by the fit report. See the link-strip section below:
+**actual recovery ran at about half the attributed cost**, so treat these as
+upper bounds.
+
 | Module | ALMs | Notes |
 |---|---|---|
 | `gba_sound` | 973 | cutting this means no audio, non-starter |
@@ -91,8 +96,20 @@ partial link cable.
 
 ## The link strip (branch `exp-nolink`, commit `e3c6d64`)
 
-mincer-ray's v0.5.0 added a partial 2-player link. Stripping it recovers
-~417 ALMs. The strip is a **restoration, not a rewrite**: `gba_serial.vhd` is
+mincer-ray's v0.5.0 added a partial 2-player link. Stripping it **recovers 223
+ALMs**, measured (run J against run C, same fitter and seed), and 0.40 ns of
+setup at AUTO FIT.
+
+Note the gap between that and `gba_serial`'s 417 ALMs in the fit report. The
+strip returned 53 % of the module's listed cost, because the module is not
+deleted but replaced by a stub that still costs something, and because
+module-level attribution does not capture how the fitter redistributes logic.
+**Read every figure in the area budget above as an upper bound on what cutting
+it would actually return**, likely around half. That reframes the remaining
+candidates: `gba_savestates` plus `save_state_controller` are quoted at 536
+together but should be expected to yield roughly 300.
+
+The strip is a **restoration, not a rewrite**: `gba_serial.vhd` is
 restored from commit `7cd1ac6`, the 67-line register-only stub that shipped
 before the link redo (PR #31 / commit `69ebe91`). That stub still answers on
 the SIO registers with no-cable-present semantics (`SIOCNT` readback forces
