@@ -67,12 +67,12 @@ if [[ -z "${SKIP_COMPILE:-}" ]]; then
   $PODMAN run --rm \
     --userns=keep-id --security-opt label=disable \
     -v "$WORK:/work" -w /work -e HOME=/tmp \
-    "$IMAGE" bash -lc 'quartus_sh -t generate.tcl' 2>&1 | tee "$BDIR/build.log"
+    "$IMAGE" quartus_sh -t generate.tcl 2>&1 | tee "$BDIR/build.log"
   rc=${PIPESTATUS[0]}
   set -e
   echo "$(( $(date +%s) - start ))" > "$BDIR/elapsed"
   [[ $rc -eq 0 ]] || { echo "quartus failed (rc=$rc), see $BDIR/build.log" >&2; exit "$rc"; }
-  $PODMAN run --rm "$IMAGE" bash -lc 'quartus_sh --version' 2>/dev/null | sed -n 2p > "$BDIR/quartus.version" || true
+  $PODMAN run --rm "$IMAGE" quartus_sh --version 2>/dev/null | sed -n 2p > "$BDIR/quartus.version" || true
 else
   echo "== SKIP_COMPILE set, packaging existing outputs"
 fi
