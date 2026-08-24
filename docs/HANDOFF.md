@@ -38,14 +38,17 @@ is the GBA domain and carries every worst-case path.
 | F | P1+P2, 16 entries | AUTO | 8 | 17,980 (97 %) | 284 | −0.711 | fail, exact rerun of E |
 | G | P1+P2 | AUTO | 2 | 17,988 (97 %) | 284 | −1.321 | fail |
 | H | P1+P2 | STANDARD | 3 | 17,871 (97 %) | 284 | −0.453 | fail |
+| I | P1+P2 | AUTO | 5 | 17,961 (97 %) | 284 | −0.887 | fail |
 
 ## What those numbers establish
 
-1. **Only STANDARD FIT measures the design.** At AUTO FIT, changing the seed
-   moved slack by half a nanosecond (C vs G, −0.846 to −1.321). At STANDARD
-   FIT, changing the seed moved it by one picosecond (D vs H, −0.452 to
-   −0.453). AUTO FIT numbers are placement luck wearing a result's clothing.
-   **Run every future comparison at STANDARD FIT** or the delta is noise.
+1. **Only STANDARD FIT measures the design.** Three AUTO FIT seeds gave
+   −0.846 (seed 8), −0.887 (seed 5) and −1.321 (seed 2). Two cluster within
+   0.04 ns and one sits 0.44 ns away, so AUTO FIT is not uniformly noisy: it
+   occasionally throws a much worse placement, and a single run cannot tell you
+   which kind you got. STANDARD FIT gave −0.452 (seed 8) and −0.453 (seed 3),
+   one picosecond apart. **Run every future comparison at STANDARD FIT** or the
+   delta is not attributable to the change you made.
 2. **The real gap is 0.45 ns**, not the −0.85 the first run suggested.
 3. **STANDARD FIT is worth ~0.39 ns at zero area cost** (C vs D, same seed).
    It is strictly better here and should probably become the default in the
