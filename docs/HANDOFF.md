@@ -171,6 +171,24 @@ failure, a `TIMING_FAILED` marker. Those are the raw results.
    Wokann's controller plus Rai's APF plumbing), P8 release and docs. P4 (OSD)
    is authorised to drop.
 
+## Re-running the in-flight builds
+
+If the session ended before these finished, the containers died with it. The
+results are only on disk if `build/gba/report.txt` is newer than the build
+started and no `TIMING_FAILED` ambiguity remains. To re-run, from the worktree:
+
+```sh
+# G: the decisive run
+cd ~/Desktop/repos/pocket-gba-g && make gba FITTER_EFFORT="STANDARD FIT" NPROC=3
+
+# H: same design, area-biased physical synthesis
+cd ~/Desktop/repos/pocket-gba-h && make gba FITTER_EFFORT="STANDARD FIT" NPROC=3
+```
+
+`make report` re-renders `build/gba/report.txt` from existing outputs without
+recompiling. `make gba SKIP_COMPILE=1` repackages the SD tree and zip from an
+existing `.rbf`. Three concurrent builds is the practical ceiling on 14 cores.
+
 ## Harness gotchas that cost time already
 
 - `FITTER_EFFORT` and `NPROC` only landed on `cheats` at `e5656b6`. Worktrees
