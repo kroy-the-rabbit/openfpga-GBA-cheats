@@ -48,10 +48,12 @@ sim-image:
 	$(PODMAN) build --security-opt label=disable -t $(SIMIMAGE) \
 		-f $(HARNESS)/Containerfile.sim $(HARNESS)
 
-# The cross-check needs a corpus of .cht files, which this repo does not carry:
-# set CHT_DB to a directory of them (see docs/CHEATS.md) or that one step is
-# skipped and the rest still runs. ARGS passes through to it.
+# The converter tests and the RTL cross-check both want a corpus of .cht files,
+# which this repo does not carry: set CHT_DB to a directory of them (see
+# docs/CHEATS.md) or those two passes are skipped and the rest still runs.
+# ARGS passes through to run.py.
 test:
+	$(SIMRUN) python3 tools/cheats/test_cht2bin.py --corpus
 	$(SIMRUN) python3 tools/sim/run_fixtures.py
 	$(SIMRUN) python3 tools/sim/run_e2e.py
 	$(SIMRUN) python3 tools/sim/run.py $(ARGS)
