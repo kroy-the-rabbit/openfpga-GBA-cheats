@@ -44,8 +44,7 @@
         "required": false,
         "parameters": "0x205",
         "extensions": [
-          "cht",
-          "txt"
+          "chtbin"
         ],
         "address": "0x50000000",
         "size_maximum": "0x100000"

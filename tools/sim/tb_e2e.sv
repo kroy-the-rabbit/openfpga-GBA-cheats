@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// End to end: APF bridge writes -> data_loader -> cheat_loader -> gba_cheats.
+// End to end: APF bridge writes -> data_loader -> the loader -> gba_cheats.
 //
-// tb_cheat_loader proves the parser and the emitter. This proves the two seams
-// around them: the byte stream arriving through data_loader's dual clock FIFO
-// at real APF rates, and the entries actually landing in gba_cheats' table and
+// The unit testbenches prove a loader in isolation. This proves the two seams
+// around it: the byte stream arriving through data_loader's dual clock FIFO at
+// real APF rates, and the entries actually landing in gba_cheats' table and
 // poking the right bytes of the right words, conditional pairs included.
+//
+// Built twice, once per loader. Define BINLOADER for cheat_binloader and a
+// packed .chtbin; without it the file is a .cht and cheat_loader parses it.
+// The seam is worth testing on both, and more so on the binary one: an entry
+// there is sixteen bytes with no framing of its own, so a byte lost in the
+// FIFO does not corrupt one entry, it misaligns every entry after it.
 //
 // The clocks are the real ones: 74.25 MHz on the bridge side, and the 100.66
 // MHz clk_sys that gba_top and everything below it run on in this core.
 //
-//   +f=<path>     the .cht file to send
+//   +f=<path>     the cheat file to send
 //   +seed=<path>  memory to preload, lines of "<hex addr> <hex byte>"
 //   +e=<path>     expected memory after the apply pass, same line format
 //
@@ -62,10 +68,16 @@ module tb_e2e;
   wire [19:0]  byte_count;
   wire         overrun;
 
+`ifdef BINLOADER
+  cheat_binloader #(
+      .MAX_ENTRIES (32)
+  ) cl (
+`else
   cheat_loader #(
       .MAX_ENTRIES     (32),
       .IDLE_FLUSH_BITS (12)
   ) cl (
+`endif
       .clk          (clk_sys),
       .reset        (reset),
       .wr           (cheat_wr),
@@ -168,8 +180,10 @@ module tb_e2e;
       send_word(32'h5000_0000 + i, w);
     end
 
-    // The download is over: the last cheat has nothing after it to resolve its
-    // enable key. The core pulses this on the falling edge of the slot 7 write.
+    // The download is over. The core pulses this on the falling edge of the
+    // slot 7 write; the ASCII parser needs it to resolve the last cheat's
+    // enable key, the binary loader only to notice a file that ended part way
+    // through an entry.
     repeat (200) @(posedge clk_sys);
     eof <= 1'b1;
     @(posedge clk_sys);
@@ -177,7 +191,8 @@ module tb_e2e;
     repeat (200) @(posedge clk_sys);
 
     // APF always sends whole 32-bit words, so a file that is not a multiple of
-    // four arrives rounded up with zero padding. The parser ignores it.
+    // four arrives rounded up with zero padding. Both loaders ignore it: the
+    // parser as whitespace, the binary one as bytes past the declared count.
     if (byte_count != ((flen + 3) / 4) * 4) begin
       fails = fails + 1;
       $display("FAIL: loader received %0d bytes, expected %0d",
