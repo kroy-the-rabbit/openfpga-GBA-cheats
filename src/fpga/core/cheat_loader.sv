@@ -2,6 +2,19 @@
 //
 // cheat_loader - parse libretro GBA .cht files into gba_cheats entries
 //
+// NOT SYNTHESISED ANY MORE, AND NOT DEAD CODE. DO NOT DELETE.
+//
+// The core ships cheat_binloader.sv instead: this module measured 441 ALMs but
+// grew the design by 1,285 and cost 0.54 ns of setup at 97 % utilisation, so
+// the parse moved to the host as tools/cheats/cht2bin.py. See docs/HANDOFF.md.
+//
+// It stays in the tree because tools/sim/run.py still compiles it, and that is
+// the cross-check which proves tools/cheats/gbacht.py is a faithful model over
+// 513 real libretro files. gbacht.py is what cht2bin.py converts with, so
+// deleting this module would silently remove the only independent check on the
+// thing that now produces every cheat file. The RTL is the reference; the
+// Python is the shipping implementation.
+//
 // Consumes the raw byte stream of a .cht file from data_loader (data slot 7,
 // bridge window 0x50000000) and pushes one 128-bit word per cheat entry into
 // MiSTer's gba_cheats, on the rising edge of cheat_on. Nothing is decoded
