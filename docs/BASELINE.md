@@ -80,6 +80,7 @@ with 0.09 ns to spare against a 9.93 ns period.
 | P1+P2, 16 entries | `fcc3fae` (dirty) | 17,980 | 284 | **-0.711 ns** | lever is dead, see below |
 | P1+P2, AUTO FIT seed 2 | `fcc3fae` | 17,988 | 284 | **-1.321 ns** | seed variance, not a result |
 | P1+P2, STANDARD FIT seed 3 | `fcc3fae` | 17,871 | 284 | **-0.453 ns** | confirms the -0.45 floor |
+| **P3 binary loader, STANDARD FIT** | `448fb44` | **17,544** | **282** | **+0.090 ns** | **timing met, bitstream built** |
 
 ## The fit problem, and how to measure it
 
@@ -109,5 +110,15 @@ purely from physical-synthesis register duplication under pressure. Roughly
 tables already live in RAM blocks, so fewer entries buys no ALMs and only
 perturbs placement. Do not retry it.
 
-See `HANDOFF.md` for the full experiment log, the area budget, and what is
-still in flight.
+### How it was solved
+
+The parse moved off the FPGA. `cheat_loader.sv` measured 441 ALMs and drew 930
+physical-synthesis modifications onto its parser arithmetic;
+`cheat_binloader.sv` measures **61 ALMs and draws zero**, because a byte counter
+and a shift register give retiming nothing to chase. Setup went from -0.452 ns
+to +0.090 ns, which is exactly upstream's own margin, so cheats now cost no
+timing at all. See `CHEATBIN.md` for the format and `HANDOFF.md` for the full
+experiment log.
+
+**Headroom after cheats: 936 ALMs and 26 RAM blocks.** That is the budget any
+cartridge work has to come out of.
