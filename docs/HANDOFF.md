@@ -218,6 +218,37 @@ call. It is the only path found that does not give up save states or the RTC,
 and unlike those it is not a gamble, because finding 8 says a feature cut is
 not even guaranteed to buy slack.
 
+### P3, in progress: the binary format
+
+Format pinned in `docs/CHEATBIN.md` on branch `p3-format`, cut from
+`p2-cheat-loader`. Two branches were cut from that and are being built in
+parallel:
+
+| Branch | Worktree | Scope |
+|---|---|---|
+| `p3-converter` | `pocket-gba-conv` | `tools/cheats/cht2bin.py` plus tests |
+| `p3-binloader` | `pocket-gba-bin` | `cheat_binloader.sv`, core_top, qsf, data.json, testbenches |
+
+The converter is a thin wrapper, not a reimplementation: `tools/cheats/gbacht.py`
+is already the Python reference model for the current RTL and exposes
+`parse()` and `words()`, so the parsing logic that leaves the FPGA has been
+sitting in the repo as the thing that validated it.
+
+The file stores the 128-bit words verbatim, so the loader does no
+transformation. Two things in the format are load-bearing and easy to get
+wrong:
+
+- **Entry order matters.** A conditional is a compare entry immediately
+  followed by the entry it guards. Nothing may sort, dedupe or reorder.
+- **The header magic is a safety interlock, not decoration.** The previous
+  format was a plain `.cht`, so someone dropping the old file in is a real
+  scenario, and shifting ASCII into the cheat table would corrupt the game.
+  Wrong magic or version must load zero entries.
+
+When both land: merge into one branch, run the sim suite, then build at
+STANDARD FIT against the −0.452 ns control. The target is P2 costing about 300
+ALMs of growth instead of 1,285.
+
 ### What was tried and did not work, so it is not retried
 
 The section below is kept because the reasoning was sound and the measurement
