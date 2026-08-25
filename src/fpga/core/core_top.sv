@@ -1260,19 +1260,27 @@ core_bridge_cmd icb (
 
 
 // ============================================================
-// Cheats: data slot 7 -> cheat_loader -> gba_cheats
+// Cheats: data slot 7 -> cheat_binloader -> gba_cheats
 // ============================================================
-// Data slot 7 streams a libretro .cht file to 0x5xxxxxxx. cheat_loader parses
-// the ASCII on the fly and pushes one 128-bit word per cheat entry into
-// gba_cheats. See src/fpga/core/cheat_loader.sv and docs/CHEATS.md.
+// Data slot 7 streams a packed .chtbin file to 0x5xxxxxxx. The file already
+// holds the 128-bit words gba_cheats consumes, one per entry, so
+// cheat_binloader frames them out of the byte stream and pushes them; it does
+// no parsing. tools/cheats/cht2bin.py turns a libretro .cht into one of these
+// on the host. See src/fpga/core/cheat_binloader.sv, docs/CHEATBIN.md and
+// docs/CHEATS.md.
+//
+// The parse used to happen here, in cheat_loader.sv, and that is what stopped
+// the design fitting: 441 ALMs of parser grew the whole design by 1,285 and
+// cost 0.54 ns of setup. docs/HANDOFF.md has the measurements.
 //
 // The slot's filename is cloned from slot 0 with the slot extension appended,
-// so the file the Pocket looks for is <rom filename>.gba.cht.
+// so the file the Pocket looks for is <rom filename>.gba.chtbin.
 
-// Which cheats are on comes from the file itself, via each cheat's `enable`
-// key. This is the one global switch, on at every launch and deliberately not
-// persisted: a forgotten cheat left on across sessions is indistinguishable
-// from a broken game.
+// Which cheats are on is decided on the host: cht2bin.py resolves each cheat's
+// `enable` key and emits only the enabled ones, so every entry in the file is
+// meant to run. This is the one global switch, on at every launch and
+// deliberately not persisted: a forgotten cheat left on across sessions is
+// indistinguishable from a broken game.
 reg cheats_master = 1'b1;
 
 // Synchronised rather than used raw: cheats_master is written in clk_74a by the
@@ -1293,10 +1301,11 @@ end
 wire cheat_downloading_s;
 synch_3 s_cheat_dl (cheat_downloading, cheat_downloading_s, clk_sys);
 
-// Edges of the download, in clk_sys. The rising edge clears the parser and
+// Edges of the download, in clk_sys. The rising edge clears the loader and
 // gba_cheats, so codes never outlive the game they belong to; the falling edge
-// says end of file, which is the only thing that can resolve the enable key of
-// the last cheat in the file (libretro writes cheatN_enable after the codes).
+// says end of file. The binary loader does not need that to finish an entry,
+// which completes on its sixteenth byte, but it is what lets it notice a file
+// that ended part way through one.
 reg cheat_dl_1, cheat_dl_2;
 always @(posedge clk_sys) begin
     cheat_dl_1 <= cheat_downloading_s;
@@ -1319,11 +1328,11 @@ wire [7:0] cheat_dout;
 // checking off. At a delay of 20 that is 80 cycles to drain a word APF delivers
 // about every microsecond, and the FIFO silently loses bytes. 4 cycles per
 // entry is 16 per word, comfortably ahead of APF and well inside what the
-// parser absorbs, which is a byte per cycle.
+// loader absorbs, which is a byte per cycle.
 data_loader #(
     .ADDRESS_MASK_UPPER_4   ( 4'h5 ),      // 0x5xxxxxxx (cheat slot)
     .ADDRESS_SIZE           ( 28 ),
-    .OUTPUT_WORD_SIZE       ( 1 ),         // 8-bit output: the parser eats ASCII
+    .OUTPUT_WORD_SIZE       ( 1 ),         // 8-bit output: the loader frames bytes
     .WRITE_MEM_CLOCK_DELAY  ( 4 )
 ) cheat_data_loader (
     .clk_74a            ( clk_74a ),
@@ -1345,9 +1354,12 @@ wire [5:0]   cheat_entries, cheat_cheats, cheat_rejected;
 wire [19:0]  cheat_bytes;
 wire         cheat_overrun;
 
-cheat_loader #(
-    .MAX_ENTRIES     ( 32 ),        // must match gba_cheats' CHEATCOUNT
-    .IDLE_FLUSH_BITS ( 20 )
+// The readout names are inherited from the ASCII parser and two of them have
+// shifted meaning: cheat_cheats is now the entry count the file's header
+// declared, not a number of cheats, and cheat_overrun now means the file was
+// malformed. See the header of cheat_binloader.sv.
+cheat_binloader #(
+    .MAX_ENTRIES ( 32 )             // must match gba_cheats' CHEATCOUNT
 ) cheats_parser (
     .clk          ( clk_sys ),
     .reset        ( cheat_reset ),
@@ -1403,9 +1415,11 @@ always @(*) begin
     end
     // What the cheat loader made of the file, so a file that failed to load is
     // diagnosable on the handheld rather than by guesswork. `CL:` is bytes
-    // received, cheats pushed and entries pushed; `CD:` is the master switch,
-    // the cheats the table had no room for, and the overrun flag that a real
-    // file can never set.
+    // received, entries the header declared and entries pushed, so a short or
+    // over-long file shows up as the last two disagreeing; `CD:` is the master
+    // switch, the entries the table had no room for, and the malformed flag,
+    // which is the only thing that separates a wrong file from a valid one
+    // carrying no cheats.
     32'hF3000000: begin
         bridge_rd_data <= {cheat_bytes_s, cheat_cheats_s, cheat_entries_s};
     end

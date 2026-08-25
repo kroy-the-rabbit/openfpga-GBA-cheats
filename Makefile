@@ -8,7 +8,9 @@
 #   make report               regenerate build/gba/report.txt from existing outputs
 #   make shell                interactive shell in the Quartus container
 #
-# Simulation for the cheat loader (see docs/CHEATS.md and tools/sim/):
+# Simulation for the cheat loaders (see docs/CHEATS.md, docs/CHEATBIN.md and
+# tools/sim/). `test` covers both the .chtbin loader the core builds today and
+# the .cht parser it replaced, which is still in the tree:
 #
 #   make sim-image   build the Icarus Verilog container (once, about a minute)
 #   make test        the whole suite
@@ -54,6 +56,7 @@ sim-image:
 # ARGS passes through to run.py.
 test:
 	$(SIMRUN) python3 tools/cheats/test_cht2bin.py --corpus
+	$(SIMRUN) python3 tools/sim/run_binloader.py
 	$(SIMRUN) python3 tools/sim/run_fixtures.py
 	$(SIMRUN) python3 tools/sim/run_e2e.py
 	$(SIMRUN) python3 tools/sim/run.py $(ARGS)
