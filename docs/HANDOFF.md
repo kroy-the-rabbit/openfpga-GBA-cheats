@@ -42,6 +42,8 @@ is the GBA domain and carries every worst-case path.
 | J | P1+P2, **link stripped** | AUTO | 8 | 17,686 (96 %) | 284 | −0.445 | fail |
 | K | link stripped | STANDARD | 8 | 17,594 (95 %) | 284 | −0.711 | fail |
 | L | link stripped, dup OFF, combo-for-area ON | STANDARD | 8 | 17,594 (95 %) | 284 | −0.711 | fail, **identical to K** |
+| M | P1+P2, `cheat_loader` multicycle 4 | STANDARD | 8 | 17,929 (97 %) | 284 | −0.600 | fail, see below |
+| N | P1+P2, phys-synth effort NORMAL | STANDARD | 8 | 17,903 (97 %) | 284 | −0.452 | fail, **identical to D** |
 
 ## What those numbers establish
 
@@ -84,6 +86,16 @@ is the GBA domain and carries every worst-case path.
 10. **Correction: `gba_cpu`'s +369 ALMs are not from register duplication.**
    Duplication never runs (finding 9). The growth is retiming, which the log
    credits with 4,129 ps of estimated improvement.
+11. **`PHYSICAL_SYNTHESIS_EFFORT` is inert too.** Run N with NORMAL instead of
+   EXTRA is byte-identical to run D. That is the third dead knob. Assume the
+   remaining physical synthesis settings do nothing in Lite unless a log line
+   proves otherwise.
+12. **The multicycle constraint worked and did not help, which kills the
+   congestion theory.** Run M cut 402 registers (24,696 to 24,294) and 14 % of
+   all physical-synthesis churn (5,973 to 5,155 nodes), so retiming genuinely
+   backed off. ALMs moved +26 and slack got *worse*, −0.452 to −0.600. The
+   manufactured registers were never the cost. **The cost is the parser's
+   combinational logic, which exists no matter how the fitter treats it.**
 
 ## Area budget
 
@@ -170,7 +182,49 @@ buys. If that reasoning holds, H beats G despite disabling a timing
 optimisation. If not, H is clearly worse and the question is closed.
 
 
-## The most promising lead: constrain `cheat_loader` instead of cutting features
+## Feasibility verdict: delete the ASCII parser, do not shrink it
+
+Fifteen builds. Nothing has ever come closer than −0.445 ns. Two fitter modes,
+four seeds, an entry-count halving, a feature strip, three fitter knobs and a
+timing constraint have all failed to move it toward zero, and three of those
+knobs turned out to do nothing at all in Lite. **There is no tuning left that
+should be expected to find 0.45 ns.** Stop looking for one.
+
+The problem is narrow, which is the good news. **P1, the cheat engine, is
+free**: 16,624 ALMs and +0.090 ns, slightly better than baseline. Every bit of
+the damage comes from P2, and specifically from the fact that `cheat_loader`
+parses ASCII. It carries a 64-bit token shift register, hex nibble conversion,
+quoted-string tracking, key matching, a CodeBreaker pair collector and a wide
+decoder. That turns a module measuring 506 ALMs into 1,285 ALMs of design
+growth and 0.54 ns of slack, and run M proved the growth is combinational and
+therefore not something the fitter can be talked out of.
+
+**The fix is to stop parsing ASCII on the FPGA.** Convert `.cht` to a packed
+binary on the host, and the on-chip loader becomes a byte counter feeding a
+128-bit shift register with a write strobe: no hex conversion, no tokeniser, no
+key matching, no state machine. Estimate 60-120 ALMs against the current 441,
+with far less for the fitter to inflate. P2 needs to cost about 300 ALMs of
+growth instead of 1,285, which is well within reach when the parser is deleted
+rather than shrunk.
+
+This also fits the tooling that already exists. The cheats GUI in the GBC fork
+is the natural place to emit the binary, and the 513-file corpus becomes the
+conversion test set instead of an RTL test set, so the parsing logic keeps its
+coverage on the host where it is much easier to verify.
+
+**The cost is a usability regression**: a `.cht` dropped straight onto the SD
+card stops working, and has to go through the converter first. That is a user
+call. It is the only path found that does not give up save states or the RTC,
+and unlike those it is not a gamble, because finding 8 says a feature cut is
+not even guaranteed to buy slack.
+
+### What was tried and did not work, so it is not retried
+
+The section below is kept because the reasoning was sound and the measurement
+is what refuted it. Constraining `cheat_loader` was the best available theory
+until run M tested it.
+
+## Superseded: constrain `cheat_loader` instead of cutting features
 
 Counting every node physical synthesis modified, retimed or created in run L:
 
@@ -234,9 +288,10 @@ failure, a `TIMING_FAILED` marker. Those are the raw results.
 
 ## Next steps, in order
 
-1. **Constrain `cheat_loader` in the SDC** and rebuild at STANDARD FIT. See the
-   section above. This is the only lead that costs no feature, and the evidence
-   for it is the strongest of anything measured.
+1. **Replace the ASCII parser with a host-side converter plus a minimal binary
+   loader.** See the feasibility verdict above. This is the recommended path
+   and needs a user decision first, because it changes how cheats are
+   installed.
 2. If that closes: merge P2 into `cheats`, record in `BASELINE.md`'s phase log,
    update `PLAN.md`, and **reconsider whether the link strip is needed** before
    merging `exp-nolink`. Then flash and validate on hardware, which has never
