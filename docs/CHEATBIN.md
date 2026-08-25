@@ -92,6 +92,10 @@ must preserve it exactly.** Do not sort, dedupe or reorder entries.
   report zero. Silently loading nothing is correct here: a wrong file should
   behave as no cheats, never as garbage cheats.
 - A truncated final entry is discarded. Do not pad it out.
+- **`entry_count` is a hard stop, not a hint.** The loader must stop after that
+  many entries and ignore anything after them. A 16-byte entry carries no
+  framing of its own, so trailing bytes are indistinguishable from real
+  entries and the declared count is the only thing that can tell them apart.
 - An empty file, or a header with `entry_count` 0, is valid and means no
   cheats.
 - **Reserved bytes are ignored on read, written as zero.** A loader must not

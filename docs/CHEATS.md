@@ -1,23 +1,37 @@
 # Cheats on the Pocket GBA core
 
-CodeBreaker and GameShark codes, read straight from a libretro `.cht` file.
-Which cheats are on is decided by the file; the core menu has a single global
-switch. Nothing has to be converted or precompiled: the core parses the ASCII
-itself.
+CodeBreaker and GameShark codes from a libretro `.cht` file, converted on your
+computer and copied to the SD card as a `.chtbin`. Which cheats are on is
+decided by the file; the core menu has a single global switch.
 
-Status: the loader, the emitter and the data slot are done and proven in
-simulation. The engine they feed, MiSTer's `gba_cheats`, is restored in P1 and
-is not wired up yet. See `docs/PLAN.md`.
+**The core no longer parses `.cht` on the handheld, and a `.cht` copied
+straight to the SD card will not work.** That is not a preference. The ASCII
+parser fit in the FPGA only on paper: it measured 441 ALMs but grew the design
+by 1,285 and cost 0.54 ns of setup timing at 97 % utilisation, which is the
+difference between a core that runs and one that does not exist. The parse
+moved to your computer, where it is also far easier to test. `docs/HANDOFF.md`
+has the measurements and `docs/CHEATBIN.md` has the format.
 
 ## Quick start
 
-1. Put the `.cht` next to the ROM, named after the **whole** ROM filename with
-   `.cht` appended:
-   `/Assets/gba/common/Zelda.gba` -> `/Assets/gba/common/Zelda.gba.cht`.
+1. Convert the `.cht` on your computer:
+
+   ```
+   tools/cheats/cht2bin.py Zelda.gba.cht          # writes Zelda.gba.chtbin
+   tools/cheats/cht2bin.py *.cht -d out/          # or a whole directory
+   ```
+
+   It prints what it found and what it had to drop. A cheat that produces no
+   entries is reported rather than silently skipped, so an empty result is
+   distinguishable from a broken file.
+
+2. Put the `.chtbin` next to the ROM, named after the **whole** ROM filename
+   with `.chtbin` appended:
+   `/Assets/gba/common/Zelda.gba` -> `/Assets/gba/common/Zelda.gba.chtbin`.
    That is APF's rule for a slot whose filename is cloned from slot 0: the
    extension is appended, not swapped.
 
-   The file is plain text and you can write it by hand. Only keys ending
+   The `.cht` you convert from is plain text and you can write it by hand. Only keys ending
    `_code`, `_desc` and `_enable` are read; `_code` and `_desc` take a quoted
    value, `_enable` a bare `true` or `false`. Everything else is ignored,
    including `cheats = N` and the number in `cheatN_`: cheats are taken in file
@@ -29,16 +43,22 @@ is not wired up yet. See `docs/PLAN.md`.
    cheat0_enable = true
    ```
 
-   Watch the extension. Windows hides known ones, so a file saved from Notepad
-   as `Zelda.gba.cht` may really be `Zelda.gba.cht.txt`: turn on "File name
-   extensions" in Explorer's View tab. On macOS, TextEdit writes rich text
-   unless you pick Format > Make Plain Text first.
+   Watch the extension when you write the `.cht`. Windows hides known ones, so
+   a file saved from Notepad as `Zelda.gba.cht` may really be
+   `Zelda.gba.cht.txt`: turn on "File name extensions" in Explorer's View tab.
+   On macOS, TextEdit writes rich text unless you pick Format > Make Plain
+   Text first. The converter will tell you if it read nothing useful.
 
-2. Load the game. **Cheats Enabled** in the core menu turns the whole lot on
+3. Load the game. **Cheats Enabled** in the core menu turns the whole lot on
    and off; it is on at every launch and is not persisted.
 
-3. If nothing happens, read `CL:` in the menu. It is three numbers packed into
+4. If nothing happens, read `CL:` in the menu. It is three numbers packed into
    one, and it says which of the three things went wrong.
+
+If you copy a `.cht` to the SD card by mistake, the core loads **zero** cheats
+rather than misbehaving: the `.chtbin` header carries a magic number precisely
+so the old file cannot be mistaken for the new one and shifted into the cheat
+table as garbage.
 
 ## Which cheats are on
 
@@ -163,7 +183,8 @@ not apply to a cartridge, because there is nothing writable there. The core
 rejects those anyway.
 
 The one gap is loading the file: in Play Cartridge mode APF does not load slots
-named after slot 0, so `<rom filename>.gba.cht` is not picked up automatically.
+named after slot 0, so `<rom filename>.gba.chtbin` is not picked up
+automatically.
 Use the **Cheats** slot in the core menu to browse for the file once; the slot
 sets the "persist browsed filename" parameter, so it comes back on later
 launches.
