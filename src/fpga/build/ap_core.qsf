@@ -852,6 +852,7 @@ set_global_assignment -name VERILOG_FILE ../pocket/mf_audio_pll/mf_audio_pll_000
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/save_type_detector.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/cart_quirks.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/save_state_controller.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../core/cheat_binloader.sv
 
 # GBA core VHDL — MEM library (SyncRam primitives)
 set_global_assignment -name VHDL_FILE ../gba/SyncFifo.vhd -library MEM

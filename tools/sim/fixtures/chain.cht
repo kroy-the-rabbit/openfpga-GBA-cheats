@@ -1,0 +1,9 @@
+cheats = 2
+
+cheat0_desc = "two conditions in a row cannot be expressed"
+cheat0_code = "72001200+0001+72001202+0002+32001204+0003"
+cheat0_enable = true
+
+cheat1_desc = "a condition with nothing after it to guard"
+cheat1_code = "32001300+0011+72001302+0001"
+cheat1_enable = true

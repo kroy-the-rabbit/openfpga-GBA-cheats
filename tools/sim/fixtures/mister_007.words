@@ -1,0 +1,21 @@
+# The 128-bit words MiSTer runs for 007 - Everything or Nothing, taken byte
+# for byte from MiSTer-devel/Cheats_MiSTer/Cheats/GBA, which gamehacking.org
+# generates. Each .gg file there is a run of 16-byte records, four 32-bit
+# little endian words, most significant first:
+#
+#     [127:96] [95:64] [63:32] [31:0]
+#
+# Only the low byte of the first word and the low 28 bits of the second are
+# read by gba_cheats, so those are the bits kept here. This file is an oracle
+# that owes nothing to our own decoder: it is a different implementation, by
+# different people, of the same mapping from the same libretro codes.
+#
+# mister_007.cht is the matching libretro file with its enable keys switched on.
+000000300201a45400000000000007b7  Infinite Time (Alternate Code).gg
+000000100200e9240000000000000096  Infinite Health (Alternate Code).gg
+00000010030034b80000000000000096  Infinite Health (Alternate Code).gg
+0000002003003980000000000000ff00  Infinite Ammo (All Guns).gg
+00000040030039800000000000ff0000  Infinite Ammo (All Guns).gg
+000000800300398000000000ff000000  Infinite Ammo (All Guns).gg
+000000800300397c0000000001000000  Always Have Silencer.gg
+0000002002019ec4000000000000ff00  Have Alot Of Points (Shop).gg

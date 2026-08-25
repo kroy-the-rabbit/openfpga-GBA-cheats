@@ -1,0 +1,10 @@
+# This comment mentions _code and gives an example, 32001100+00FF, which is
+# not a key and must not be parsed as one.
+cheats = 1
+
+cheat0_desc = "32001101+00FF is only a description"
+cheat0_code = "32001102+0042"
+cheat0_enable = true
+
+notes_codecs = "32001103+00FF"
+other_desc_field = "32001104+00FF"

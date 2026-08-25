@@ -1,0 +1,9 @@
+cheats = 2
+
+cheat0_desc = "spaces around the separator"
+cheat0_code = "32001400 + 0055"
+cheat0_enable = true
+
+cheat1_desc = "a colon between address and value"
+cheat1_code = "32001401:0066"
+cheat1_enable = true
