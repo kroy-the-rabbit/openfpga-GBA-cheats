@@ -58,9 +58,16 @@ numbering here is what the hardware does. See `tools/cheats/gbacht.py`.
 
 Everything. The converter resolves `enable` keys and emits **only enabled
 cheats**, decodes GameShark and CodeBreaker pairs, places values into byte
-lanes, drops address ranges the GBA does not have, enforces the 32-entry
-ceiling, and orders conditional pairs so a compare entry is immediately
-followed by the entry it guards. The hardware receives a finished table.
+lanes, filters by address region, enforces the 32-entry ceiling, and orders
+conditional pairs so a compare entry is immediately followed by the entry it
+guards. The hardware receives a finished table.
+
+The region filter keeps **EWRAM, IWRAM and IO only**. That is narrower than
+"addresses the GBA has": BIOS and ROM are not writable, SRAM is byte wide so a
+32-bit debug write is wrong there, and VRAM, OAM and palette are rewritten by
+the game every frame so a write into them does nothing useful. A second
+converter written from this document alone would otherwise emit a larger file
+that the hardware cannot act on. See `REGIONS` in `tools/cheats/gbacht.py`.
 
 ## Conditionals
 
@@ -74,12 +81,27 @@ must preserve it exactly.** Do not sort, dedupe or reorder entries.
 - `entry_count` above 32 (`CHEATCOUNT` in `gba_cheats.vhd`, `MAX_ENTRIES` in
   the loader) is not an error in the file. The converter should not emit more,
   and the loader must ignore the excess rather than wrap or corrupt.
+- **At the cap, shed whole cheats, never a partial one.** Truncating at exactly
+  32 entries can cut between a compare entry and the entry it guards. That
+  leaves the compare last in the table, where its `skip_next` falls on an
+  unrelated cheat and the write it was guarding is gone: a silently wrong
+  cheat, which is worse than a missing one. So a file may legitimately carry
+  fewer than 32 entries even when the source had more to give. This matches
+  `gbacht`'s existing all-or-nothing policy for a group.
 - A file whose magic or version does not match must load **zero** entries and
   report zero. Silently loading nothing is correct here: a wrong file should
   behave as no cheats, never as garbage cheats.
 - A truncated final entry is discarded. Do not pad it out.
 - An empty file, or a header with `entry_count` 0, is valid and means no
   cheats.
+- **Reserved bytes are ignored on read, written as zero.** A loader must not
+  reject a file for a non-zero reserved byte at offset 5 or in 8:16. Rejecting
+  would make any future use of those bytes a breaking change, which defeats
+  the point of reserving them.
+- **The file never pads to 32 entries and never contains optype `F`.**
+  `entry_count` bounds the table. What happens to the table slots past
+  `entry_count` is the loader's business: `gba_cheats` wants them empty, and
+  the loader is what clears them. Do not expect padding entries in the file.
 
 ## Naming
 
