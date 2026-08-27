@@ -199,6 +199,64 @@ def test_gameshark_greater_or_equal_emits_optype_3():
     assert cht2bin.unpack(res.blob)[0] >> 96 & 0xF == gbacht.OPT_GE
 
 
+def test_gameshark_sp_code_matches_its_codebreaker_twin():
+    """The SP/Action-Replay-v3 reading, pinned against codes that already work.
+
+    A gamehacking.org export writes `0WAAAAAA VVVVVVVV`: the width is the
+    second nibble, and the address is a 24-bit EWRAM offset rather than a bus
+    address. Nothing in the file declares that, so the only honest way to pin
+    it is a game whose list carries the same cheats in both dialects. The
+    Minish Cap list does, and the two must produce the same word.
+    """
+    same = (("00202AEA+000000A0", "32002AEA+00A0"),      # Infinite Health
+            ("02202B00+000003E7", "82002B00+03E7"),      # 999 Rupees
+            ("02202B30+00005555", "82002B30+5555"))      # All Items
+    for sp, cb in same:
+        got = cht2bin.unpack(cht2bin.convert(cht(sp)).blob)
+        want = cht2bin.unpack(cht2bin.convert(cht(cb)).blob)
+        assert got == want, f"{sp} != {cb}: {got} vs {want}"
+
+
+def test_gameshark_sp_width_is_the_second_nibble():
+    """0 is a byte, 2 a halfword, 4 a word, and the address is an offset.
+
+    `042C2B58` is a word write to EWRAM + 0x2B58: the offset is masked to the
+    256 KB the hardware mirrors, so the 0x2C0000 in the token falls away.
+    """
+    for code, mask, addr in (("00202AEA+000000A0", 0x4, 0x2002AE8),
+                             ("02202B00+000003E7", 0x3, 0x2002B00),
+                             ("042C2B58+75707172", 0xF, 0x2002B58)):
+        word = cht2bin.unpack(cht2bin.convert(cht(code)).blob)[0]
+        assert word >> 100 & 0xF == mask, code
+        assert word >> 64 & 0x0FFFFFFF == addr, code
+
+
+def test_gameshark_sp_never_overrides_a_working_reading():
+    """A code both dialects can read stays v1/v2, or this would change cheats.
+
+    `02002AEA 00000050` is a valid v1/v2 8-bit assign *and* a valid SP
+    halfword assign, and they disagree: the halfword one also zeroes the byte
+    above, which on this game is Max HP. The SP reading is only ever reached
+    for a code v1/v2 has already thrown out.
+    """
+    e, why = gbacht.decode_pair("02002AEA", "00000050")
+    assert e is not None and why == "ok"
+    assert e.kind == "gs" and e.bytemask == 0x4
+
+
+def test_encrypted_words_are_still_refused():
+    """The filter this dialect is threaded through must still hold.
+
+    `0b070768` and `0f0e1320` are the addresses the module docstring cites
+    from Cheats_MiSTer: encrypted codes run through a raw decoder. Their width
+    nibbles are not 0, 2 or 4, so the SP reading declines them too.
+    """
+    for op1, op2 in (("0B070768", "00000000"), ("0F0E1320", "12345678"),
+                     ("9E6EE1B0", "D14F1E6F"), ("A4699E04", "BB9B2A8F")):
+        e, why = gbacht.decode_pair(op1, op2)
+        assert e is None, f"{op1} {op2} decoded to {e} ({why})"
+
+
 def test_reserved_bits_are_refused_rather_than_masked():
     for bad in (1 << 32, 1 << 63, 1 << 104, 1 << 127):
         try:
