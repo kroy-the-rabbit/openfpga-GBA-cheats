@@ -305,15 +305,26 @@ NO_LIMIT = 1 << 30
 
 def parse(data: bytes, max_entries: int = MAX_ENTRIES,
           max_group_entries: int = MAX_GROUP_ENTRIES,
-          keep_disabled: bool = False
+          browse: bool = False
           ) -> tuple[list[Group], Stats]:
     """Decode a `.cht` into cheats the engine can run.
 
-    `keep_disabled` returns cheats whose `_enable` key says false, with the key
-    recorded on the group rather than acted on. The converter does not want
-    them: a file it writes holds exactly the cheats that should run, and the
-    core reads every entry it is given regardless of any flag. A picker does,
-    because "off" is a thing it offers to change.
+    `browse` changes the question from "what will the core run" to "what does
+    this file contain", which is what a picker needs and a converter must not
+    have. Two kinds of cheat are returned that are otherwise dropped:
+
+    - **Cheats whose `_enable` key says false.** A converted file holds exactly
+      the cheats that should run, and gba_cheats runs every entry it is handed
+      regardless of any flag, so carrying a disabled one would turn it on. A
+      picker offers to change "off", and a libretro file has almost everything
+      off, so without this it shows a nearly empty list.
+    - **Cheats no code of which survived.** A converter has nothing to write
+      for one. A picker still has something to show: the description is what
+      the user recognises, and a row that is present and greyed says "this
+      cheat cannot be expressed" where a missing row says nothing at all.
+
+    Both come back with the fact recorded rather than acted on: `enabled` says
+    what the key said, and a cheat with nothing usable has an empty `entries`.
     """
     """Model of src/fpga/core/cheat_loader.sv.
 
@@ -355,10 +366,10 @@ def parse(data: bytes, max_entries: int = MAX_ENTRIES,
         if pending is None:
             return
         g, pending = pending, None
-        if not g.enabled and not keep_disabled:
+        if not g.enabled and not browse:
             st.drop("disabled")
             return
-        if not g.entries:
+        if not g.entries and not browse:
             return
         # A cheat is all or nothing. Pushing the part of it that fits would
         # apply half a cheat, and could leave a condition as the last entry in
@@ -381,7 +392,9 @@ def parse(data: bytes, max_entries: int = MAX_ENTRIES,
             if cond_at is not None:
                 del cur.entries[cond_at:]
             cur.desc = last_desc
-            if cur.entries:
+            if cur.entries or browse:
+                if not cur.entries:
+                    st.drop("no codes")
                 flush()             # in case a previous cheat is still parked
                 pending_set(cur)
             else:
