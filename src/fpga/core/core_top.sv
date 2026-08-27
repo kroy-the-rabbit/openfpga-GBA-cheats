@@ -1517,7 +1517,8 @@ reg ff_video_stable = 1'b1; // 0 = Classic FF, 1 = wait for complete rendered li
 // Cartridge probe input, written at 0x94. Declared here with the other menu
 // registers because the block that writes them is directly below; the probe
 // itself is at the bottom of this file.
-reg [31:0] cart_probe_in = 32'd0;
+reg [31:0] cart_probe_in  = 32'd0;   // per-access: addresses, requests, data
+reg [31:0] cart_probe_cfg = 32'd0;   // quasi-static: phi_sel, gpio timing
 
 reg [13:0] reset_counter = 0;
 wire       core_reset = (reset_counter != 0);
@@ -1535,6 +1536,7 @@ always @(posedge clk_74a) begin
         32'h8C: ff_video_stable <= bridge_wr_data[0];
         32'hF3000008: cheats_master <= bridge_wr_data[0];
         32'h94: cart_probe_in    <= bridge_wr_data;   // cartridge probe only
+        32'h98: cart_probe_cfg   <= bridge_wr_data;   // cartridge probe only
         endcase
     end
 end
@@ -1896,6 +1898,17 @@ synch_3 cart_probe_reset_sync(reset_n, cart_probe_reset_n_s, clk_sys);
 wire [31:0] cart_probe_in_s;
 synch_3 #(.WIDTH(32)) cart_probe_sync(cart_probe_in, cart_probe_in_s, clk_sys);
 
+// The controller's configuration inputs, kept in a separate register from the
+// per-access ones so they can be constrained separately. phi_sel, the GPIO
+// timing mode and the GPIO recovery count are settings: they change when
+// somebody changes a setting, not once per bus cycle. Sharing one register
+// with rd_addr made that impossible to say in the SDC, and gpio_recover_set
+// feeds a 14-bit compare that lands in the state machine, so it was the
+// source of the worst path in the first probe.
+wire [31:0] cart_probe_cfg_s;
+synch_3 #(.WIDTH(32)) cart_probe_cfg_sync(cart_probe_cfg, cart_probe_cfg_s,
+                                          clk_sys);
+
 wire [31:0] cart_rd_data, cart_rd_data_second;
 wire        cart_rd_ready, cart_save_done, cart_eeprom_dout, cart_eeprom_done;
 wire  [7:0] cart_save_dout, cart_gpio_diag, cart_err_count;
@@ -1905,7 +1918,7 @@ wire        cart_gpio_done, cart_present_w, cart_pwroff_reset_w;
 gba_cart_controller cart_probe (
     .clk                    ( clk_sys ),
     .reset_n                ( cart_probe_reset_n_s ),
-    .phi_sel                ( cart_probe_in_s[1:0] ),
+    .phi_sel                ( cart_probe_cfg_s[1:0] ),
 
     .cart_tran_bank2        ( cart_tran_bank2 ),
     .cart_tran_bank2_dir    ( cart_tran_bank2_dir ),
@@ -1948,8 +1961,8 @@ gba_cart_controller cart_probe (
     .gpio_din               ( cart_probe_in_s[27:24] ),
     .gpio_dout              ( cart_gpio_dout ),
     .gpio_done              ( cart_gpio_done ),
-    .gpio_timing_mode       ( cart_probe_in_s[23:21] ),
-    .gpio_recover_set       ( cart_probe_in_s[31:18] ),
+    .gpio_timing_mode       ( cart_probe_cfg_s[4:2] ),
+    .gpio_recover_set       ( cart_probe_cfg_s[18:5] ),
     .gpio_diag              ( cart_gpio_diag ),
 
     .cart_present           ( cart_present_w ),

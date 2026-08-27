@@ -170,3 +170,29 @@ set_multicycle_path -setup 2 \
 set_multicycle_path -hold 1 \
   -from [get_registers {*igba_savestates|internal_bus_out.Adr*}] \
   -to   [get_registers {*eProcReg_gba*Dout_buffer*}]
+
+# ---------------------------------------------------------------------------
+# Cartridge probe (branch exp-cart-probe). Measurement only; delete with the
+# probe.
+#
+# phi_sel, gpio_timing_mode and gpio_recover_set are configuration, not data.
+# They are written from the menu and then stand still, so the logic they feed
+# has as long as it likes to settle: gpio_recover_set in particular drives a
+# 14-bit compare whose result reaches the bus state machine, and that compare
+# was the source of the worst path in the unconstrained probe.
+#
+# 4 rather than something larger because it is enough and because a multicycle
+# is a claim about the hardware: these registers are written by a bridge write
+# at 74.25 MHz and synchronised into clk_sys, so consecutive writes cannot
+# arrive closer than a few clk_sys cycles even if somebody tried.
+#
+# Deliberately NOT applied to the per-access inputs. byte_addr is loaded in
+# S_IDLE and out_bank* is loaded from it in S_ROM_CS on the very next cycle,
+# so those paths genuinely have one cycle and constraining them would be a
+# lie that closes timing in the report and fails on a bench.
+set_multicycle_path -setup 4 \
+  -from [get_registers {*cart_probe_cfg_sync|o[*]}] \
+  -to   [get_registers {*gba_cart_controller*}]
+set_multicycle_path -hold 3 \
+  -from [get_registers {*cart_probe_cfg_sync|o[*]}] \
+  -to   [get_registers {*gba_cart_controller*}]
