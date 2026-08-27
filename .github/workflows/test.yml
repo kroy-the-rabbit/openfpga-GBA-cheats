@@ -11,7 +11,7 @@ name: test
 
 on:
   push:
-    branches: [cheats]
+    branches: [master]
   pull_request:
   workflow_dispatch:
 

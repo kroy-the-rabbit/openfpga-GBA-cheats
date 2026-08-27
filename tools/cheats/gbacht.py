@@ -66,6 +66,30 @@ The top nibble of the first word is the code type, and the low 28 bits are the
 address. Type semantics follow mGBA's `src/gba/cheats/codebreaker.c` and
 `gameshark.c`.
 
+A third dialect, and how it is told apart
+-----------------------------------------
+Lists exported for GameShark SP and Action Replay v3 write an 8+8 code whose
+top nibble is 0 but which is not a v1/v2 8-bit assign:
+
+    0WAAAAAA VVVVVVVV    W = 0 one byte, 2 two bytes, 4 four bytes
+                         AAAAAA is an offset into EWRAM, not a bus address
+
+The width is in the second nibble rather than the type, and the address is 24
+bits of EWRAM offset that the hardware's 256 KB mirroring folds down. Nothing
+in the file says which dialect a code is in, and the two overlap: `02002AEA
+00000050` is a valid v1/v2 8-bit assign *and* a valid halfword assign here.
+
+So this dialect is only ever tried on a code the v1/v2 rules have already
+rejected. That keeps every code that decodes today decoding the same way, and
+confines the new reading to words that were being thrown away.
+
+It is worth having because these exports are most of what a user downloads by
+hand. In the gamehacking.org list for The Minish Cap, the same cheats appear in
+both dialects, which is what pinned the format:
+
+    00202AEA 000000A0   and   32002AEA 00A0     Infinite Health
+    02202B00 000003E7   and   82002B00 03E7     999 Rupees
+
 What is rejected, and why it has to be
 --------------------------------------
 GameShark v3, Action Replay v3 and CodeBreaker codes past a `9` (CB_ENCRYPT)
