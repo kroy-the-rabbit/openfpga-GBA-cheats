@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Containerised Quartus build for the Pocket GBA core. Runs on the HOST and
 # drives podman itself, so the container only ever needs Quartus.
 #
@@ -18,6 +19,17 @@ WORK="$BDIR/work"
 
 PODMAN=${PODMAN:-podman}
 IMAGE=${IMAGE:-docker.io/raetro/quartus:21.1}
+
+# The two runtimes need different flags to leave the output owned by whoever
+# ran this, and that is not cosmetic: everything after the compile - rsync, the
+# version stamp, zip - runs on the host against files the container wrote.
+# podman's --userns=keep-id maps the caller to the same uid inside. Docker has
+# no equivalent and runs as root unless told, so it is told. label=disable is
+# for SELinux on the host and is only wanted where there is one.
+case "$(basename "$PODMAN")" in
+  docker) RUNAS=(--user "$(id -u):$(id -g)") ;;
+  *)      RUNAS=(--userns=keep-id --security-opt label=disable) ;;
+esac
 
 CORE_DIR=$(ls -d "$REPO/pkg/Cores"/*/ | head -1)
 CORE_NAME=$(basename "$CORE_DIR")
@@ -80,7 +92,7 @@ if [[ -z "${SKIP_COMPILE:-}" ]]; then
   start=$(date +%s)
   set +e
   $PODMAN run --rm \
-    --userns=keep-id --security-opt label=disable \
+    "${RUNAS[@]}" \
     -v "$WORK:/work" -w /work -e HOME=/tmp \
     "$IMAGE" quartus_sh -t generate.tcl 2>&1 | tee "$BDIR/build.log"
   rc=${PIPESTATUS[0]}

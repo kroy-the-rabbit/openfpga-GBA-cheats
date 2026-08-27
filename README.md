@@ -4,28 +4,53 @@
 
 LLM assisted port of [MiSTer GBA core](https://github.com/MiSTer-devel/GBA_MiSTer)
 
-> **This is a fork.** Upstream is
-> [mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA) and
-> everything below is theirs; the README is kept as they wrote it. What this
-> fork adds is a **cheat engine**, restored from MiSTer's `gba_cheats.vhd`,
-> which the Pocket port had dropped. The core installs as `kroy.GBA` and shows
-> as "Game Boy Advance (cheats)", so it sits alongside upstream rather than
-> replacing it.
->
-> CodeBreaker and GameShark codes are converted from a libretro `.cht` on your
-> computer and copied to the card as a `.chtbin` — the parse does not happen on
-> the handheld, because at 90 % logic utilisation there was no room for it.
->
-> | | |
-> |---|---|
-> | [`docs/CHEATS.md`](docs/CHEATS.md) | using cheats: the converter, the file, the menu readout |
-> | [`docs/CHEATBIN.md`](docs/CHEATBIN.md) | the `.chtbin` format contract |
-> | [`docs/HARDWARE.md`](docs/HARDWARE.md) | validating a build on a real Pocket |
-> | [`docs/PLAN.md`](docs/PLAN.md) | design and phasing, including the unstarted cartridge work |
-> | [`docs/HANDOFF.md`](docs/HANDOFF.md) | the fit history, and why the on-FPGA parser had to go |
-> | [`docs/BASELINE.md`](docs/BASELINE.md) | measured area and timing, build by build |
->
-> Not yet validated on hardware. See `docs/HARDWARE.md`.
+This repository is
+[mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA) with a
+**cheat engine** added. The Pocket port dropped MiSTer's `gba_cheats.vhd`; this
+restores it, along with the debug-bus arbitration and the CPU pause it needs,
+a data slot to load codes through, and a menu switch. See
+[docs/CHEATS.md](docs/CHEATS.md).
+
+The core installs as `Cores/kroy.GBA` and shows as "Game Boy Advance (cheats)",
+so it sits **beside** an upstream `mincer_ray.GBA` install rather than replacing
+it. Everything below this section is upstream's README, unchanged.
+
+> **Cheats can corrupt save files.** A cheat is not a setting, it is a write
+> into the memory of a running game once a frame, and a game builds its save
+> data out of that same memory. A code aimed at an address that means something
+> else in your copy overwrites whatever is there, and the damage is written into
+> your save at the next save point. Back up anything you care about first.
+
+**Cheats are converted on your computer.** The core reads
+`<rom filename>.gba.chtbin`, not a `.cht`, and that is not a preference: an
+ASCII parser on the FPGA measured 441 ALMs but grew the design by 1,285 and cost
+0.54 ns of setup timing at 97 % utilisation, which is the difference between a
+core that runs and one that does not exist. A plain `.cht` on the card loads
+**zero** cheats rather than misbehaving. Use the
+[desktop picker](https://github.com/kroy-the-rabbit/openfpga-GBC-cheats-ui) or
+`tools/cheats/cht2bin.py`.
+
+Everything outside `src/` and `pkg/` is new here and none of it ships: a
+containerised Quartus build, a simulation harness, the converter, and the docs
+below. Builds here also differ from upstream's in one way that is not the
+cheats - the fitter runs STANDARD FIT rather than AUTO - because at this
+occupancy AUTO measures placement luck rather than the design;
+[docs/HANDOFF.md](docs/HANDOFF.md) has the fifteen builds that establish it.
+
+**Not yet validated on hardware.** Simulation and the fit report are green;
+nothing here has run on a Pocket. [docs/HARDWARE.md](docs/HARDWARE.md) is the
+checklist that closes that.
+
+| Document | |
+|---|---|
+| [docs/CHEATS.md](docs/CHEATS.md) | using cheats: the converter, the file, the menu readout |
+| [docs/CHEATBIN.md](docs/CHEATBIN.md) | the `.chtbin` format contract |
+| [docs/HARDWARE.md](docs/HARDWARE.md) | validating a build on a real Pocket |
+| [docs/PLAN.md](docs/PLAN.md) | design and phasing, including the unstarted cartridge work |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | the fit history, and why the on-FPGA parser had to go |
+| [docs/BASELINE.md](docs/BASELINE.md) | measured area and timing, build by build |
+
+---
 
 ## Features
 
@@ -75,6 +100,12 @@ Note: MiSTer core has an accuracy branch! A few of those changes have made it in
 
 ## Installation
 
+> This fork is on the [Releases](../../releases) page. Download
+> `kroy.GBA_<version>.zip`, **not** the "Source code" archives: the bitstream is
+> built by CI rather than committed, so a core installed from one is listed by
+> the Pocket and cannot start. Upstream's own instructions follow and are
+> otherwise unchanged.
+
 The core should be available on pocket manager apps, or you can install manually:
 
 1. Download the latest release
@@ -105,12 +136,19 @@ Should be very easy
 ./scripts/build.sh
 ```
 
+> This fork builds with `make gba`, which runs the same image under Podman,
+> keeps the checked-in tree read-only, and **fails the build on negative
+> slack** - Quartus exits 0 on a design that misses timing, so the gate lives
+> in `tools/podman/report.sh`. It is the same script CI runs. `make test` is
+> the simulation suite.
+
 ## Credits
 
 - **[MiSTer GBA core](https://github.com/MiSTer-devel/GBA_MiSTer)** — original FPGA GBA implementation
 - **[Analogue openFPGA](https://www.analogue.co/developer)** — platform framework and core template
 - **[budude2/openfpga-GBC](https://github.com/budude2/openfpga-GBC)** — reference for MiSTer-to-Pocket porting patterns
 - **[agg23](https://github.com/agg23)** — analogue-pocket-utils and reference SNES/NES Pocket cores
+- **[mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA)** — the Pocket port this forks; everything in `src/` and `pkg/` is theirs apart from the cheat engine
 
 ## License
 

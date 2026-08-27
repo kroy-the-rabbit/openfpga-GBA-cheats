@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Render assets/icon.svg into the Pocket's core icon format.
 #
 #   tools/icon/make-icon.sh [source.svg] [out.bin]

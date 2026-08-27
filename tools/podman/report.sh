@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Summarise a finished build and gate on timing.
 #   tools/podman/report.sh   -> build/gba/report.txt
 #
