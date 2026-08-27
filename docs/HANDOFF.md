@@ -22,7 +22,12 @@ physical-synthesis churn became 61 ALMs and none.
 |---|---|---|---|
 | upstream v0.6.2 baseline | 16,648 (90 %) | 278 | +0.090 |
 | P1+P2, ASCII parser | 17,903 (97 %) | 284 | −0.452 |
-| **P1+P3, `.chtbin`** | **17,544 (95 %)** | **282** | **+0.090 met** |
+| **P1+P3, `.chtbin`** | **16,689-17,544 (90-95 %)** | **282** | **+0.090 met** |
+
+The ALM figure is a range because two runs of identical RTL produced both ends
+of it while agreeing exactly on RAM and slack; `docs/BASELINE.md` has the
+comparison and the leading explanation. Slack is the result that matters and
+both runs give the same one.
 
 It closes at exactly the margin upstream itself ships. Merged to `cheats` as
 `d7a2138`; format contract in `docs/CHEATBIN.md`.
@@ -355,7 +360,8 @@ Two git-ignored things went with the worktrees, both regenerable:
 2. **P8 packaging**, once 1 passes: README, release zip, and decide whether any
    of this goes back to mincer-ray.
 3. **Cartridge (P5-P7) is a separate decision** and has not been made. The
-   headroom is **936 ALMs and 26 RAM blocks**. Wokann's controller is 905 lines
+   headroom is **936-1,791 ALMs and 26 RAM blocks**, a range rather
+   than a number. Wokann's controller is 905 lines
    and has never been anyone's boot path. The cheap way to size it before
    committing: drop the controller in unwired, build once at STANDARD FIT, read
    the delta. Note that `mincer-ray/openfpga-GBA` reports `parent: none` — it is

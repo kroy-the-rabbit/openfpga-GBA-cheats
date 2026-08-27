@@ -81,6 +81,35 @@ with 0.09 ns to spare against a 9.93 ns period.
 | P1+P2, AUTO FIT seed 2 | `fcc3fae` | 17,988 | 284 | **-1.321 ns** | seed variance, not a result |
 | P1+P2, STANDARD FIT seed 3 | `fcc3fae` | 17,871 | 284 | **-0.453 ns** | confirms the -0.45 floor |
 | **P3 binary loader, STANDARD FIT** | `448fb44` | **17,544** | **282** | **+0.090 ns** | **timing met, bitstream built** |
+| **P3 rebuilt, STANDARD FIT, 12 processors** | `66a7d6a` | **16,689** | **282** | **+0.090 ns** | **timing met, bitstream built** |
+
+### The two P3 rows are the same design, and they disagree by 855 ALMs
+
+Not a typo and not a change. The RTL is identical: the only diff between
+`448fb44` and `66a7d6a` under `src/` is thirteen comment lines in
+`cheat_loader.sv`, which stopped being synthesised when the qsf was pointed at
+`cheat_binloader.sv`, and both commits list exactly the same sources. Both runs
+were Standard Fit. RAM blocks and worst setup match to the digit.
+
+What differed was the machine. The rebuild had all 12 processors; the original
+was made in a worktree while several experiments shared the box under a capped
+`NUM_PARALLEL_PROCESSORS`, which `tools/podman/build.sh` writes into
+`generate.tcl` when `NPROC` is set. Quartus's fitter is multithreaded and its
+placement is allowed to depend on how it divides the work, so that is the
+leading explanation. It is **not proved**: the original build log went with the
+worktrees, so the two cannot be compared directly. Capping `NPROC` and
+rebuilding would settle it in about 45 minutes.
+
+Two things follow, and the second matters more than the first:
+
+- **Pin `NPROC` as well as `FITTER_EFFORT` in any comparison.** The rule that
+  came out of the fit investigation was that only Standard Fit measures the
+  design. That is necessary and, on this evidence, not sufficient.
+- **Do not quote a single headroom number.** Two runs of one design put it
+  between **936 and 1,791 ALMs**. Both closed at +0.090 ns, which is the
+  result that actually matters and is the one both agree on. Anything sized
+  against the difference - the cartridge controller in particular - has to be
+  measured, not budgeted.
 
 ## The fit problem, and how to measure it
 
@@ -120,5 +149,8 @@ to +0.090 ns, which is exactly upstream's own margin, so cheats now cost no
 timing at all. See `CHEATBIN.md` for the format and `HANDOFF.md` for the full
 experiment log.
 
-**Headroom after cheats: 936 ALMs and 26 RAM blocks.** That is the budget any
-cartridge work has to come out of.
+**Headroom after cheats: 26 RAM blocks, and somewhere between 936 and 1,791
+ALMs.** The RAM figure is solid; the ALM figure is a range because two runs of
+this exact design landed at both ends of it, for the reason the section above
+records. Cartridge work comes out of that, and has to be measured into it
+rather than budgeted against a number that moves by 855 between builds.
