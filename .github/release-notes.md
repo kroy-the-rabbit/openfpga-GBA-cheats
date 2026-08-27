@@ -42,7 +42,7 @@ tools/cheats/cht2bin.py YourGame.gba.cht     # -> YourGame.gba.chtbin
 
 A plain `.cht` copied to the card loads **zero** cheats rather than
 misbehaving; the header carries a magic number so the old format cannot be
-mistaken for the new one. [docs/CHEATS.md](https://github.com/kroy-the-rabbit/openfpga-GBA-cheats/blob/master/docs/CHEATS.md)
+mistaken for the new one. [docs/CHEATS.md](https://github.com/kroy-the-rabbit/openfpga-GBA-cheats/blob/main/docs/CHEATS.md)
 explains why the parse is not on the handheld, and which code formats work.
 
 **Cheats can corrupt saves.** A cheat is a write into the memory of a running
