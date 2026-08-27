@@ -21,7 +21,7 @@ with two partial implementations to draw on.
 | | |
 |---|---|
 | Base | `upstream/master` v0.6.2 (`b08568f`, 2026-06-16) |
-| Branch | `cheats` |
+| Branch | `master`, the only one on the remote; releases are built from it and CI refuses a tag that is not |
 | Status | P0-P3 done and merged; P4 closed as not wanted; P5-P8 open. Nothing has run on hardware yet. |
 | Core identity | `pkg/Cores/kroy.GBA`, author `kroy`, description `Game Boy Advance (cheats)` |
 | Platform id | `gba`, unchanged, so `/Assets/gba/common` is shared with any other GBA core |

@@ -28,8 +28,7 @@ Reproduced on CI at a different processor count, agreeing in every figure.
 `docs/BASELINE.md` records an earlier 17,544 reading of the same design that
 nothing has been able to repeat.
 
-It closes at exactly the margin upstream itself ships. Merged to `cheats` as
-`d7a2138`; format contract in `docs/CHEATBIN.md`.
+It closes at exactly the margin upstream itself ships. Merged as `d7a2138`; format contract in `docs/CHEATBIN.md`.
 
 **What is still not done: none of this has run on a Pocket.** Simulation is
 green end to end (24 converter, 19 binloader, 10 fixture, 9 e2e, 513 corpus),
@@ -40,8 +39,10 @@ checklist that closes it.
 
 - **Nothing is pushed to any remote.** Not `origin`, not anything. The user set
   this explicitly and it has not been lifted.
-- **Nothing merges into `cheats` from a build that fails timing.** P3 satisfied
-  this; the rule stands for the cartridge work.
+- **Nothing merges into `master` from a build that fails timing.** P3 satisfied
+  this; the rule stands for the cartridge work. CI enforces the release half of
+  it: a tag that is not on `master` is refused, and a build that misses timing
+  refuses to publish.
 - **Run every fit comparison at STANDARD FIT** (finding 1 below), or the delta
   is not attributable to the change you made.
 - Upstream attribution stays: `info.txt`, `FUNDING.yml`, git history, the
@@ -235,8 +236,8 @@ not even guaranteed to buy slack.
 ### P3, delivered: the binary format
 
 Format pinned in `docs/CHEATBIN.md`; converter in `tools/cheats/cht2bin.py`;
-loader in `src/fpga/core/cheat_binloader.sv`. All merged to `cheats` via
-`p3-format` -> `p3-converter` + `p3-binloader` -> `p3-binary` -> `d7a2138`.
+loader in `src/fpga/core/cheat_binloader.sv`. All merged via `p3-format` ->
+`p3-converter` + `p3-binloader` -> `p3-binary` -> `d7a2138`.
 
 The converter is a thin wrapper, not a reimplementation: `tools/cheats/gbacht.py`
 was already the Python reference model for the RTL and exposes `parse()` and
@@ -313,18 +314,19 @@ has been tried; run K shows it does not help timing at STANDARD FIT anyway.
 
 The thirteen experiment worktrees under `~/Desktop/repos/` were removed on
 2026-08-26. **Every branch survives** in the main repo's `.git`; the worktrees
-were only checkouts. `git worktree add ../<dir> <branch>` brings any of them
+were only checkouts. None of them is on the remote and none should be: `origin`
+carries `master` alone. `git worktree add ../<dir> <branch>` brings any of them
 back. Nothing is pushed to any remote; `origin` holds only upstream's `master`
 and `rumble-support`.
 
 | Branch | Tip | Holds |
 |---|---|---|
-| `cheats` | (tip) | **the integration branch.** P1 + P3, closes timing. |
+| `master` | (tip) | **the integration branch**, and the only one on the remote. P1 + P3, closes timing. Releases are built from here and CI refuses a tag that is not on it. |
 | `p3-binary` | `d7a2138`^ | P3 assembled: format, converter, binloader. Merged. |
 | `p3-format` / `p3-converter` / `p3-binloader` | | the three P3 strands, merged into `p3-binary`. |
 | `p2-cheat-loader` | `c7aebd5` | P1+P2 with the ASCII parser. The design that failed timing. |
 | `p1-cheat-engine` | | P1 alone, the build that proved there was room for the engine. |
-| `exp-nolink` | `e3c6d64` | P2 plus the link-cable strip. **Retire, do not merge:** run K showed the strip does not help, and `cheats` closes with the link intact. |
+| `exp-nolink` | `e3c6d64` | P2 plus the link-cable strip. **Retire, do not merge:** run K showed the strip does not help, and `master` closes with the link intact. |
 | `exp-nolink-g` | `40ac38c` | as `exp-nolink` at STANDARD FIT (run K). |
 | `exp-nolink-h` | `0e807d6` | as G plus area-biased physical synthesis (run L). |
 | `exp-standard-16` | `47496dc` | the dead 16-entry lever, kept for reproducibility. |
@@ -341,7 +343,7 @@ Two git-ignored things went with the worktrees, both regenerable:
   pass `CHT_DB=`. Without it `make test` skips the two corpus passes and says
   so; it does not silently pass.
 - **Every built bitstream**, including the one that closed. Rebuild from
-  `cheats` with `make gba FITTER_EFFORT="STANDARD FIT"`, about 23 minutes.
+  `master` with `make gba FITTER_EFFORT="STANDARD FIT"`, about 23 minutes.
 
 ## Next steps, in order
 
@@ -389,7 +391,8 @@ existing `.rbf`. Three concurrent builds is the practical ceiling on 14 cores.
 
 ## Harness gotchas that cost time already
 
-- `FITTER_EFFORT` and `NPROC` only landed on `cheats` at `e5656b6`. Worktrees
+- `FITTER_EFFORT` and `NPROC` only landed on the integration branch at
+  `e5656b6`. Worktrees
   branched before that **silently ignore them** as unset variables, and the run
   measures AUTO FIT while the command line says STANDARD. Check
   `grep FITTER_EFFORT tools/podman/build.sh` in any worktree before trusting a
@@ -410,7 +413,7 @@ existing `.rbf`. Three concurrent builds is the practical ceiling on 14 cores.
 
 ## Simulation
 
-Green end to end on `cheats`, and it always was — the fit problem was never a
+Green end to end on `master`, and it always was — the fit problem was never a
 correctness problem. `make test`:
 
 | Pass | Result | Covers |
