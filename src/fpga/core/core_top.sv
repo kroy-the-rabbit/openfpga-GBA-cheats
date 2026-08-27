@@ -230,21 +230,7 @@ assign port_ir_rx_disable = 1;
 // bridge endianness
 assign bridge_endian_little = 0;
 
-// cart is unused, so set all level translators accordingly
-// directions are 0:IN, 1:OUT
-assign cart_tran_bank3 = 8'hzz;
-assign cart_tran_bank3_dir = 1'b0;
-assign cart_tran_bank2 = 8'hzz;
-assign cart_tran_bank2_dir = 1'b0;
-assign cart_tran_bank1 = 8'hzz;
-assign cart_tran_bank1_dir = 1'b0;
-assign cart_tran_bank0 = 4'hf;
-assign cart_tran_bank0_dir = 1'b1;
-assign cart_tran_pin30 = 1'b0;
-assign cart_tran_pin30_dir = 1'bz;
-assign cart_pin30_pwroff_reset = 1'b0;
-assign cart_tran_pin31 = 1'bz;
-assign cart_tran_pin31_dir = 1'b0;
+
 
 // ---- Link Cable ----
 // Supported: 2-player multi-player mode on SD/SC with SO/SI terminal detect.
@@ -1450,6 +1436,11 @@ always @(*) begin
     32'hF3000008: begin
         bridge_rd_data <= {31'd0, cheats_master};
     end
+    // Cartridge probe, measurement only. Reading it is what stops the fitter
+    // trimming the controller in front of it; see the probe block above.
+    32'hF4000000: begin
+        bridge_rd_data <= cart_probe_out_s;
+    end
     32'hF3000004: begin
         bridge_rd_data <= {24'd0, cheat_overrun_s, cheats_master,
                            cheat_rejected_s};
@@ -1523,6 +1514,11 @@ reg force_rtc = 0;        // 0 = Off, 1 = Force enable RTC/GPIO
 reg [1:0] turbo_mode = 0; // 0 = Disabled, 1 = Turbo A, 2 = Turbo B
 reg ff_video_stable = 1'b1; // 0 = Classic FF, 1 = wait for complete rendered lines
 
+// Cartridge probe input, written at 0x94. Declared here with the other menu
+// registers because the block that writes them is directly below; the probe
+// itself is at the bottom of this file.
+reg [31:0] cart_probe_in = 32'd0;
+
 reg [13:0] reset_counter = 0;
 wire       core_reset = (reset_counter != 0);
 
@@ -1538,6 +1534,7 @@ always @(posedge clk_74a) begin
         32'h88: turbo_mode     <= bridge_wr_data[1:0];
         32'h8C: ff_video_stable <= bridge_wr_data[0];
         32'hF3000008: cheats_master <= bridge_wr_data[0];
+        32'h94: cart_probe_in    <= bridge_wr_data;   // cartridge probe only
         endcase
     end
 end
@@ -1870,5 +1867,112 @@ gba_top #(
     .debug_mem           ()
 );
 
+
+// ============================================================
+// CARTRIDGE PROBE - MEASUREMENT ONLY, NOT A FEATURE
+// ============================================================
+// This instantiates Wokann's cart bus controller so the fitter has to place
+// and route it, and reports what that costs in ALMs, RAM and slack. It does
+// not implement cartridge support and must not be merged: no cheat, no ROM,
+// no save ever goes through it, `cartridge_adapter` is not declared in
+// core.json, and the Pocket therefore never powers the slot.
+//
+// It has to be instantiated rather than merely compiled. A module nothing
+// instantiates is synthesised away and measures as free, which is the
+// answer this experiment exists to avoid believing.
+//
+// Everything it needs is driven from a register the bridge writes, and
+// everything it produces is folded into a word the bridge reads. Both
+// directions matter: a constant input lets the fitter fold the logic behind
+// it away, and an unobserved output lets it trim the logic in front. Either
+// one would make the controller measure smaller than it is.
+//
+// The cart pins were tied off here before this. The controller drives them
+// now, which is the one part of this that is real: the pins already exist in
+// the 224/224 pin budget, so they cost nothing to claim.
+wire cart_probe_reset_n_s;
+synch_3 cart_probe_reset_sync(reset_n, cart_probe_reset_n_s, clk_sys);
+
+wire [31:0] cart_probe_in_s;
+synch_3 #(.WIDTH(32)) cart_probe_sync(cart_probe_in, cart_probe_in_s, clk_sys);
+
+wire [31:0] cart_rd_data, cart_rd_data_second;
+wire        cart_rd_ready, cart_save_done, cart_eeprom_dout, cart_eeprom_done;
+wire  [7:0] cart_save_dout, cart_gpio_diag, cart_err_count;
+wire  [3:0] cart_gpio_dout;
+wire        cart_gpio_done, cart_present_w, cart_pwroff_reset_w;
+
+gba_cart_controller cart_probe (
+    .clk                    ( clk_sys ),
+    .reset_n                ( cart_probe_reset_n_s ),
+    .phi_sel                ( cart_probe_in_s[1:0] ),
+
+    .cart_tran_bank2        ( cart_tran_bank2 ),
+    .cart_tran_bank2_dir    ( cart_tran_bank2_dir ),
+    .cart_tran_bank3        ( cart_tran_bank3 ),
+    .cart_tran_bank3_dir    ( cart_tran_bank3_dir ),
+    .cart_tran_bank1        ( cart_tran_bank1 ),
+    .cart_tran_bank1_dir    ( cart_tran_bank1_dir ),
+    .cart_tran_bank0        ( cart_tran_bank0 ),
+    .cart_tran_bank0_dir    ( cart_tran_bank0_dir ),
+    .cart_tran_pin30        ( cart_tran_pin30 ),
+    .cart_tran_pin30_dir    ( cart_tran_pin30_dir ),
+    .cart_pin30_pwroff_reset( cart_pwroff_reset_w ),
+    .cart_tran_pin31        ( cart_tran_pin31 ),
+    .cart_tran_pin31_dir    ( cart_tran_pin31_dir ),
+
+    // Every input from the probe register, so none of it folds to a constant.
+    .rd_req                 ( cart_probe_in_s[2] ),
+    .rd_addr                ( {cart_probe_in_s[31:8], 1'b0} ),
+    .rd_data                ( cart_rd_data ),
+    .rd_data_second         ( cart_rd_data_second ),
+    .rd_ready               ( cart_rd_ready ),
+
+    .save_req               ( cart_probe_in_s[3] ),
+    .save_addr              ( cart_probe_in_s[24:8] ),
+    .save_rnw               ( cart_probe_in_s[4] ),
+    .save_din               ( cart_probe_in_s[15:8] ),
+    .save_dout              ( cart_save_dout ),
+    .save_done              ( cart_save_done ),
+
+    .eeprom_req             ( cart_probe_in_s[5] ),
+    .eeprom_rnw             ( cart_probe_in_s[6] ),
+    .eeprom_din             ( cart_probe_in_s[7] ),
+    .eeprom_dma             ( cart_probe_in_s[16] ),
+    .eeprom_dout            ( cart_eeprom_dout ),
+    .eeprom_done            ( cart_eeprom_done ),
+
+    .gpio_req               ( cart_probe_in_s[17] ),
+    .gpio_rnw               ( cart_probe_in_s[18] ),
+    .gpio_addr              ( cart_probe_in_s[20:19] ),
+    .gpio_din               ( cart_probe_in_s[27:24] ),
+    .gpio_dout              ( cart_gpio_dout ),
+    .gpio_done              ( cart_gpio_done ),
+    .gpio_timing_mode       ( cart_probe_in_s[23:21] ),
+    .gpio_recover_set       ( cart_probe_in_s[31:18] ),
+    .gpio_diag              ( cart_gpio_diag ),
+
+    .cart_present           ( cart_present_w ),
+    .err_count              ( cart_err_count )
+);
+
+// Every output reduced into one readable word. XOR rather than concatenation
+// so that all 32 bits of rd_data reach it: a 32-bit slice of a wider bus
+// would let the fitter trim whatever did not survive to the mux.
+wire [31:0] cart_probe_out =
+      cart_rd_data ^ cart_rd_data_second
+    ^ {24'd0, cart_save_dout}
+    ^ {24'd0, cart_gpio_diag}
+    ^ {24'd0, cart_err_count}
+    ^ {28'd0, cart_gpio_dout}
+    ^ {26'd0, cart_rd_ready, cart_save_done, cart_eeprom_dout,
+              cart_eeprom_done, cart_gpio_done, cart_present_w};
+wire [31:0] cart_probe_out_s;
+synch_3 #(.WIDTH(32)) cart_probe_out_sync(cart_probe_out, cart_probe_out_s,
+                                          clk_74a);
+
+// The controller drives pin30 through its own output; the framework's
+// power-off reset line still has to be driven from somewhere.
+assign cart_pin30_pwroff_reset = cart_pwroff_reset_w;
 
 endmodule

@@ -853,6 +853,10 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../core/save_type_detector.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/cart_quirks.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/save_state_controller.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/cheat_binloader.sv
+# Cartridge probe, measurement only. Vendored from Wokann/openfpga-GBA and
+# instantiated in core_top so the fitter has to place it; see the probe block
+# at the bottom of core_top.sv. Not a feature and not for merging.
+set_global_assignment -name SYSTEMVERILOG_FILE ../han/gba_cart_controller.sv
 
 # GBA core VHDL — MEM library (SyncRam primitives)
 set_global_assignment -name VHDL_FILE ../gba/SyncFifo.vhd -library MEM
