@@ -14,6 +14,18 @@ has the measurements and `docs/CHEATBIN.md` has the format.
 
 ## Quick start
 
+There are two ways to get a `.chtbin` onto the card. The desktop picker is the
+one to use if you have it:
+
+**[openfpga-GBC-cheats-ui](https://github.com/kroy-the-rabbit/openfpga-GBC-cheats-ui)**
+lists the games on your card, matches each against the libretro cheat database,
+and lets you tick what you want. It knows this format, uses the same decoder
+this repo does, and writes the `.chtbin` for you. It also writes a `.cht`
+alongside, which is deliberate and explained under
+[Two files](#two-files-if-you-used-the-picker) below.
+
+By hand, with this repo checked out:
+
 1. Convert the `.cht` on your computer:
 
    ```
@@ -59,6 +71,21 @@ If you copy a `.cht` to the SD card by mistake, the core loads **zero** cheats
 rather than misbehaving: the `.chtbin` header carries a magic number precisely
 so the old file cannot be mistaken for the new one and shifted into the cheat
 table as garbage.
+
+## Two files, if you used the picker
+
+The picker leaves both `Game.gba.chtbin` and `Game.gba.cht` beside the ROM.
+That is not the mistake above and nothing is wrong.
+
+The core reads the `.chtbin` and only the `.chtbin`: data slot 7 accepts that
+extension and no other, so the `.cht` is invisible to the hardware. It is there
+for the picker, which needs somewhere to keep the descriptions and the enable
+flags that the packed format has no room for and the core has no use for. It is
+what makes your ticks come back the next time you open the app.
+
+Edit or delete them as a pair. Changing the `.cht` by hand does nothing until
+it is converted again; deleting only the `.chtbin` leaves the app thinking the
+cheats are installed.
 
 ## Which cheats are on
 

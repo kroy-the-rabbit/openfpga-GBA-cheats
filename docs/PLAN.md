@@ -316,7 +316,10 @@ timing, and it should not block a feature that is a re-port of working code.
    Answered by P3, and more cleanly than the options in §3 allowed: the
    conversion step exists now regardless, so decryption has somewhere obvious
    to live if it is ever wanted. Nothing decrypts today; raw forms only, as
-   `docs/CHEATS.md` states.
+   `docs/CHEATS.md` states. The picker the option was named after now carries
+   this system too: `openfpga-GBC-cheats-ui` vendors `gbacht.py` and
+   `cht2bin.py` from this repo and writes the `.chtbin` itself, so the "drop
+   any file in and it works" property is recovered for anyone using it.
 2. ~~Is `CHEATCOUNT` 32 affordable here, or does the entry-pair encoding of
    conditional codes make 16 too small in practice?~~ Answered: 32, and the
    question was backwards. Halving it made the design *larger* and slower, both
