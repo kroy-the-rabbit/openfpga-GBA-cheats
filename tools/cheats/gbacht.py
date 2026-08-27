@@ -130,6 +130,13 @@ class Entry:
     address: int          # word aligned, 28 bits
     value: int            # already shifted into its byte lane
     kind: str = ""        # "cb" / "gs", for reporting only
+    # The two hex words this entry was decoded from, canonical rather than
+    # verbatim. The original spelling cannot be recovered: `+` separates the
+    # two halves of one code *and* one code from the next, and the tokenizer
+    # ignores separators entirely, so "3300786D+00FF" and "3300786D 00FF" and
+    # "3300786D00FF" all arrive here identically. What callers need is not the
+    # file's spelling but a stable name for the entry, so that a file written
+    # from these codes reads back as the same cheats it was written from.
     raw: str = ""
 
     @property
@@ -141,7 +148,8 @@ class Entry:
         return isinstance(other, Entry) and self.word == other.word
 
     def __repr__(self):
-        return (f"Entry(opt={self.optype:x} bm={self.bytemask:x} "
+        return (f"Entry({self.raw or '?'} opt={self.optype:x} "
+                f"bm={self.bytemask:x} "
                 f"addr={self.address:08x} val={self.value:08x})")
 
 
@@ -401,6 +409,8 @@ def parse(data: bytes, max_entries: int = MAX_ENTRIES,
         if op1 is not None:
             if n in (4, 8):
                 e, why = decode_pair(op1, t)
+                if e is not None:
+                    e.raw = f"{op1.upper()}+{t.upper()}"
                 op1 = None
                 if why == "encrypt":
                     encrypted = True
