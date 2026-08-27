@@ -260,10 +260,9 @@ def decode_gameshark(op1: int, op2: int) -> tuple[Optional[Entry], str]:
     if kind == 0x0:
         # 8-bit write. mGBA's own detector docks a code whose operand has bits
         # above the width it claims; here that is a hard reject, because it is
-        # the main thing separating a raw code from an encrypted word.
-        if op2 & 0xFFFFFF00:
-            return None, "rejected"
-        e = _lane(addr, 1, op2 & 0xFF)
+        # the main thing separating a raw code from an encrypted word. It is
+        # not a return, because the SP/v3 reading below gets what falls out.
+        e = None if op2 & 0xFFFFFF00 else _lane(addr, 1, op2 & 0xFF)
     elif kind == 0x1:
         if op2 & 0xFFFF0000:
             return None, "rejected"
@@ -279,8 +278,44 @@ def decode_gameshark(op1: int, op2: int) -> tuple[Optional[Entry], str]:
     else:
         return None, "unsupported"
     if e is None or not address_is_real(e.address):
+        # Type 0 is the only nibble the SP/v3 dialect uses, so it is the only
+        # one worth a second reading before the code is thrown away.
+        if kind == 0x0:
+            return decode_arv3(op1, op2)
         return None, "rejected"
     e.kind = "gs"
+    return e, "ok"
+
+
+# ------------------------------------------------ GameShark SP / AR v3 --
+# The width lives in the second nibble instead of the type, and the address is
+# an EWRAM offset rather than a bus address. See "A third dialect" in the module
+# docstring for why this is only ever tried after the v1/v2 reading has failed.
+ARV3_WIDTH = {0x0: 1, 0x2: 2, 0x4: 4}
+
+# EWRAM is 256 KB and the bus mirrors it the whole way across 0x02000000 to
+# 0x02FFFFFF, so an exporter is free to write any mirror of an address and the
+# hardware lands on the same byte. Folding here means the word this emits is
+# the canonical one, which is what the RTL and gba_cheats are compared against.
+EWRAM_BASE = 0x2000000
+EWRAM_MASK = 0x3FFFF
+
+
+def decode_arv3(op1: int, op2: int) -> tuple[Optional[Entry], str]:
+    """Decode one `0WAAAAAA VVVVVVVV` code, or say why not."""
+    if op1 >> 28 != 0x0:
+        return None, "unsupported"
+    width = ARV3_WIDTH.get((op1 >> 24) & 0xF)
+    if width is None:
+        return None, "unsupported"
+    # The same width check the v1/v2 types get, and for the same reason: an
+    # operand wider than the code claims is the cheapest tell of a random word.
+    if op2 >> (8 * width):
+        return None, "rejected"
+    e = _lane((op1 & 0xFFFFFF & EWRAM_MASK) + EWRAM_BASE, width, op2)
+    if e is None or not address_is_real(e.address):
+        return None, "rejected"
+    e.kind = "ar"
     return e, "ok"
 
 

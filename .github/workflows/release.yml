@@ -13,6 +13,12 @@
 # slack, so tools/podman/report.sh checks worst-case slack itself and exits 3.
 # That is the point of gating here rather than reporting: a bitstream with
 # negative slack may work on one bench and fail on somebody's handheld.
+#
+# Releases are built from master and nothing else. A tag can be pushed at any
+# commit on any branch, and a tag trigger does not care which, so an experiment
+# branch could have published a release that no reviewed history contained. The
+# first step checks that the tagged commit is actually on master and stops if
+# it is not.
 name: release
 
 on:
@@ -25,7 +31,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
+      # Full history: the ancestry check below needs master and the tag in the
+      # same clone, and a shallow one has neither.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Releases come from master
+        run: |
+          git fetch --no-tags --depth=0 origin master 2>/dev/null \
+            || git fetch --no-tags origin master
+          if git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "$GITHUB_SHA is on master"
+          else
+            echo "::error::${GITHUB_REF_NAME} is not on master. Releases are" \
+                 "built from master only; merge it first and tag the merge."
+            exit 1
+          fi
 
       - name: Fetch Quartus
         run: docker pull docker.io/raetro/quartus:21.1
