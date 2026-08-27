@@ -145,6 +145,62 @@ to back, or it is arithmetic on numbers that were never comparable.
 
 What is reproducible, and what actually decides whether a build ships, is
 timing closure. Every build of this design has closed at a positive margin.
+## Cartridge probe: the area fits, the controller does not meet 100 MHz
+
+Branch `exp-cart-probe`, commit `60961b5`. Wokann's `gba_cart_controller.sv`
+vendored and instantiated behind a harness whose only job is to stop the
+fitter optimising it away: every input driven from a bridge register, every
+output folded into a bridge-readable word.
+
+| | ALMs | RAM | Setup |
+|---|---|---|---|
+| `main`, cheats only | 16,689 (90 %) | 282 (92 %) | **+0.090** |
+| + cart controller | 17,548 (95 %) | 282 (92 %) | **-1.101** |
+| delta | **+859** | **0** | **-1.191** |
+
+**Area is not the objection.** 859 ALMs out of 1,791 available, and not one
+extra RAM block. The pins were already in the 224/224 budget.
+
+**The failure is not the P2 failure, and the difference decides what to do
+next.** When the ASCII parser missed timing, all 44 violating paths were
+pre-existing core paths - `gba_memorymux` into `gba_cpu` and into `gba_dma` -
+and the cheat logic was on none of them. That was congestion, and nothing
+inside the new module could fix it.
+
+Here: **400 failing paths, and zero of them touch the existing core.** Every
+one is inside `gba_cart_controller`. `gba_memorymux`, `gba_cpu` and `gba_dma`
+do not appear at all. The core still closes at 95 % occupancy with the
+controller beside it; it is the controller's own logic that will not run at
+100 MHz.
+
+**And it does not have to.** The worst path needs 10.419 ns against a 9.931 ns
+period, about half a nanosecond over one clk_sys cycle. But these are
+bus-facing registers on a controller that drives PHI at clk_sys/6 and holds an
+address for `ADDR_SETUP` = 4 cycles, a ROM read for `ROM_WAIT` = 24 and a save
+access for `SAVE_WAIT` = 54. Nothing on those paths is required to settle in
+one cycle. STA constrains them at 100 MHz because nobody has told it
+otherwise.
+
+So the next experiment is a multicycle constraint on the controller's
+bus-facing registers. Note that this is not the lever that failed as run M:
+there the constraint worked mechanically and bought nothing, because the cost
+was combinational logic in paths that genuinely were single-cycle. Here the
+constrained paths are the failing paths, and they have between 4 and 54 cycles
+to settle.
+
+Two caveats on the -1.101 before treating it as the real number:
+
+- The harness shares one CDC register across three input buses - bit 22 of
+  `cart_probe_in_s` feeds `rd_addr`, `save_addr` and `gpio_recover_set` at
+  once - so fanout on the failing paths is worse than a real integration would
+  produce, where those come from separate registered sources.
+- Wokann's wait-state constants are documented placeholders awaiting
+  calibration on real cartridges, so the timing this controller actually needs
+  is not yet settled either.
+
+Nothing on that branch is mergeable: `cartridge_adapter` is not declared, so
+the Pocket never powers the slot, and no ROM, save or cheat is routed through
+the controller.
 
 ## The fit problem, and how to measure it
 
