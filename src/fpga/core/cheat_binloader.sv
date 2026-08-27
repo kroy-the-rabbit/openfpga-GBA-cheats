@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later
 //
 // cheat_binloader - load a packed .chtbin file into gba_cheats
 //

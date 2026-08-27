@@ -33,10 +33,9 @@ build should not have got this far; if it is positive but much smaller than
 0.090, something changed and the fit history in `docs/HANDOFF.md` is the place
 to start.
 
-ALMs will land somewhere between **16,689 and 17,544** (90-95 %) and that spread
-is not a problem with your build. Two runs of identical RTL produced both ends
-of it, apparently depending on how many processors Quartus was given; see
-`docs/BASELINE.md`. Neither number changes what gets flashed.
+ALMs should read **16,689 (90 %)**. Local and CI builds agree in every figure,
+so a different number means something changed; `docs/BASELINE.md` has the one
+earlier reading that has never been reproduced.
 
 You also need a test `.chtbin`. Make one from a game you own, and **write down
 what `cht2bin.py` printed** — the entry count is what step 3 checks against:
@@ -122,9 +121,7 @@ A pass here is what makes the format change safe to ship.
 P1, P2's surviving parts and P3 are done — closed at both ends, simulation and
 hardware. That clears P8 (packaging and release) and makes the cartridge
 question in `docs/PLAN.md` §2 the next real decision, to be made against the
-**936-1,791 ALMs and 26 RAM blocks** left over - a range rather than a
-number, for the reason `docs/BASELINE.md` records, and one that has to be
-measured rather than budgeted against.
+**1,791 ALMs and 26 RAM blocks** left over.
 
 Record the result in `docs/BASELINE.md` next to the fit numbers. A green fit
 report and a green hardware pass are different claims and the log should not

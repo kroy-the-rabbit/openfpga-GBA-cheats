@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later
 //
 // cheat_loader - parse libretro GBA .cht files into gba_cheats entries
 //

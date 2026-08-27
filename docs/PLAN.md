@@ -140,11 +140,10 @@ engine and any cart controller live in. For comparison, the GBC fork started at
 50 % ALMs and 2.374 ns. Every design decision below is downstream of this.
 
 **Where the shipping design landed.** With cheats in, at STANDARD FIT:
-282 RAM blocks and setup **+0.090 ns** — the same margin upstream's own build
-closes at. ALMs are 16,689-17,544 (90-95 %) depending on the run; two builds of
-identical RTL produced both ends, so headroom for everything after P4 is
-**936-1,791 ALMs and 26 RAM blocks**, a range the cartridge decision has to
-measure rather than budget against. `docs/BASELINE.md` records why. Getting there took fifteen builds and cost the ASCII parser; the whole
+16,689 ALMs (90 %), 282 RAM blocks and setup **+0.090 ns** — the same margin
+upstream's own build closes at. Confirmed twice, locally and on CI, agreeing in
+every figure. Headroom for everything after P4 is **1,791 ALMs and 26 RAM
+blocks**. Getting there took fifteen builds and cost the ASCII parser; the whole
 argument is in `docs/HANDOFF.md`, and the rule that came out of it is: **every
 fit comparison runs at STANDARD FIT**, or the delta is not attributable.
 
@@ -257,7 +256,7 @@ it works" property the GBC core has. Decide before writing the emitter.
 | **P0** | Reproducible local build. Upstream ships `scripts/build.sh` on `raetro/quartus:21.1` under Docker plus `print_timing.sh`, `seed_sweep.sh` and custom STA reports. Convert to Podman to match the GBC harness, keep Quartus 21.1, and make the wrapper fail the build on negative slack the way `tools/podman/build-core.sh` does in the GBC repo. | Unmodified v0.6.2 builds locally, boots a ROM on hardware, and `docs/BASELINE.md` carries our own numbers next to upstream's. |
 | **P1** done | Restore the cheat engine: `gba_cheats.vhd` and `SyncFifo` wiring, the five `gba_top` ports, the third debug-bus branch, `sleep_cheats` in the run condition, qsf entries. Feed it one hardcoded 128-bit word. | Fit closes: 16,624 ALMs, +0.090 ns, i.e. the engine is nearly free. The hardware half of this criterion is still outstanding. |
 | **P2** superseded by P3 | Data slot 7, a fourth `data_loader`, `cheat_loader.sv` ported with the 128-bit emitter, master switch on `0x90`. | Written and correct in simulation (513/513 corpus), but **it does not fit**: 17,903 ALMs at 97 %, setup -0.452 ns. The slot, the `data_loader` and the `0x90` switch all survive into P3; only the on-FPGA ASCII parser was cut. |
-| **P3** done | The format decision from §3, resolved harder than planned: **the whole parse moved off the FPGA.** `tools/cheats/cht2bin.py` converts `.cht` to a 16-byte-per-entry `.chtbin`, and `cheat_binloader.sv` is a byte counter plus a 72-bit shift register in place of the 648-line parser. Format contract in `docs/CHEATBIN.md`. | **Closes at 282 RAM and setup +0.090 ns** — upstream's own margin — with ALMs at 16,689-17,544 (90-95 %) depending on the run. The loader costs 61 ALMs with zero physical-synthesis churn, against 441 and 12.7 % of all churn for the parser. `docs/CHEATS.md` describes the `.chtbin` workflow. |
+| **P3** done | The format decision from §3, resolved harder than planned: **the whole parse moved off the FPGA.** `tools/cheats/cht2bin.py` converts `.cht` to a 16-byte-per-entry `.chtbin`, and `cheat_binloader.sv` is a byte counter plus a 72-bit shift register in place of the 648-line parser. Format contract in `docs/CHEATBIN.md`. | **Closes at 16,689 ALMs (90 %), 282 RAM, setup +0.090 ns** — upstream's own margin, reproduced on CI. The loader costs 61 ALMs with zero physical-synthesis churn, against 441 and 12.7 % of all churn for the parser. `docs/CHEATS.md` describes the `.chtbin` workflow. |
 | **P4** closed, will not happen | On-screen readout re-attached to `video_adapter.sv`. **Authorised to drop outright if the fit proves there is no room**, which is where the evidence currently points: the P1+P2 build carries no OSD at all and still misses setup by 0.846 ns at 97 % ALMs. Dropping it therefore saves nothing today; it means the phase does not happen unless the budget recovers first. The `CL:`/`CD:` menu readouts already cover the diagnostics the OSD existed for. | Closed on 2026-08-26 by user decision, not by the budget: the overlay is not wanted. The `CL:`/`CD:` menu readouts carry the diagnostics. |
 | **P5** | Cartridge bring-up: import Wokann's controller and Rai's APF plumbing, cart detected, header read, `cartridge_adapter` enabled. | The core boots with a cart inserted and reads a correct header, on hardware. |
 | **P6** | ROM from cart as the boot path, source mux, save routing to the cart. | A real cart boots and plays, saves land on the cart. |
@@ -269,8 +268,7 @@ Every "done" above is a simulation and fit result. The hardware pass is one
 session with an SD card, laid out step by step in `docs/HARDWARE.md`, and is
 the next thing to happen; until it does, the
 cheat feature is unproven, and sizing the cartridge work against the remaining
-936-1,791 ALMs and 26 RAM blocks is premature, and that
-range is itself a reason to measure the controller rather than budget for it.
+1,791 ALMs and 26 RAM blocks is premature.
 
 P1 is deliberately before any file I/O, and P5 deliberately after the cheat work
 is closed: cartridge bring-up is the phase most likely to stall on hardware
