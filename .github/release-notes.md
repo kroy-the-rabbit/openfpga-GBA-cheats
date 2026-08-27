@@ -1,3 +1,9 @@
+> **This build has never run on a Pocket.** The simulation suite and the fit
+> report are green and the core builds and closes timing, but no cheat has been
+> seen to take effect on real hardware, and neither has the core been seen to
+> boot. Treat it as something to test rather than something to rely on, and back
+> up your saves. `docs/HARDWARE.md` in the repository is the checklist.
+
 **Download `kroy.GBA_<version>.zip` below**, not the "Source code" archives.
 Those are the repository, and the bitstream is built by CI rather than
 committed, so a core installed from one is listed by the Pocket but cannot
