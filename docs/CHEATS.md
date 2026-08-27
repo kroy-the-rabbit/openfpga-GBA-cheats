@@ -150,29 +150,60 @@ has 32 slots in it.
 ## The readout
 
 Two numbers in the core menu, for when a file does not do what you expected.
+There is no console on a Pocket, so these five counters are the whole
+diagnostic surface.
 
 `CL:` packs three counters into one 32-bit number:
 
 ```
-bits 31:12  bytes received
-bits 11:6   cheats pushed
-bits  5:0   entries pushed
+bits 31:12  bytes received, used or not
+bits 11:6   entries the file's header DECLARED
+bits  5:0   entries actually pushed to the engine
 ```
 
-* Zero bytes means the file was never loaded: wrong name, wrong extension, or
-  it is not next to the ROM.
-* Bytes but no cheats means the file was read and nothing in it survived. Every
-  cheat is probably `enable = false`, or the codes are encrypted.
-* Cheats but the game is unchanged means the codes are running and are wrong
-  for your save or your version of the game.
+Read the low two fields against each other:
+
+* **Zero bytes.** The file was never loaded: wrong name, wrong extension, or it
+  is not next to the ROM. Nothing downstream of this matters.
+* **Bytes, but declared and pushed are both zero.** The file arrived and was
+  rejected at the header. Almost always a `.cht` that got renamed rather than
+  converted — see `CD:` bit 7. This is the safety interlock doing its job.
+* **Declared higher than pushed.** The file is truncated, or it declared more
+  entries than the 32-slot table holds. `CD:` bits 5:0 tell you which.
+* **Declared equals pushed, game unchanged.** The codes are loading and running
+  and are simply wrong for your version of the game or your save.
+
+A worked example. `cht2bin.py` prints what it wrote:
+
+```
+smoke.cht: 3 cheats, 4 entries, 0 dropped at the 32-entry cap, 80 bytes
+```
+
+so `CL:` should read `(80 << 12) | (4 << 6) | 4` = **327,940**. If it does not,
+the difference tells you where it went wrong before you have opened anything.
 
 `CD:` is the diagnostics word:
 
 ```
-bit   7     push overrun; a real file cannot set this
-bit   6     the master switch
-bits  5:0   enabled cheats the table had no room for
+bit   7     the file was malformed: wrong magic, wrong version, or it ended
+            mid-entry. This is the only state that otherwise looks exactly
+            like a valid file containing no cheats.
+bit   6     the master switch, i.e. Cheats Enabled
+bits  5:0   declared entries the table had no room for
 ```
+
+Two cautions on those fields. **`CD:` bit 7 is set by a plain `.cht`**, which is
+the point: the header magic exists so that renaming a file instead of converting
+it loads nothing, rather than shifting ASCII into the cheat table and corrupting
+the game. And **bits 5:0 saturate**: the declared count is clamped at 63, so the
+overflow tally stops at 31. It means "there were more", not an exact number, and
+a file that trips it should have been trimmed by the converter already.
+
+One name to be aware of if you read the RTL: internally these are
+`group_count` and `overrun`, names inherited from the ASCII loader where they
+counted cheats and push collisions. Under the binary format they count declared
+entries and malformed files. The RTL says so at
+`src/fpga/core/cheat_binloader.sv:76`.
 
 ## Cartridges
 
@@ -190,6 +221,9 @@ sets the "persist browsed filename" parameter, so it comes back on later
 launches.
 
 ## How it is tested
+
+`docs/HARDWARE.md` is the checklist for validating a build on a real Pocket,
+including the stray-`.cht` case. In simulation:
 
 ```
 make sim-image                     # once

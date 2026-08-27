@@ -1,24 +1,45 @@
 # Handoff
 
-State of the fork as of 2026-08-24. Written so the work can be picked up cold.
+State of the fork as of 2026-08-26. Written so the work can be picked up cold.
 Read this first, then `PLAN.md` for the design and `BASELINE.md` for the fit
 history.
 
-## Where the work stands in one paragraph
+## Resolved: the fit problem below is solved
 
-The cheat engine (P1) and the `.cht` loader (P2) are both written, both pass
-simulation, and together they do not fit. P1 alone closes timing with room to
-spare. P1+P2 together sit at 97 % ALM occupancy and miss setup by a
-reproducible 0.45 ns. Nothing has been merged into `cheats` beyond the build
-harness and docs, because nothing should merge from a build that fails timing.
-The open question is not "does the cheat code work" (simulation says yes), it
-is "what comes out of the design to make room".
+Everything from "Measured results" down was written on 2026-08-24, while
+P1+P2 were missing setup by a reproducible 0.45 ns. It is kept because the
+fifteen builds it records are what ruled out the fitter, the seed, the entry
+count and the feature strip as answers, and that negative evidence is the
+reason the eventual fix was the right one to reach for.
+
+The fix was P3: stop parsing ASCII on the FPGA. `tools/cheats/cht2bin.py`
+converts a `.cht` to a 16-byte-per-entry `.chtbin` on the host, and
+`src/fpga/core/cheat_binloader.sv` replaces the 648-line parser with a byte
+counter and a 72-bit shift register. 441 ALMs and 12.7 % of all
+physical-synthesis churn became 61 ALMs and none.
+
+| | ALMs | RAM | Setup |
+|---|---|---|---|
+| upstream v0.6.2 baseline | 16,648 (90 %) | 278 | +0.090 |
+| P1+P2, ASCII parser | 17,903 (97 %) | 284 | −0.452 |
+| **P1+P3, `.chtbin`** | **17,544 (95 %)** | **282** | **+0.090 met** |
+
+It closes at exactly the margin upstream itself ships. Merged to `cheats` as
+`d7a2138`; format contract in `docs/CHEATBIN.md`.
+
+**What is still not done: none of this has run on a Pocket.** Simulation is
+green end to end (24 converter, 19 binloader, 10 fixture, 9 e2e, 513 corpus),
+but no cheat has ever taken effect on real hardware. `docs/HARDWARE.md` is the
+checklist that closes it.
 
 ## Standing constraints
 
 - **Nothing is pushed to any remote.** Not `origin`, not anything. The user set
   this explicitly and it has not been lifted.
-- **P2 does not merge into `cheats` until a build closes timing.**
+- **Nothing merges into `cheats` from a build that fails timing.** P3 satisfied
+  this; the rule stands for the cartridge work.
+- **Run every fit comparison at STANDARD FIT** (finding 1 below), or the delta
+  is not attributable to the change you made.
 - Upstream attribution stays: `info.txt`, `FUNDING.yml`, git history, the
   `upstream` remote.
 
@@ -167,20 +188,9 @@ which is the right direction when the failure is congestion:
 
 ## In flight at handoff time
 
-| Worktree | Branch | Config | Purpose |
-|---|---|---|---|
-| `pocket-gba-nolink` | `exp-nolink` | AUTO, seed 8 | link strip, A/B against C's −0.846 |
-| `pocket-gba-p1` | `exp-16entries` (clean, 32 entries) | AUTO, seed 5 | seed roll, low value given finding 1 |
-| `pocket-gba-g` | `exp-nolink-g` | **STANDARD** | link strip at the valid measurement setting. **The decisive run.** |
-| `pocket-gba-h` | `exp-nolink-h` | **STANDARD** + area-biased phys synth | as G, plus duplication OFF and combo-for-area ON |
-
-H is a genuine coin flip and worth understanding: register duplication exists
-to *help* timing by shortening fanout paths, so disabling it normally costs
-slack. But it is also what added 369 ALMs to `gba_cpu` for free, and at 97 %
-occupancy that growth may cost more in routing congestion than the duplication
-buys. If that reasoning holds, H beats G despite disabling a timing
-optimisation. If not, H is clearly worse and the question is closed.
-
+Nothing. The four builds that were running on 2026-08-24 all finished and are
+runs I, J, K and L in the table above. The commands that produced them are in
+"Re-running the in-flight builds" below, kept because the branches still exist.
 
 ## Feasibility verdict: delete the ASCII parser, do not shrink it
 
@@ -218,21 +228,16 @@ call. It is the only path found that does not give up save states or the RTC,
 and unlike those it is not a gamble, because finding 8 says a feature cut is
 not even guaranteed to buy slack.
 
-### P3, in progress: the binary format
+### P3, delivered: the binary format
 
-Format pinned in `docs/CHEATBIN.md` on branch `p3-format`, cut from
-`p2-cheat-loader`. Two branches were cut from that and are being built in
-parallel:
-
-| Branch | Worktree | Scope |
-|---|---|---|
-| `p3-converter` | `pocket-gba-conv` | `tools/cheats/cht2bin.py` plus tests |
-| `p3-binloader` | `pocket-gba-bin` | `cheat_binloader.sv`, core_top, qsf, data.json, testbenches |
+Format pinned in `docs/CHEATBIN.md`; converter in `tools/cheats/cht2bin.py`;
+loader in `src/fpga/core/cheat_binloader.sv`. All merged to `cheats` via
+`p3-format` -> `p3-converter` + `p3-binloader` -> `p3-binary` -> `d7a2138`.
 
 The converter is a thin wrapper, not a reimplementation: `tools/cheats/gbacht.py`
-is already the Python reference model for the current RTL and exposes
-`parse()` and `words()`, so the parsing logic that leaves the FPGA has been
-sitting in the repo as the thing that validated it.
+was already the Python reference model for the RTL and exposes `parse()` and
+`words()`, so the parsing logic that left the FPGA had been sitting in the repo
+as the thing that validated it.
 
 The file stores the 128-bit words verbatim, so the loader does no
 transformation. Two things in the format are load-bearing and easy to get
@@ -243,11 +248,13 @@ wrong:
 - **The header magic is a safety interlock, not decoration.** The previous
   format was a plain `.cht`, so someone dropping the old file in is a real
   scenario, and shifting ASCII into the cheat table would corrupt the game.
-  Wrong magic or version must load zero entries.
+  Wrong magic or version loads zero entries.
 
-When both land: merge into one branch, run the sim suite, then build at
-STANDARD FIT against the −0.452 ns control. The target is P2 costing about 300
-ALMs of growth instead of 1,285.
+Outcome against the target: P2's growth was 1,285 ALMs, the goal was about 300,
+and the measured cost is **61 ALMs with zero physical-synthesis churn**.
+`cheat_loader.sv` is still in the tree and is not dead code — `tools/sim/run.py`
+compiles it as the reference that cross-checks `gbacht.py`, which is what the
+shipping converter parses with.
 
 ### What was tried and did not work, so it is not retried
 
@@ -298,43 +305,65 @@ If this works it preserves **every** feature, and the link cable strip on
 branch `exp-nolink` may not be needed at all. Do not merge the strip until this
 has been tried; run K shows it does not help timing at STANDARD FIT anyway.
 
-## Worktree and branch map
+## Branch map
 
-All worktrees are committed and clean. Nothing is pushed to any remote;
-`origin` holds only upstream's `master` and `rumble-support`.
+The thirteen experiment worktrees under `~/Desktop/repos/` were removed on
+2026-08-26. **Every branch survives** in the main repo's `.git`; the worktrees
+were only checkouts. `git worktree add ../<dir> <branch>` brings any of them
+back. Nothing is pushed to any remote; `origin` holds only upstream's `master`
+and `rumble-support`.
 
-| Worktree (in `~/Desktop/repos/`) | Branch | Tip | Holds |
-|---|---|---|---|
-| `pocket-gba` | `cheats` | (tip) | harness, docs, P1. The integration branch. |
-| `pocket-gba-loader` | `p2-cheat-loader` | `c7aebd5` | P1+P2 merged. The design that fails timing. |
-| `pocket-gba-nolink` | `exp-nolink` | `e3c6d64` | P2 plus the link cable strip. |
-| `pocket-gba-g` | `exp-nolink-g` | `40ac38c` | as `exp-nolink`, run at STANDARD FIT. |
-| `pocket-gba-h` | `exp-nolink-h` | `0e807d6` | as G, plus area-biased physical synthesis. |
-| `pocket-gba-exp-c` | `exp-standard-16` | `47496dc` | the dead 16-entry lever, kept for reproducibility. |
-| `pocket-gba-exp-d` | `exp-seed2` | `fcc3fae` | seed 2 roll, superseded by the STANDARD FIT finding. |
-| `pocket-gba-p1` | `exp-16entries` | `fcc3fae` | misleading name, now clean at 32 entries; used for the seed 5 roll. |
+| Branch | Tip | Holds |
+|---|---|---|
+| `cheats` | (tip) | **the integration branch.** P1 + P3, closes timing. |
+| `p3-binary` | `d7a2138`^ | P3 assembled: format, converter, binloader. Merged. |
+| `p3-format` / `p3-converter` / `p3-binloader` | | the three P3 strands, merged into `p3-binary`. |
+| `p2-cheat-loader` | `c7aebd5` | P1+P2 with the ASCII parser. The design that failed timing. |
+| `p1-cheat-engine` | | P1 alone, the build that proved there was room for the engine. |
+| `exp-nolink` | `e3c6d64` | P2 plus the link-cable strip. **Retire, do not merge:** run K showed the strip does not help, and `cheats` closes with the link intact. |
+| `exp-nolink-g` | `40ac38c` | as `exp-nolink` at STANDARD FIT (run K). |
+| `exp-nolink-h` | `0e807d6` | as G plus area-biased physical synthesis (run L). |
+| `exp-standard-16` | `47496dc` | the dead 16-entry lever, kept for reproducibility. |
+| `exp-seed2` | `fcc3fae` | seed 2 roll (run G). |
+| `exp-16entries` | `fcc3fae` | misleading name, clean at 32 entries; the seed 5 roll (run I). |
+| `exp-cheat-mcp` | | the multicycle constraint (run M). |
+| `exp-psnormal` | | `PHYSICAL_SYNTHESIS_EFFORT NORMAL` (run N). |
+| `master` | | upstream v0.6.2, untouched. |
 
-Each worktree keeps its own `build/gba/report.txt`, `build.log` and, on
-failure, a `TIMING_FAILED` marker. Those are the raw results.
+Two git-ignored things went with the worktrees, both regenerable:
+
+- **The 513-file `.cht` corpus.** Re-fetch from libretro-database,
+  `cht/Nintendo - Game Boy Advance`, and either drop it at `external/cht` or
+  pass `CHT_DB=`. Without it `make test` skips the two corpus passes and says
+  so; it does not silently pass.
+- **Every built bitstream**, including the one that closed. Rebuild from
+  `cheats` with `make gba FITTER_EFFORT="STANDARD FIT"`, about 23 minutes.
 
 ## Next steps, in order
 
-1. **Replace the ASCII parser with a host-side converter plus a minimal binary
-   loader.** See the feasibility verdict above. This is the recommended path
-   and needs a user decision first, because it changes how cheats are
-   installed.
-2. If that closes: merge P2 into `cheats`, record in `BASELINE.md`'s phase log,
-   update `PLAN.md`, and **reconsider whether the link strip is needed** before
-   merging `exp-nolink`. Then flash and validate on hardware, which has never
-   been done for P1 or P2.
-3. Only if constraining fails, discuss cutting features. Candidates are
-   `gba_savestates` + `save_state_controller` (attributed 536 together, expect
-   roughly 300 back, costs save states) and `gba_gpioRTCSolarGyro` (341, costs
-   Pokémon RTC events, Boktai solar and WarioWare Twisted gyro). Both are user
-   calls, not ours, and note finding 8: a cut is not guaranteed to help.
-4. Unstarted: hardware validation of P1/P2, P5-P7 cartridge work (import
-   Wokann's controller plus Rai's APF plumbing), P8 release and docs. P4 (OSD)
-   is authorised to drop.
+1. **Hardware validation. Nothing else is blocking, and nothing here has ever
+   run on a Pocket.** `docs/HARDWARE.md` is the checklist, with the expected
+   `CL:` value worked out for each case. In short, what has to be seen work:
+   - the core boots a ROM at all, i.e. P1's engine did not break the build;
+   - `<rom>.gba.chtbin` loads and the `CL:`/`CD:` menu readouts show a
+     plausible entry count;
+   - a code visibly takes effect in-game;
+   - the Cheats Enabled toggle turns it off and back on live;
+   - a stray `.cht` renamed to `.chtbin` loads **zero** entries rather than
+     corrupting anything. This is what the `GBAC` magic is for and it is the
+     one failure mode simulation cannot fully vouch for.
+2. **P8 packaging**, once 1 passes: README, release zip, and decide whether any
+   of this goes back to mincer-ray.
+3. **Cartridge (P5-P7) is a separate decision** and has not been made. The
+   headroom is **936 ALMs and 26 RAM blocks**. Wokann's controller is 905 lines
+   and has never been anyone's boot path. The cheap way to size it before
+   committing: drop the controller in unwired, build once at STANDARD FIT, read
+   the delta. Note that `mincer-ray/openfpga-GBA` reports `parent: none` — it is
+   the root of the lineage, so there is no better base to rebase onto; all 14
+   forks are downstream additions.
+4. **Retire `exp-nolink`.** Do not merge it. See the branch map.
+5. **P4 (OSD) is closed, not deferred.** The user has confirmed the overlay is
+   not wanted. The `CL:`/`CD:` menu readouts carry the diagnostics.
 
 ## Re-running the in-flight builds
 
@@ -377,5 +406,16 @@ existing `.rbf`. Three concurrent builds is the practical ceiling on 14 cores.
 
 ## Simulation
 
-Green on the merged tree and independent of the fit problem: 10/10 fixtures,
-9/9 e2e, 513/513 corpus files against the reference model. `make test`.
+Green end to end on `cheats`, and it always was — the fit problem was never a
+correctness problem. `make test`:
+
+| Pass | Result | Covers |
+|---|---|---|
+| `test_cht2bin.py` | 24/24 | the converter, including three hand-computed entries with derivations and a cross-check against an encoder nobody here wrote |
+| `run_binloader.py` | 19/19 | `cheat_binloader.sv`. Mutation-verified: reversing the shift loses 10 cases, delaying `cheat_on` loses exactly the two zero-gap cases |
+| `run_fixtures.py` | 10/10 | known-good words |
+| `run_e2e.py` | 9/9 | `.cht` in, cheat table out |
+| `run.py` | 513/513 | the whole libretro GBA corpus, RTL parser against `gbacht.py` |
+
+The last two want the corpus; see the branch map for where it went and how to
+get it back.

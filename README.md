@@ -4,8 +4,32 @@
 
 LLM assisted port of [MiSTer GBA core](https://github.com/MiSTer-devel/GBA_MiSTer)
 
+> **This is a fork.** Upstream is
+> [mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA) and
+> everything below is theirs; the README is kept as they wrote it. What this
+> fork adds is a **cheat engine**, restored from MiSTer's `gba_cheats.vhd`,
+> which the Pocket port had dropped. The core installs as `kroy.GBA` and shows
+> as "Game Boy Advance (cheats)", so it sits alongside upstream rather than
+> replacing it.
+>
+> CodeBreaker and GameShark codes are converted from a libretro `.cht` on your
+> computer and copied to the card as a `.chtbin` — the parse does not happen on
+> the handheld, because at 90 % logic utilisation there was no room for it.
+>
+> | | |
+> |---|---|
+> | [`docs/CHEATS.md`](docs/CHEATS.md) | using cheats: the converter, the file, the menu readout |
+> | [`docs/CHEATBIN.md`](docs/CHEATBIN.md) | the `.chtbin` format contract |
+> | [`docs/HARDWARE.md`](docs/HARDWARE.md) | validating a build on a real Pocket |
+> | [`docs/PLAN.md`](docs/PLAN.md) | design and phasing, including the unstarted cartridge work |
+> | [`docs/HANDOFF.md`](docs/HANDOFF.md) | the fit history, and why the on-FPGA parser had to go |
+> | [`docs/BASELINE.md`](docs/BASELINE.md) | measured area and timing, build by build |
+>
+> Not yet validated on hardware. See `docs/HARDWARE.md`.
+
 ## Features
 
+- **Cheats** (this fork) - see [`docs/CHEATS.md`](docs/CHEATS.md)
 - **Filters**
 - **Save States**
 - **Fast Forward (Bound to Y button)**

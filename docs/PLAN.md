@@ -22,6 +22,7 @@ with two partial implementations to draw on.
 |---|---|
 | Base | `upstream/master` v0.6.2 (`b08568f`, 2026-06-16) |
 | Branch | `cheats` |
+| Status | P0-P3 done and merged; P4 closed as not wanted; P5-P8 open. Nothing has run on hardware yet. |
 | Core identity | `pkg/Cores/kroy.GBA`, author `kroy`, description `Game Boy Advance (cheats)` |
 | Platform id | `gba`, unchanged, so `/Assets/gba/common` is shared with any other GBA core |
 | Licence | upstream MiSTer core is GPL-2.0 (`pkg/Cores/kroy.GBA/info.txt`); no LICENSE file in the port, so per-file notices and that info.txt govern |
@@ -79,7 +80,7 @@ is read off `gba_cheats.vhd` directly:
 | `63:32` | not read by the module |
 | `91:64` | 28-bit GBA bus address |
 | `95:92` | not read |
-| `99:96` | optype: `0` always, `1` `=`, `2` `>`, `3` `<`, `4` `>=`, `5` `<=`, `6` `!=`, `F` empty slot |
+| `99:96` | optype: `0` always, `1` `=`, `2` `>`, `3` `>=`, `4` `<`, `5` `<=`, `6` `!=`, `F` empty slot. **The VHDL constant names lie:** optype 3 is named `OPTYPE_LESS` and optype 4 `OPTYPE_GREATER_EQ`, but the comparisons they generate are the other way round. This table is the behaviour, read off the generated logic, and it is what `cht2bin.py` encodes to. |
 | `103:100` | byte enables for the four bytes of the value |
 
 Behaviour worth knowing before writing the loader:
@@ -121,7 +122,7 @@ Behaviour worth knowing before writing the loader:
   not a scanline pipe like the GB core. The GBC OSD hooks the pixel stream, so
   it has to be re-attached here rather than copied.
 
-### 1d. There is no headroom
+### 1d. There is almost no headroom
 
 From upstream CI run 27648777430, the v0.6.2 build this fork starts from:
 
@@ -137,6 +138,14 @@ From upstream CI run 27648777430, the v0.6.2 build this fork starts from:
 Worst setup slack is **0.102 ns**, and it is on `clk_sys`, the domain the cheat
 engine and any cart controller live in. For comparison, the GBC fork started at
 50 % ALMs and 2.374 ns. Every design decision below is downstream of this.
+
+**Where the shipping design landed.** With cheats in, at STANDARD FIT:
+17,544 ALMs (95 %), 282 RAM blocks, setup **+0.090 ns** — the same margin
+upstream's own build closes at. That leaves **936 ALMs and 26 RAM blocks** for
+everything after P4, which is the number the cartridge decision has to be made
+against. Getting there took fifteen builds and cost the ASCII parser; the whole
+argument is in `docs/HANDOFF.md`, and the rule that came out of it is: **every
+fit comparison runs at STANDARD FIT**, or the delta is not attributable.
 
 ---
 
@@ -245,14 +254,21 @@ it works" property the GBC core has. Decide before writing the emitter.
 | Phase | Deliverable | Done when |
 |---|---|---|
 | **P0** | Reproducible local build. Upstream ships `scripts/build.sh` on `raetro/quartus:21.1` under Docker plus `print_timing.sh`, `seed_sweep.sh` and custom STA reports. Convert to Podman to match the GBC harness, keep Quartus 21.1, and make the wrapper fail the build on negative slack the way `tools/podman/build-core.sh` does in the GBC repo. | Unmodified v0.6.2 builds locally, boots a ROM on hardware, and `docs/BASELINE.md` carries our own numbers next to upstream's. |
-| **P1** | Restore the cheat engine: `gba_cheats.vhd` and `SyncFifo` wiring, the five `gba_top` ports, the third debug-bus branch, `sleep_cheats` in the run condition, qsf entries. Feed it one hardcoded 128-bit word. | A hardcoded code visibly takes effect on hardware, and the fit report still closes. This is the phase that answers whether there is room at all. |
-| **P2** | Data slot 7, a fourth `data_loader`, `cheat_loader.sv` ported with the 128-bit emitter, master switch on `0x90`. | A `.cht` next to the ROM applies its codes. Verified in simulation against the libretro GBA cheat database before it goes near hardware. |
-| **P3** | Code-format decision from §3 implemented: raw forms in RTL, encrypted forms handled in the picker or explicitly unsupported and documented. | `docs/CHEATS.md` describes exactly what a user can paste in, with no asterisks. |
-| **P4** | On-screen readout re-attached to `video_adapter.sv`. **Authorised to drop outright if the fit proves there is no room**, which is where the evidence currently points: the P1+P2 build carries no OSD at all and still misses setup by 0.846 ns at 97 % ALMs. Dropping it therefore saves nothing today; it means the phase does not happen unless the budget recovers first. The `CL:`/`CD:` menu readouts already cover the diagnostics the OSD existed for. | Parsed count visible on screen, or the phase is closed as not affordable. |
+| **P1** done | Restore the cheat engine: `gba_cheats.vhd` and `SyncFifo` wiring, the five `gba_top` ports, the third debug-bus branch, `sleep_cheats` in the run condition, qsf entries. Feed it one hardcoded 128-bit word. | Fit closes: 16,624 ALMs, +0.090 ns, i.e. the engine is nearly free. The hardware half of this criterion is still outstanding. |
+| **P2** superseded by P3 | Data slot 7, a fourth `data_loader`, `cheat_loader.sv` ported with the 128-bit emitter, master switch on `0x90`. | Written and correct in simulation (513/513 corpus), but **it does not fit**: 17,903 ALMs at 97 %, setup -0.452 ns. The slot, the `data_loader` and the `0x90` switch all survive into P3; only the on-FPGA ASCII parser was cut. |
+| **P3** done | The format decision from §3, resolved harder than planned: **the whole parse moved off the FPGA.** `tools/cheats/cht2bin.py` converts `.cht` to a 16-byte-per-entry `.chtbin`, and `cheat_binloader.sv` is a byte counter plus a 72-bit shift register in place of the 648-line parser. Format contract in `docs/CHEATBIN.md`. | **Closes at 17,544 ALMs (95 %), 282 RAM, setup +0.090 ns** — upstream's own margin. The loader costs 61 ALMs with zero physical-synthesis churn, against 441 and 12.7 % of all churn for the parser. `docs/CHEATS.md` describes the `.chtbin` workflow. |
+| **P4** closed, will not happen | On-screen readout re-attached to `video_adapter.sv`. **Authorised to drop outright if the fit proves there is no room**, which is where the evidence currently points: the P1+P2 build carries no OSD at all and still misses setup by 0.846 ns at 97 % ALMs. Dropping it therefore saves nothing today; it means the phase does not happen unless the budget recovers first. The `CL:`/`CD:` menu readouts already cover the diagnostics the OSD existed for. | Closed on 2026-08-26 by user decision, not by the budget: the overlay is not wanted. The `CL:`/`CD:` menu readouts carry the diagnostics. |
 | **P5** | Cartridge bring-up: import Wokann's controller and Rai's APF plumbing, cart detected, header read, `cartridge_adapter` enabled. | The core boots with a cart inserted and reads a correct header, on hardware. |
 | **P6** | ROM from cart as the boot path, source mux, save routing to the cart. | A real cart boots and plays, saves land on the cart. |
 | **P7** | Cheats on cart games, cart-mode `.cht` loading via parameter bit 9. | Both features work together in one session. |
-| **P8** | README, `docs/CHEATS.md`, release packaging as `kroy.GBA_<version>.zip`, and upstreaming whatever belongs upstream. | Release published. |
+| **P8** | README, `docs/CHEATS.md`, release packaging as `kroy.GBA_<version>.zip`, and upstreaming whatever belongs upstream. `tools/podman/build.sh` already emits the zip. | Release published. |
+
+**The gate everything now sits behind: none of P1-P3 has run on a Pocket.**
+Every "done" above is a simulation and fit result. The hardware pass is one
+session with an SD card, laid out step by step in `docs/HARDWARE.md`, and is
+the next thing to happen; until it does, the
+cheat feature is unproven, and sizing the cartridge work against the remaining
+936 ALMs is premature.
 
 P1 is deliberately before any file I/O, and P5 deliberately after the cheat work
 is closed: cartridge bring-up is the phase most likely to stall on hardware
@@ -294,9 +310,15 @@ timing, and it should not block a feature that is a re-port of working code.
 
 ## 6. Open questions
 
-1. Which code formats ship in P3, and does the picker take on decryption?
-2. Is `CHEATCOUNT` 32 affordable here, or does the entry-pair encoding of
-   conditional codes make 16 too small in practice?
+1. ~~Which code formats ship in P3, and does the picker take on decryption?~~
+   Answered by P3, and more cleanly than the options in §3 allowed: the
+   conversion step exists now regardless, so decryption has somewhere obvious
+   to live if it is ever wanted. Nothing decrypts today; raw forms only, as
+   `docs/CHEATS.md` states.
+2. ~~Is `CHEATCOUNT` 32 affordable here, or does the entry-pair encoding of
+   conditional codes make 16 too small in practice?~~ Answered: 32, and the
+   question was backwards. Halving it made the design *larger* and slower, both
+   tables already live in RAM blocks. Do not retry 16.
 3. ~~Does the OSD survive the fit?~~ Answered by measurement: no, and it is
    authorised to be dropped. The `CL:`/`CD:` menu readouts carry the
    diagnostics instead.
