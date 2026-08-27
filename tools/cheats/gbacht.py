@@ -295,9 +295,26 @@ class Stats:
 HEX = "0123456789abcdefABCDEF"
 
 
+# A budget large enough not to be one. Reading a file to choose from is not
+# reading it to run: a picker has to show every cheat in a libretro file, and
+# stopping at the store's size would make everything past the first couple of
+# dozen invisible and unpickable. The limit belongs where the selection is
+# written, not where the file is read.
+NO_LIMIT = 1 << 30
+
+
 def parse(data: bytes, max_entries: int = MAX_ENTRIES,
-          max_group_entries: int = MAX_GROUP_ENTRIES
+          max_group_entries: int = MAX_GROUP_ENTRIES,
+          keep_disabled: bool = False
           ) -> tuple[list[Group], Stats]:
+    """Decode a `.cht` into cheats the engine can run.
+
+    `keep_disabled` returns cheats whose `_enable` key says false, with the key
+    recorded on the group rather than acted on. The converter does not want
+    them: a file it writes holds exactly the cheats that should run, and the
+    core reads every entry it is given regardless of any flag. A picker does,
+    because "off" is a thing it offers to change.
+    """
     """Model of src/fpga/core/cheat_loader.sv.
 
     The lexer is the GB core's, unchanged: a rolling seven byte window matches
@@ -338,7 +355,7 @@ def parse(data: bytes, max_entries: int = MAX_ENTRIES,
         if pending is None:
             return
         g, pending = pending, None
-        if not g.enabled:
+        if not g.enabled and not keep_disabled:
             st.drop("disabled")
             return
         if not g.entries:
