@@ -1,9 +1,5 @@
 # GBA for Analogue Pocket
 
-[![Latest Release](https://img.shields.io/github/v/tag/mincer-ray/openfpga-GBA?label=latest)](https://github.com/mincer-ray/openfpga-GBA/releases/latest) [![Downloads](https://img.shields.io/github/downloads/mincer-ray/openfpga-GBA/total)](https://github.com/mincer-ray/openfpga-GBA/releases) [![Platform](https://img.shields.io/badge/platform-Analogue%20Pocket-blue)](https://openfpga-library.github.io/analogue-pocket/)
-
-LLM assisted port of [MiSTer GBA core](https://github.com/MiSTer-devel/GBA_MiSTer)
-
 This repository is
 [mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA) with a
 **cheat engine** added. The Pocket port dropped MiSTer's `gba_cheats.vhd`; this
@@ -13,7 +9,7 @@ a data slot to load codes through, and a menu switch. See
 
 The core installs as `Cores/kroy.GBA` and shows as "Game Boy Advance (cheats)",
 so it sits **beside** an upstream `mincer_ray.GBA` install rather than replacing
-it. Everything below this section is upstream's README, unchanged.
+it.
 
 > **Cheats can corrupt save files.** A cheat is not a setting, it is a write
 > into the memory of a running game once a frame, and a game builds its save
@@ -52,9 +48,18 @@ checklist that closes that.
 
 ---
 
+Everything from here down is upstream's README: their badges, their credits and
+their own description of their work. The badges report
+`mincer-ray/openfpga-GBA`, not this fork. Where this fork differs from what
+they wrote, the difference is a marked note like this one and nothing else has
+been altered.
+
+[![Latest Release](https://img.shields.io/github/v/tag/mincer-ray/openfpga-GBA?label=latest)](https://github.com/mincer-ray/openfpga-GBA/releases/latest) [![Downloads](https://img.shields.io/github/downloads/mincer-ray/openfpga-GBA/total)](https://github.com/mincer-ray/openfpga-GBA/releases) [![Platform](https://img.shields.io/badge/platform-Analogue%20Pocket-blue)](https://openfpga-library.github.io/analogue-pocket/)
+
+LLM assisted port of [MiSTer GBA core](https://github.com/MiSTer-devel/GBA_MiSTer)
+
 ## Features
 
-- **Cheats** (this fork) - see [`docs/CHEATS.md`](docs/CHEATS.md)
 - **Filters**
 - **Save States**
 - **Fast Forward (Bound to Y button)**
