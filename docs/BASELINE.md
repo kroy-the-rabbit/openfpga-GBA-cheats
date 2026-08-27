@@ -145,62 +145,62 @@ to back, or it is arithmetic on numbers that were never comparable.
 
 What is reproducible, and what actually decides whether a build ships, is
 timing closure. Every build of this design has closed at a positive margin.
-## Cartridge probe: the area fits, the controller does not meet 100 MHz
 
-Branch `exp-cart-probe`, commit `60961b5`. Wokann's `gba_cart_controller.sv`
-vendored and instantiated behind a harness whose only job is to stop the
-fitter optimising it away: every input driven from a bridge register, every
-output folded into a bridge-readable word.
+## Cartridge probe: it fits, and it closes, with one constraint
 
-| | ALMs | RAM | Setup |
-|---|---|---|---|
-| `main`, cheats only | 16,689 (90 %) | 282 (92 %) | **+0.090** |
-| + cart controller | 17,548 (95 %) | 282 (92 %) | **-1.101** |
-| delta | **+859** | **0** | **-1.191** |
+Branch `exp-cart-probe`. Wokann's `gba_cart_controller.sv` vendored and
+instantiated behind a harness whose only job is to stop the fitter optimising
+it away: every input driven from a bridge register, every output folded into a
+bridge-readable word.
 
-**Area is not the objection.** 859 ALMs out of 1,791 available, and not one
-extra RAM block. The pins were already in the 224/224 budget.
+| | ALMs | RAM | Setup | Hold |
+|---|---|---|---|---|
+| `main`, cheats only | 16,689 (90 %) | 282 (92 %) | +0.090 | +0.027 |
+| + controller, unconstrained | 17,548 (95 %) | 282 (92 %) | **-1.101** | +0.052 |
+| + controller, settings constrained | 17,693 (96 %) | 282 (92 %) | **+0.090** | +0.017 |
 
-**The failure is not the P2 failure, and the difference decides what to do
-next.** When the ASCII parser missed timing, all 44 violating paths were
-pre-existing core paths - `gba_memorymux` into `gba_cpu` and into `gba_dma` -
-and the cheat logic was on none of them. That was congestion, and nothing
-inside the new module could fix it.
+**It closes at exactly the margin the design already had**, with 0 violated
+setup paths and 0 violated hold paths.
 
-Here: **400 failing paths, and zero of them touch the existing core.** Every
-one is inside `gba_cart_controller`. `gba_memorymux`, `gba_cpu` and `gba_dma`
-do not appear at all. The core still closes at 95 % occupancy with the
-controller beside it; it is the controller's own logic that will not run at
-100 MHz.
+The whole 1.191 ns was three configuration inputs. `phi_sel`,
+`gpio_timing_mode` and `gpio_recover_set` are settings: written from the menu,
+then still. `gpio_recover_set` in particular feeds a 14-bit compare whose
+result reaches the bus state machine, and driving it straight off a CDC
+register put that compare on the critical path. Giving the three their own
+register and a multicycle of 4 recovered all of it.
 
-**And it does not have to.** The worst path needs 10.419 ns against a 9.931 ns
-period, about half a nanosecond over one clk_sys cycle. But these are
-bus-facing registers on a controller that drives PHI at clk_sys/6 and holds an
-address for `ADDR_SETUP` = 4 cycles, a ROM read for `ROM_WAIT` = 24 and a save
-access for `SAVE_WAIT` = 54. Nothing on those paths is required to settle in
-one cycle. STA constrains them at 100 MHz because nobody has told it
-otherwise.
+**The bus logic itself already meets 100 MHz.** That is the part worth
+noticing. The per-access paths were deliberately left unconstrained, because
+`byte_addr` is loaded in `S_IDLE` and `out_bank*` is loaded from it in
+`S_ROM_CS` on the very next cycle - those genuinely have one cycle, and a
+blanket multicycle over the controller would have closed timing in the report
+and failed on a bench. They passed on their own.
 
-So the next experiment is a multicycle constraint on the controller's
-bus-facing registers. Note that this is not the lever that failed as run M:
-there the constraint worked mechanically and bought nothing, because the cost
-was combinational logic in paths that genuinely were single-cycle. Here the
-constrained paths are the failing paths, and they have between 4 and 54 cycles
-to settle.
+**The cost is area, and it is now the binding constraint.** 1,004 ALMs against
+the 1,791 that were free, leaving 787 and taking the design to 96 %. RAM is
+untouched, and the pins were already in the 224/224 budget.
 
-Two caveats on the -1.101 before treating it as the real number:
+### What this does not establish
 
-- The harness shares one CDC register across three input buses - bit 22 of
-  `cart_probe_in_s` feeds `rd_addr`, `save_addr` and `gpio_recover_set` at
-  once - so fanout on the failing paths is worse than a real integration would
-  produce, where those come from separate registered sources.
-- Wokann's wait-state constants are documented placeholders awaiting
-  calibration on real cartridges, so the timing this controller actually needs
-  is not yet settled either.
+- **It is a probe, not an integration.** No ROM, save or cheat is routed
+  through the controller; `rom_source_mux` is vendored but not instantiated,
+  and `cartridge_adapter` is not declared, so the Pocket never powers the slot.
+  A real integration adds the mux and the paths from `gba_top`, which this has
+  not measured.
+- **Wokann's wait states are placeholders** their own author says must be
+  calibrated on real cartridges, so the timing this controller finally needs is
+  not settled.
+- **ROM-from-cart has never run anywhere.** Wokann's own `core_top` hard-wires
+  `han_rom_cart_mode` to 0: their design runs a translated ROM from SD and uses
+  the cart for saves, GPIO and EEPROM. The ROM read path exists and is wired
+  and has never been anyone's boot path.
+- **A correction on method.** An earlier reading of this experiment reported
+  "400 failing paths". That was wrong: it counted incremental-delay rows inside
+  a `-detail full_path` breakdown rather than violations. The report states its
+  own verdict in a header - "Found 80 setup paths (0 violated)" - and that
+  header is the thing to read. The identification of *which* paths were worst
+  was right; the count was not.
 
-Nothing on that branch is mergeable: `cartridge_adapter` is not declared, so
-the Pocket never powers the slot, and no ROM, save or cheat is routed through
-the controller.
 
 ## The fit problem, and how to measure it
 
