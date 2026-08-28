@@ -146,7 +146,7 @@ to back, or it is arithmetic on numbers that were never comparable.
 What is reproducible, and what actually decides whether a build ships, is
 timing closure. Every build of this design has closed at a positive margin.
 
-## Cartridge probe: it fits, and it closes, with one constraint
+## Cartridge probe: it fits, it closes, and 640 ALMs are left
 
 Branch `exp-cart-probe`. Wokann's `gba_cart_controller.sv` vendored and
 instantiated behind a harness whose only job is to stop the fitter optimising
@@ -179,6 +179,41 @@ and failed on a bench. They passed on their own.
 **The cost is area, and it is now the binding constraint.** 1,004 ALMs against
 the 1,791 that were free, leaving 787 and taking the design to 96 %. RAM is
 untouched, and the pins were already in the 224/224 budget.
+
+### With the ROM path wired through, it still closes
+
+Commit `99932ee`. `gba_top`'s ROM reads now go through `rom_source_mux`, which
+passes them to SDRAM while `cart_mode` is low, and the controller's
+`rd_req`/`rd_addr` come from the mux rather than a probe register. `cart_mode`
+is driven from a register rather than tied low, so neither branch folds away.
+
+| | ALMs | Free | Setup | Hold |
+|---|---|---|---|---|
+| cheats only | 16,689 (90 %) | 1,791 | +0.090 | +0.027 |
+| + controller, constrained | 17,693 (96 %) | 787 | +0.090 | +0.017 |
+| **+ ROM path through the mux** | **17,840 (97 %)** | **640** | **+0.090** | **+0.093** |
+
+0 violated setup paths, 0 violated hold paths. The mux and the wiring cost
+**147 ALMs**; the whole cartridge front end is **1,151** and the design still
+closes at the margin it started with. Worst hold moved off the PLL output
+counter onto `clk_74a` and got better, not worse.
+
+**640 ALMs is what remains**, and what still has to come out of it is not
+small: save and EEPROM routing to `gba_top`, reporting `save_size = 0` in cart
+mode so the Pocket does not fight the cartridge for the save, the APF
+declaration, and the part nobody has done - ROM out of the cart fast enough
+that the CPU is not stalled to a crawl. If that overruns, `gba_serial` is the
+first candidate to drop, but budget it at the ~220 ALMs `exp-nolink` actually
+recovered rather than the 417 the fit report attributes.
+
+### Where these were built
+
+The last of these ran on a dedicated LXC on a Proxmox node rather than the
+workstation: 1377 s against 2610 s locally for a comparable design, on a Xeon
+E5-2680 v4 at 16 cores. The workstation is a 15 W Core Ultra 7 155U, which
+throttles under a 40-minute fit; a 4-core GitHub runner beat 12 threads of it
+by the same ratio. Core count is not the lever, sustained clock is. `NPROC`
+still does not change the result.
 
 ### What this does not establish
 
