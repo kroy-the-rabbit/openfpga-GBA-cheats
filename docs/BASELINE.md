@@ -83,7 +83,7 @@ with 0.09 ns to spare against a 9.93 ns period.
 | **P3 binary loader, STANDARD FIT** | `448fb44` | **17,544** | **282** | **+0.090 ns** | **timing met, bitstream built** |
 | **P3 rebuilt, STANDARD FIT, 12 processors** | `66a7d6a` | **16,689** | **282** | **+0.090 ns** | **timing met, bitstream built** |
 | **P3 on CI, STANDARD FIT, 4 processors** | `9650073` | **16,689** | **282** | **+0.090 ns** | **timing met, same to the digit** |
-| **Toggle fix, build runner, 16 processors** | `3bcd7d9` | **17,633** | **282** | **+0.048 ns** | **timing met, see below** |
+| **Toggle fix, build runner, 16 processors** | `3bcd7d9` | **17,633** | **282** | **+0.048 ns** | **timing met; does not reproduce, see below** |
 
 ### The two P3 rows are the same design, and they disagree by 855 ALMs
 
@@ -131,80 +131,113 @@ headers; the tree was checked clean, with no stray files and no extra qsf
 entries. Nothing in that costs 950 ALMs.
 
 So this design fits at **16,689** on a workstation at 12 processors and on a CI
-runner at 4, and at **17,633** on a build runner at 16. That is the third swing
-of roughly a thousand ALMs that is not the design - the first was the 17,544
-reading in the section above, whose processor-count explanation was already
-retracted when CI at 4 matched the workstation at 12.
+runner at 4, and at **17,744** on a build runner at 16. Anything sized by
+comparing two builds - a feature's cost, the headroom left for the next one -
+has to have both sides built on one host, back to back, or it is arithmetic on
+numbers that were never comparable.
 
-Three instances is enough to stop treating it as a mystery and start treating
-it as a rule. **At 90-97 % occupancy the ALM figure moves by around a thousand
-depending on the build host, and an area delta taken across two builds means
-very little.** Anything sized by comparing two builds - a feature's cost, the
-headroom left for the next one - has to have both sides built on one host, back
-to back, or it is arithmetic on numbers that were never comparable.
+#### What a nine-build run on one host actually showed
+
+That rule was first written claiming three instances of a thousand-ALM swing
+and blaming the build host for all of them. One of the three has since
+dissolved, and the mechanism was wrong.
+
+The `17,633` figure originally recorded here for the build runner **does not
+reproduce**. On that same host, `3bcd7d9` and `6994156` were rebuilt cold and
+warm, four builds in all, and every one returned **17,744 / 24,735 registers /
++0.059 setup**, identical to the digit. The two commits differ only in three
+documentation files, and the git SHA reaches `core.json` after the compile
+rather than synthesis, so Quartus saw the same input each time. `17,633` was a
+one-off whose cause was not found; it is not evidence of anything and the
+number to carry forward is 17,744.
+
+Three things were ruled out along the way, and are worth not re-testing:
+
+- **Run-to-run variance is zero.** Repeat builds of a branch on one host agree
+  exactly, including which timing corner wins.
+- **Quartus scratch state is irrelevant.** A build with `work/` deleted
+  outright matches one that inherited `db/` from the previous build, and it
+  does not matter whether that previous build was the same branch or a
+  different one.
+- **Seed is not irrelevant, and is the only knob found that moves the number.**
+  Identical RTL across seeds 1-3 spans 81 ALMs and 497 ps of setup slack.
+
+So the intra-host part of the original claim was wrong: on one host this design
+is deterministic per seed, not noisy by a thousand. What remains genuinely
+unexplained is the **cross-host** gap - 16,689 on the workstation and in CI
+against 17,744 here, ~1,050 ALMs for identical RTL - and one unreproduced
+outlier. The practical instruction the rule produced is unaffected and is what
+made the cartridge comparison below trustworthy; only the count of evidence
+behind it, and the "it is noisy on any host" reading of it, were overstated.
 
 What is reproducible, and what actually decides whether a build ships, is
-timing closure. Every build of this design has closed at a positive margin.
+timing closure - though "closes" now has to mean across seeds, not on one.
 
-## Cartridge probe: it fits, it closes, and 640 ALMs are left
+## Cartridge probe: it closes on one placement in three, and the cost is timing
 
-Branch `exp-cart-probe`. Wokann's `gba_cart_controller.sv` vendored and
-instantiated behind a harness whose only job is to stop the fitter optimising
-it away: every input driven from a bridge register, every output folded into a
-bridge-readable word.
+Branch `exp-cart-probe`. Wokann's `gba_cart_controller.sv` and a
+`rom_source_mux` vendored and instantiated behind a harness whose only job is
+to stop the fitter optimising them away: every input driven from a bridge
+register, every output folded into a bridge-readable word. `gba_top`'s ROM
+reads go through the mux, which passes them to SDRAM while `cart_mode` is low.
 
-| | ALMs | RAM | Setup | Hold |
-|---|---|---|---|---|
-| `main`, cheats only | 16,689 (90 %) | 282 (92 %) | +0.090 | +0.027 |
-| + controller, unconstrained | 17,548 (95 %) | 282 (92 %) | **-1.101** | +0.052 |
-| + controller, settings constrained | 17,693 (96 %) | 282 (92 %) | **+0.090** | +0.017 |
+Everything below was built on one host, back to back, under identical
+conditions - the rule the previous section exists to state. Earlier numbers in
+this section compared a workstation build against a runner build and are
+withdrawn.
 
-**It closes at exactly the margin the design already had**, with 0 violated
-setup paths and 0 violated hold paths.
+| | ALMs | RAM | Setup | Hold | |
+|---|---|---|---|---|---|
+| `main` `6994156` | 17,744 (96 %) | 282 | **+0.059** | +0.026 | pass |
+| + cartridge front end, seed 1 | 17,814 (96 %) | 282 | **-0.410** | +0.093 | fail |
+| + cartridge front end, seed 2 | 17,787 (96 %) | 282 | **-0.125** | +0.094 | fail |
+| + cartridge front end, seed 3 | 17,868 (97 %) | 282 | **+0.087** | +0.108 | pass |
 
-The whole 1.191 ns was three configuration inputs. `phi_sel`,
-`gpio_timing_mode` and `gpio_recover_set` are settings: written from the menu,
-then still. `gpio_recover_set` in particular feeds a 14-bit compare whose
-result reaches the bus state machine, and driving it straight off a CDC
-register put that compare on the critical path. Giving the three their own
-register and a multicycle of 4 recovered all of it.
+**It closes, but only on one placement in three.** `release.yml` retries a
+timing miss at seeds 2 and 3 before giving up, so this would ship - on the
+third try, with 87 ps of margin and nothing behind it.
 
-**The bus logic itself already meets 100 MHz.** That is the part worth
-noticing. The per-access paths were deliberately left unconstrained, because
-`byte_addr` is loaded in `S_IDLE` and `out_bank*` is loaded from it in
-`S_ROM_CS` on the very next cycle - those genuinely have one cycle, and a
-blanket multicycle over the controller would have closed timing in the report
-and failed on a bench. They passed on their own.
+**The multicycle constraint did its job and is not what is failing.** The
+1.191 ns recovered earlier was three configuration inputs: `phi_sel`,
+`gpio_timing_mode` and `gpio_recover_set` are settings, written from the menu
+and then still, and `gpio_recover_set` feeds a 14-bit compare that reaches the
+bus state machine. Giving the three their own register and a multicycle of 4
+recovered all of it. The per-access paths were deliberately left alone -
+`byte_addr` is loaded in `S_IDLE` and `out_bank*` from it in `S_ROM_CS` on the
+next cycle, so those genuinely have one cycle, and a blanket multicycle would
+have closed timing in the report and failed on a bench. They pass unaided.
 
-**The cost is area, and it is now the binding constraint.** 1,004 ALMs against
-the 1,791 that were free, leaving 787 and taking the design to 96 %. RAM is
-untouched, and the pins were already in the 224/224 budget.
+What fails on seeds 1 and 2 is `sys_pll_i|...|PLL_OUTPUT_COUNTER|divclk`,
+which is **`main`'s own worst path**, sitting at +0.059 before the controller
+is added. Nothing inside `gba_cart_controller` appears. This is the P2 failure
+mode - congestion pushing a pre-existing marginal path over - not the P3 one.
 
-### With the ROM path wired through, it still closes
+### The area figure has saturated and should not be used to size anything
 
-Commit `99932ee`. `gba_top`'s ROM reads now go through `rom_source_mux`, which
-passes them to SDRAM while `cart_mode` is low, and the controller's
-`rd_req`/`rd_addr` come from the mux rather than a probe register. `cart_mode`
-is driven from a register rather than tied low, so neither branch folds away.
+The four builds above span 17,787 to 17,868 ALMs for **identical RTL**, purely
+by seed. That spread, 81 ALMs, is the same order as the 43-124 ALM "cost" of
+the entire cartridge front end measured against `main`. A 905-line bus
+controller plus a ROM mux does not cost 70 ALMs; the register count *falls* by
+around 400 when it is added, which is retiming and packing rearranging the
+same logic into fewer, fuller ALMs.
 
-| | ALMs | Free | Setup | Hold |
-|---|---|---|---|---|
-| cheats only | 16,689 (90 %) | 1,791 | +0.090 | +0.027 |
-| + controller, constrained | 17,693 (96 %) | 787 | +0.090 | +0.017 |
-| **+ ROM path through the mux** | **17,840 (97 %)** | **640** | **+0.090** | **+0.093** |
+At 96-97 % occupancy an ALM holds two LUTs and two FFs and the fitter packs
+pairs into one rather than spreading them, because there is nowhere to spread
+to. New logic consumes the packing headroom instead of the area headroom, and
+the bill arrives as slack.
 
-0 violated setup paths, 0 violated hold paths. The mux and the wiring cost
-**147 ALMs**; the whole cartridge front end is **1,151** and the design still
-closes at the margin it started with. Worst hold moved off the PLL output
-counter onto `clk_74a` and got better, not worse.
+So **"how many ALMs are left" is not a question this design can answer any
+more.** The previous version of this section put 640 ALMs of headroom on that
+number and planned the remaining work against it. That figure is withdrawn.
+What is left to do is unchanged - save and EEPROM routing to `gba_top`,
+`save_size = 0` in cart mode so the Pocket does not fight the cartridge for the
+save, the APF declaration, and ROM out of the cart fast enough that the CPU is
+not stalled - but the thing to watch while doing it is worst-case slack across
+several seeds, not the utilisation percentage.
 
-**640 ALMs is what remains**, and what still has to come out of it is not
-small: save and EEPROM routing to `gba_top`, reporting `save_size = 0` in cart
-mode so the Pocket does not fight the cartridge for the save, the APF
-declaration, and the part nobody has done - ROM out of the cart fast enough
-that the CPU is not stalled to a crawl. If that overruns, `gba_serial` is the
-first candidate to drop, but budget it at the ~220 ALMs `exp-nolink` actually
-recovered rather than the 417 the fit report attributes.
+Nothing on that branch is mergeable regardless: `cartridge_adapter` is not
+declared, so the Pocket never powers the slot, and no save or cheat is routed
+through the controller.
 
 ### Where these were built
 
