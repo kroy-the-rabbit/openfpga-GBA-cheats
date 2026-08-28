@@ -739,8 +739,17 @@ wire [15:0] sdram_wr_data_mux = ss_sdram_wr_req  ? ss_sdram_wr_data : rom_loader
 
 // Mux SDRAM ch1 read port: ROM reads OR staging reads
 // During Phase 2 core is paused (sleep_savestate), no ROM reads conflict.
-wire        sdram_rd_req_mux  = ss_serving_active ? ss_sdram_rd_req     : sdram_read_req_gba;
-wire [24:0] sdram_rd_addr_mux = ss_serving_active ? ss_sdram_rd_addr    : sdram_read_addr_gba;
+// Cartridge probe: rom_source_mux sits between gba_top and this, so the ROM
+// request reaching SDRAM is the mux's rather than gba_top's. With cart_mode
+// low the mux passes everything straight through and behaviour is unchanged.
+wire        sdram_rd_req_mux  = ss_serving_active ? ss_sdram_rd_req     : romsrc_sdram_rd_req;
+wire [24:0] sdram_rd_addr_mux = ss_serving_active ? ss_sdram_rd_addr    : romsrc_sdram_rd_addr;
+
+wire        romsrc_gba_rd_ready, romsrc_sdram_rd_req;
+wire [24:0] romsrc_sdram_rd_addr;
+wire [31:0] romsrc_gba_rd_data, romsrc_gba_rd_data_second;
+wire        romsrc_cart_rd_req;
+wire [24:0] romsrc_cart_rd_addr;
 
 wire sdram_ready;
 wire sdram_wr_pending;
@@ -1789,10 +1798,10 @@ gba_top #(
     .cheats_active       (),
     // SDRAM (ROM reads — muxed with staging in sdram_pocket section)
     .sdram_read_ena      ( sdram_read_req_gba ),
-    .sdram_read_done     ( ss_serving_active ? 1'b0 : sdram_rd_ready ),
+    .sdram_read_done     ( romsrc_gba_rd_ready ),
     .sdram_read_addr     ( sdram_read_addr_gba ),
-    .sdram_read_data     ( sdram_rd_data ),
-    .sdram_second_dword  ( sdram_rd_data_second ),
+    .sdram_read_data     ( romsrc_gba_rd_data ),
+    .sdram_second_dword  ( romsrc_gba_rd_data_second ),
     // External memory (EWRAM + saves via PSRAM)
     .bus_out_Din         ( bus_out_Din ),
     .bus_out_Dout        ( bus_out_Dout ),
@@ -1935,8 +1944,8 @@ gba_cart_controller cart_probe (
     .cart_tran_pin31_dir    ( cart_tran_pin31_dir ),
 
     // Every input from the probe register, so none of it folds to a constant.
-    .rd_req                 ( cart_probe_in_s[2] ),
-    .rd_addr                ( {cart_probe_in_s[31:8], 1'b0} ),
+    .rd_req                 ( romsrc_cart_rd_req ),
+    .rd_addr                ( romsrc_cart_rd_addr ),
     .rd_data                ( cart_rd_data ),
     .rd_data_second         ( cart_rd_data_second ),
     .rd_ready               ( cart_rd_ready ),
@@ -1983,6 +1992,33 @@ wire [31:0] cart_probe_out =
 wire [31:0] cart_probe_out_s;
 synch_3 #(.WIDTH(32)) cart_probe_out_sync(cart_probe_out, cart_probe_out_s,
                                           clk_74a);
+
+// The ROM source mux, wired for real: gba_top's ROM reads go through it and
+// out to SDRAM exactly as before while cart_mode is low. cart_mode comes from
+// the probe register rather than a constant, because tying it low would let
+// the fitter delete the cartridge branch and the measurement with it.
+rom_source_mux romsrc (
+    .clk                  ( clk_sys ),
+    .cart_mode            ( cart_probe_cfg_s[19] ),
+
+    .gba_rd_req           ( sdram_read_req_gba ),
+    .gba_rd_addr          ( sdram_read_addr_gba ),
+    .gba_rd_ready         ( romsrc_gba_rd_ready ),
+    .gba_rd_data          ( romsrc_gba_rd_data ),
+    .gba_rd_data_second   ( romsrc_gba_rd_data_second ),
+
+    .sdram_rd_req         ( romsrc_sdram_rd_req ),
+    .sdram_rd_addr        ( romsrc_sdram_rd_addr ),
+    .sdram_rd_ready       ( ss_serving_active ? 1'b0 : sdram_rd_ready ),
+    .sdram_rd_data        ( sdram_rd_data ),
+    .sdram_rd_data_second ( sdram_rd_data_second ),
+
+    .cart_rd_req          ( romsrc_cart_rd_req ),
+    .cart_rd_addr         ( romsrc_cart_rd_addr ),
+    .cart_rd_ready        ( cart_rd_ready ),
+    .cart_rd_data         ( cart_rd_data ),
+    .cart_rd_data_second  ( cart_rd_data_second )
+);
 
 // The controller drives pin30 through its own output; the framework's
 // power-off reset line still has to be driven from somewhere.
