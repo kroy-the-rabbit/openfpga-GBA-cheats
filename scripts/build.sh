@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 RBF="$PROJECT_DIR/src/fpga/build/output_files/ap_core.rbf"
-RBF_R="$PROJECT_DIR/pkg/Cores/mincer_ray.GBA/bitstream.rbf_r"
+RBF_R="$PROJECT_DIR/pkg/Cores/kroy.GBA/bitstream.rbf_r"
 
 echo "=== Starting Quartus build via Docker ==="
 docker run --rm \

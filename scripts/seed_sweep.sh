@@ -213,7 +213,7 @@ if [[ "$BEST_SEED" -gt 0 && -f "$RESULTS_DIR/seed_$BEST_SEED/ap_core.rbf" ]]; th
     cp -f "$RESULTS_DIR/seed_$BEST_SEED/ap_core.rbf" "$RESULTS_DIR/best/"
     echo ""
     echo "Best bitstream saved to: $RESULTS_DIR/best/ap_core.rbf"
-    echo "To deploy: python3 scripts/reverse_bitstream.py $RESULTS_DIR/best/ap_core.rbf pkg/Cores/mincer_ray.GBA/bitstream.rbf_r"
+    echo "To deploy: python3 scripts/reverse_bitstream.py $RESULTS_DIR/best/ap_core.rbf pkg/Cores/kroy.GBA/bitstream.rbf_r"
 fi
 
 # Update the QSF with the best seed

@@ -1,0 +1,29 @@
+cheats = 7
+
+cheat0_desc = "if equal, and it is"
+cheat0_code = "72000200+00AA+32000204+0001"
+cheat0_enable = true
+
+cheat1_desc = "if equal, and it is not"
+cheat1_code = "72000300+00AA+32000304+0002"
+cheat1_enable = true
+
+cheat2_desc = "if not equal"
+cheat2_code = "A2000400+0005+32000404+0003"
+cheat2_enable = true
+
+cheat3_desc = "if greater than, and it is"
+cheat3_code = "B2000500+0010+32000504+0004"
+cheat3_enable = true
+
+cheat4_desc = "if less than, and it is"
+cheat4_code = "C2000600+0010+32000604+0005"
+cheat4_enable = true
+
+cheat5_desc = "if greater than, and it is not"
+cheat5_code = "B2000700+0010+32000704+0006"
+cheat5_enable = true
+
+cheat6_desc = "if less than, and it is not"
+cheat6_code = "C2000800+0010+32000804+0007"
+cheat6_enable = true

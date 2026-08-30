@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# The simulation suite, on every push. Icarus Verilog and Python only: no
+# Quartus, no container build, about a minute.
+#
+# tools/sim/run.py's corpus pass is not here. It diffs the RTL parser against
+# the reference model over real .cht files, and that corpus is third-party
+# content this repo does not carry; run it locally with
+# `make test CHT_DB=/path/to/cht`. The converter's corpus cross-check is
+# skipped for the same reason. Both say so rather than passing quietly.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends iverilog
+
+      # The converter is pure Python and needs no simulator, so it runs first:
+      # if the thing that produces .chtbin is wrong, the loader tests are
+      # testing the wrong bytes.
+      - name: Converter, and the hand-computed entries
+        run: python3 tools/cheats/test_cht2bin.py --corpus
+
+      - name: The .chtbin loader the core builds
+        run: python3 tools/sim/run_binloader.py
+
+      - name: Adversarial fixtures
+        run: python3 tools/sim/run_fixtures.py
+
+      - name: End to end, APF bridge writes through to the cheat table
+        run: python3 tools/sim/run_e2e.py
+
+      # cheat_loader.sv is no longer synthesised - the parse moved to the host
+      # in P3 - but it is still the reference the converter is cross-checked
+      # against, so it still has to compile and still has to behave.
+      - name: The ASCII parser it replaced still behaves
+        run: python3 tools/sim/run.py

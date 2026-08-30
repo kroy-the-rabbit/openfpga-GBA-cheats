@@ -7,7 +7,6 @@ Desktop.ini
 *.swp
 *.swo
 *~
-.claude/
 .vscode/
 .idea/
 
@@ -26,7 +25,7 @@ src/fpga/apf/build_id.mif
 
 # Build outputs
 bitstream.rbf_r
-pkg/Cores/mincer_ray.GBA/bitstream.rbf_r
+pkg/Cores/kroy.GBA/bitstream.rbf_r
 build_output/
 test_results.txt
 
@@ -35,3 +34,12 @@ references/*
 reference/*
 
 stresstest.txt
+
+# Build harness outputs: Quartus under build/gba/, simulation under build/sim/
+/build/
+# Test corpus of .cht files, fetched by the user; see docs/CHEATS.md
+/external/
+# Python for the reference model and the harness runs from a venv
+/.venv/
+__pycache__/
+*.pyc

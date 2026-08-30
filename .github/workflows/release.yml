@@ -1,0 +1,163 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Builds the core with Quartus and attaches the zip to the release for the tag
+# that triggered it.
+#
+# It runs the same tools/podman/build.sh the local harness runs, with PODMAN set
+# to docker, so a CI build and a local one are the same build rather than two
+# scripts that have to be kept in step. Quartus comes from the raetro image
+# upstream's own CI uses; do not bump it. Upstream tuned the constraints, the
+# seed and the custom STA reports against 21.1, and this fork closes setup by
+# 0.090 ns, which is not a margin to spend on a toolchain change.
+#
+# The build fails if the design misses timing. Quartus exits 0 on negative
+# slack, so tools/podman/report.sh checks worst-case slack itself and exits 3.
+# That is the point of gating here rather than reporting: a bitstream with
+# negative slack may work on one bench and fail on somebody's handheld.
+#
+# Releases are built from main and nothing else. A tag can be pushed at any
+# commit on any branch, and a tag trigger does not care which, so an experiment
+# branch could have published a release that no reviewed history contained. The
+# guard job below checks that the tagged commit is actually on main and stops
+# if it is not, before any of the build runs.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  RELEASE_BRANCH: main
+
+jobs:
+  # A tag fires this workflow wherever it was made: `on: push: tags` has no
+  # branch filter and GitHub offers none, so tagging a scratch branch would
+  # otherwise publish it as a release. This proves the tagged commit is on the
+  # release branch before anything else runs.
+  #
+  # Its own job rather than a step inside the build, so the refusal costs
+  # seconds instead of failing after a Quartus install and a fit.
+  #
+  # The branch is named in env rather than written into the check, because it
+  # has moved: all three forks are on main now.
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: the ancestry test needs the branch and the tag in the
+      # same clone, and a shallow one has neither.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Releases come from ${{ env.RELEASE_BRANCH }}
+        run: |
+          git fetch --no-tags origin "$RELEASE_BRANCH"
+          if git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "$GITHUB_REF_NAME is on $RELEASE_BRANCH"
+          else
+            echo "::error::${GITHUB_REF_NAME} is not on ${RELEASE_BRANCH}." \
+                 "Releases are built from that branch only; merge it first" \
+                 "and tag the merge."
+            exit 1
+          fi
+
+  build:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Quartus
+        run: docker pull docker.io/raetro/quartus:21.1
+
+      # STANDARD FIT is not a preference. At AUTO FIT this design's slack moved
+      # by half a nanosecond across placement seeds while STANDARD moved by one
+      # picosecond, so AUTO measures placement luck rather than the design.
+      # docs/HANDOFF.md has the fifteen builds that establish it.
+      #
+      # NPROC is pinned for a related reason, learned the harder way: two builds
+      # of identical RTL came out 855 ALMs apart and what differed was how many
+      # processors Quartus had. Pinning it does not make a CI build match a
+      # local one, it makes CI builds match each other.
+      #
+      # A timing miss refits with another seed rather than failing outright. The
+      # worst hold path sits inside the PLL's own output counter at about
+      # +0.03 ns, so placement variance alone can tip it negative. Only a timing
+      # miss retries - report.sh exits 3 for that and nothing else does - so a
+      # real error still stops the build on the first attempt.
+      - name: Build
+        env:
+          PODMAN: docker
+          FITTER_EFFORT: STANDARD FIT
+          NPROC: "4"
+        run: |
+          for seed in '' 2 3; do
+            [ -n "$seed" ] && echo "::warning::timing missed, refitting with seed $seed"
+            set +e
+            RELEASE_NAME="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}" \
+              SEED="$seed" tools/podman/build.sh
+            rc=$?
+            set -e
+            [ $rc -eq 0 ] && exit 0
+            [ $rc -eq 3 ] || exit $rc
+          done
+          echo "::error::missed timing on every seed"
+          exit 3
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-gba
+          path: build/gba/*.zip
+          if-no-files-found: error
+
+      # The report is the evidence behind the numbers in docs/BASELINE.md and
+      # the first thing anyone wants when a build behaves differently from the
+      # last one. Kept whether or not the build passed.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report
+          path: |
+            build/gba/report.txt
+            build/gba/build.log
+          if-no-files-found: warn
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: core-gba
+          path: dist
+      - name: Attach the core to ${{ github.ref_name }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${{ github.ref_name }}"
+
+          # Bare filenames, so `sha256sum -c` works in whatever directory a
+          # browser downloaded the zip into.
+          (cd dist && sha256sum *.zip > SHA256SUMS)
+
+          # The notes say which asset to download. GitHub attaches "Source code"
+          # archives to every release and those contain no bitstream, so a core
+          # installed from one is listed by the Pocket and cannot start.
+          # Alpha, beta, rc and testing tags publish as prereleases. A tag is
+          # just a label and -testing means "cut so one thing can be tried on
+          # hardware", which is the least finished kind of tag here. Without
+          # this every tag lands as a full release and the repository offers a
+          # test build as its latest.
+          case "$tag" in
+            *-alpha*|*-beta*|*-rc*|*-testing*) pre=--prerelease ;;
+            *) pre= ;;
+          esac
+          gh release view "$tag" >/dev/null 2>&1 \
+            || gh release create "$tag" --title "$tag" $pre \
+                 --notes-file .github/release-notes.md
+          gh release upload "$tag" dist/*.zip dist/SHA256SUMS --clobber

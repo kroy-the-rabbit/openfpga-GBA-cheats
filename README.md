@@ -1,95 +1,277 @@
-# GBA for Analogue Pocket
+# Game Boy Advance for Analogue Pocket, with cheats
 
-[![Latest Release](https://img.shields.io/github/v/tag/mincer-ray/openfpga-GBA?label=latest)](https://github.com/mincer-ray/openfpga-GBA/releases/latest) [![Downloads](https://img.shields.io/github/downloads/mincer-ray/openfpga-GBA/total)](https://github.com/mincer-ray/openfpga-GBA/releases) [![Platform](https://img.shields.io/badge/platform-Analogue%20Pocket-blue)](https://openfpga-library.github.io/analogue-pocket/)
+A Pocket core for the Game Boy Advance that can apply cheat codes to a running
+game.
 
-LLM assisted port of [MiSTer GBA core](https://github.com/MiSTer-devel/GBA_MiSTer)
+**Based on [mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA)
+by mincer-ray**, which is a Pocket port of
+[GBA_MiSTer](https://github.com/MiSTer-devel/GBA_MiSTer). Everything that ships
+here is theirs apart from the cheat engine.
 
-## Features
+The Pocket port dropped MiSTer's `gba_cheats.vhd`. This puts it back, along with
+the debug-bus arbitration and the CPU pause it needs, a data slot to load codes
+through and a menu switch. That is six files touched in `src/`, three of them
+new, plus a data slot and two menu entries in `pkg/`:
 
-- **Filters**
-- **Save States**
-- **Fast Forward (Bound to Y button)**
-- **Button Turbo (Bound to X button)**
-- **RTC**
-- **Link Cable (Partial)** - 2p Multiplayer
+| | |
+|---|---|
+| `core/cheat_binloader.sv` | **new**, reads the `.chtbin` into the cheat table |
+| `core/cheat_loader.sv` | **new**, the loader around it |
+| `gba/gba_cheats.vhd` | **new** here, MiSTer's engine that the Pocket port dropped |
+| `core/core_top.sv` | the data slot, the debug-bus branch, the menu switch |
+| `gba/gba_top.vhd` | the engine ports and the CPU run condition |
+| `build/ap_core.qsf` | two lines, so the new files are compiled |
 
-##  Currently Not Included
+See [docs/CHEATS.md](docs/CHEATS.md).
 
-- **Link Cable** - normal serial modes/accessories, 3p/4p Multiplayer, GCN link, GBA wireless, Single Pak download
+> **Cheats can corrupt save files.** A cheat is a write into the memory of a
+> running game, made once a frame, and a game builds its save data out of that
+> same memory. A code aimed at an address that means something else in your copy
+> overwrites whatever is there, and the damage is written into your save at the
+> next save point. Back up anything you care about first.
 
-## Fast Forward
+## What works
 
-You can change fast forward behavior with the "Fast Forward Render" setting in the menu. Choices are:
+Confirmed on a real Pocket with v0.6.4: the core boots, a `.chtbin` beside the
+ROM loads, a code visibly takes effect in game, and **Cheats Enabled** turns the
+effect off and back on live.
 
-- Fastest: core runs as fast as possible, highest possible fast forward speed but can show tearing/mixed/corrupted frames in some games.
-- Stable: wait for full frames. video during fast forward is MUCH more stable, however max fast forward speed is decreased.
+| | |
+|---|---|
+| Cheats, CodeBreaker and GameShark v1/v2, from libretro `.cht` files | **works on hardware** |
+| **Cheats Enabled** switch, live | **works on hardware** |
+| Everything upstream's core does | **works**, unchanged. Nothing was cut to make room |
+| Save states and sleep | **works**, upstream's |
+| Real-time clock | **works**, upstream's |
+| Fast forward, on Y | **works**, upstream's |
+| Button turbo, on X | **works**, upstream's |
+| Display filters | **works**, upstream's |
+| Link cable | **partial**, upstream's: two-player multiplayer only |
+| A stray `.cht` loading zero rather than garbage | correct in simulation, **unconfirmed on hardware** |
+| Closing the lid with the engine running | **unconfirmed on hardware** |
+| Encrypted codes: GameShark v3, Action Replay v3, CodeBreaker after a `9` line | refused, and cannot be made to work |
+| Cartridges | not supported. [docs/PLAN.md](docs/PLAN.md) §2 is the design study, unstarted |
+| 64 MB video carts | do not work |
 
-## RTC and Save Compatibility
+[docs/HARDWARE.md](docs/HARDWARE.md) is the checklist and says exactly which
+steps have been walked and which have not.
 
-When a game uses RTC (either detected automatically or forced on), the core appends RTC data to the end of the save file. This makes the save file larger than a standard GBA save. If you then try to load that save on a GBA core that doesn't support RTC, it will fail with an error because the save file size doesn't match what the core expects. To use the save on a non-RTC core, you would need to trim the extra RTC bytes from the end of the file to restore it to its original size.
+## Versions
 
->For saves you might be having issues with try the new online self help tool I have added here:
->
->https://www.peterdegenaro.com/pages/rtc-save-tool.html
+The five projects in this set share one version number. The set is at
+**0.9999**. The next release is 0.99991, then 0.99992, and so on: each one adds
+to the tail rather than climbing toward a round number. Nothing here reaches
+1.0, because 1.0 is a claim to be finished and none of this is.
 
-The following tools might be able to help you but I have not tested them:
-- [mGBA](https://mgba.io/) — The built-in Save Converter tool (Tools → Save Converter) can export saves with RTC data stripped. Requires mGBA v0.10.3 or later.
-- [save-file-converter](https://github.com/euan-forrester/save-file-converter) — A web-based tool that can convert and resize save files across many retro formats.
-
-## **FORCE QUIRK**
-At the moment there only seems to be 1 romhack that needs this feature. If you are trying to play Unbound keep reading, otherwise PLEASE ignore this feature.
-
-— Manually enables RTC for ROMs that aren't in the database. This is useful for ROM hacks that add RTC support to games that don't normally use it. Make sure to enable this on first load of the hack, ideally as soon as possible during the bios display to avoid any issues with initializing the save. **USE WITH CAUTION:** enabling this on a game that doesn't actually use RTC can cause crashes or glitches.
-### **⚠️WARNING: Forced RTC setting persists across games! Remember to turn it off before loading a game that doesn't need it⚠️**
-### **⚠️WARNING: Do not enable this setting unless you are playing a romhack that needs it⚠️**
-
-## Accuracy
-
-This core more or less replicates the current accuracy of the MiSTer GBA core master branch. The features that were cut to fit the smaller FPGA were convenience features, not accuracy-related logic. It scores similarly to the MiSTer core in the mGBA test suite. If you encounter a game that works on MiSTer but not here, please open an issue.
-
-Note: MiSTer core has an accuracy branch! A few of those changes have made it into this port but due to it not supporting fast forward (never coming due to technical limitations) or link port (probably coming) I've kinda stalled on that branch for the time being. I'm considering maybe splitting into 2 cores, but probably we just need to wait for the MiSTer devs to finish before really committing to that plan. The regular MiSTer core works well enough for now.
+Provenance is stated in words, above and in the credits, rather than implied by
+a number.
 
 ## Installation
 
-The core should be available on pocket manager apps, or you can install manually:
+Prebuilt cores are on the [Releases](../../releases) page. Download
+`kroy.GBA_<version>.zip`, not the "Source code" archives: the bitstream is built
+by CI rather than committed, so a core installed from a source archive is listed
+by the Pocket and cannot start.
 
-1. Download the latest release
-2. Copy the 3 folders `Cores/`, `Platforms/`, `Assets/`  to your SD card
-   - **macOS users:** Note: macOS Finder replaces folders instead of merging them so do it all manually and be careful.
-3. Place your ROMs and `gba_bios.bin` in `/Assets/gba/common/`
+This core installs as `Cores/kroy.GBA` and shows as "Game Boy Advance (cheats)".
+It does not replace an upstream `mincer_ray.GBA` install, it sits beside it. APF
+names a core folder after the author in its `core.json`, and this one says
+`kroy` because it is not mincer_ray's build. Delete the old folder if you do not
+want both listed, and its `/Settings/mincer_ray.GBA` folder with it. Saves are
+keyed by platform rather than by core, so they carry over untouched; save states
+and settings do not.
 
-## Known Issues
+Copy the `Assets`, `Cores` and `Platforms` folders to the root of the SD card.
+Finder on macOS *replaces* folders rather than merging them the way Windows
+does, which will delete the ROMs already in `Assets`, so copy the folders inside
+those three rather than dragging the three themselves.
 
-- **Fast forward speed varies by game** — Games that make heavy use of the GBA's slower external RAM will not fast-forward as quickly as games that primarily use internal RAM. This is most noticeable with the Classic NES Series titles.
+### Boot ROM
 
-- **Fast forward creates visible screen tearing** — Nothing i can do about this for the time being. Would need a frame buffer.
+The core will not start a game without one. It is copyrighted console code, it
+is not in the zip, and nothing here will fetch it. Dump it from your own
+hardware or supply your own copy.
 
-- **64MB Video carts do not work** you cant watch shrek, shrek 2, or shark tale =(
+| File | Goes in | Size |
+|---|---|---|
+| `gba_bios.bin` | `/Assets/gba/common/` | 16384 bytes |
 
-## Building from Source
+## Usage
 
-Should be very easy
+ROMs go in `/Assets/gba/common/`. Cartridges are not supported; cheats apply to
+ROMs on the card.
 
-### Prerequisites
+**This is the one core in the set where the file you pick from is not the file
+the handheld reads.** The core reads `<rom filename>.gba.chtbin`, not a `.cht`.
 
-- Docker
-- `raetro/quartus:21.1` Docker image
+That is not a preference. The cheat engine went into a design already at 90 %
+logic utilisation, and an ASCII parser on the FPGA measured 441 ALMs but grew
+the design by 1,285 and cost 0.54 ns of setup timing, which is the difference
+between a core that runs and one that does not exist. So the parse happens on a
+desktop, where it can also be cross-checked against the whole libretro Game Boy
+Advance directory rather than inferred from a handheld with no console. That
+cross-check is opt-in and needs the corpus mounted, `make test CHT_DB=/path/to/cht`;
+a plain `make test` skips it and still exits zero, so a green run on its own is
+not evidence the corpus passed.
 
-### Build
+Two ways to produce the file:
 
-```bash
-./scripts/build.sh
+* the [desktop app](#the-desktop-app), which lists the games on your card,
+  matches each against the cheat database and writes both files for you;
+* `tools/cheats/cht2bin.py YourGame.gba.cht`, which writes
+  `YourGame.gba.chtbin` beside it.
+
+A plain `.cht` copied to the card loads **zero** cheats rather than misbehaving.
+The `.chtbin` header carries a magic number precisely so the old format cannot
+be mistaken for the new one and shifted into the cheat table as garbage. That is
+correct in simulation and is one of the two things still unconfirmed on
+hardware.
+
+**Cheats Enabled** in the core menu turns the whole lot on and off. `CL:` and
+`CD:` say how many bytes, cheats and codes were parsed and what the engine is
+doing with them, which is the whole diagnostic surface on a handheld with no
+console. [docs/CHEATS.md](docs/CHEATS.md) explains how to read them.
+
+Encrypted codes, meaning GameShark v3, Action Replay v3 and CodeBreaker codes
+after a `9` line, are enciphered with a per-game seed and cannot work. The
+converter rejects them by plausibility rather than guessing: a real code's
+address lands in the machine's RAM and an enciphered word almost never does. A
+few real codes will be refused this way and a few enciphered ones will slip
+through as pokes at nothing.
+
+### Fast forward
+
+**Fast Forward Render** in the menu chooses between the two ways of doing it.
+*Fastest* runs the core as fast as it will go and can show torn or mixed frames
+in some games. *Stable* waits for whole frames, which looks far better and is
+slower. Speed varies by game either way: a game that leans on the GBA's slower
+external RAM will not fast-forward as quickly as one that stays in internal RAM,
+which is most obvious on the Classic NES Series titles.
+
+### RTC and save compatibility
+
+When a game uses RTC, the core appends RTC data to the end of the save file.
+That makes the save larger than a standard GBA save, so loading it on a GBA core
+without RTC support fails on the size check. To move such a save to a non-RTC
+core, the extra bytes have to come off the end.
+
+mincer_ray's [self-help tool](https://www.peterdegenaro.com/pages/rtc-save-tool.html)
+does this. [mGBA](https://mgba.io/) v0.10.3 or later can also export saves with
+RTC data stripped, under Tools, Save Converter, and
+[save-file-converter](https://github.com/euan-forrester/save-file-converter)
+converts between many retro save formats. Neither has been tested here.
+
+### Force Quirk
+
+Manually enables RTC for a ROM that is not in the database, for ROM hacks that
+add RTC support to a game that does not normally use it. At the time of writing
+one hack needs it. Enable it on the first load of the hack, as early in the BIOS
+display as possible, or the save initialises wrong.
+
+> **The setting persists across games.** Turn it off before loading anything
+> that does not need it, and do not enable it on a game that does not use RTC:
+> it causes crashes and glitches.
+
+### Accuracy
+
+Upstream's core more or less matches the current accuracy of the MiSTer GBA
+master branch and scores similarly on the mGBA test suite. What was cut to fit
+the smaller FPGA was convenience features rather than accuracy logic. The cheat
+engine added here does not touch any of that. A game that works on MiSTer and
+not here is worth an issue.
+
+## The desktop app
+
+[pocket-tools](https://github.com/kroy-the-rabbit/pocket-tools) is the desktop
+side of this set. It reads your Pocket SD card, lists the games on it, matches
+each against the libretro cheat database and writes both the `.cht` and the
+`.chtbin` beside the ROM. It will also install and update this core for you.
+
+You do not need it. `tools/cheats/cht2bin.py` in this repository does the
+conversion on its own. The app exists because picking cheats out of a few
+hundred database files by hand is tedious.
+
+## Known issues
+
+* Fast forward shows screen tearing. Fixing it needs a frame buffer.
+* 64 MB video carts do not work.
+* Two items on [docs/HARDWARE.md](docs/HARDWARE.md) are still unwalked: the
+  stray `.cht`, and closing the lid with the engine in the CPU run condition.
+
+## Documentation
+
+| | |
+|---|---|
+| [docs/CHEATS.md](docs/CHEATS.md) | using cheats: the converter, the file, the menu readout |
+| [docs/CHEATBIN.md](docs/CHEATBIN.md) | the `.chtbin` format contract |
+| [docs/HARDWARE.md](docs/HARDWARE.md) | validating a build on a real Pocket, and what is still unwalked |
+| [docs/PLAN.md](docs/PLAN.md) | design and phasing, including the unstarted cartridge work |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | the fit history, and why the parser had to leave the FPGA |
+| [docs/BASELINE.md](docs/BASELINE.md) | measured area and timing, build by build |
+| [docs/BUILD-RUNNER.md](docs/BUILD-RUNNER.md) | standing up a dedicated build runner, if a workstation is not the place for a 40-minute fit |
+
+## Building from source
+
+Quartus Prime Lite 21.1 runs in a container and nothing is installed on the
+host:
+
+```sh
+make gba      # -> build/gba/{bitstream.rbf_r, sd/, kroy.GBA_<version>.zip, report.txt}
+make test     # the simulation suite
 ```
+
+**Do not bump Quartus.** Upstream tuned the constraints, the fitter seed and the
+custom STA reports against 21.1, and this design closes setup by 0.090 ns, which
+is not a margin to spend on a toolchain change.
+
+The build fails if the design misses timing. Quartus exits 0 on negative slack,
+so `tools/podman/report.sh` checks worst-case slack itself and stops the build,
+because a bitstream with negative slack may work on one bench and fail on
+somebody's handheld. It is the same script CI runs, and a CI build and a local
+one land on the same numbers.
+
+## Where to report a problem
+
+Cheat engine bugs belong here. Bugs in the core itself are most likely the
+Pocket port's rather than MiSTer's, so they belong
+[upstream](https://github.com/mincer-ray/openfpga-GBA/issues) and will be
+forwarded from here as necessary.
 
 ## Credits
 
-- **[MiSTer GBA core](https://github.com/MiSTer-devel/GBA_MiSTer)** — original FPGA GBA implementation
-- **[Analogue openFPGA](https://www.analogue.co/developer)** — platform framework and core template
-- **[budude2/openfpga-GBC](https://github.com/budude2/openfpga-GBC)** — reference for MiSTer-to-Pocket porting patterns
-- **[agg23](https://github.com/agg23)** — analogue-pocket-utils and reference SNES/NES Pocket cores
+This core is other people's work with a cheat engine put back into it.
+
+| | |
+|---|---|
+| [GBA_MiSTer](https://github.com/MiSTer-devel/GBA_MiSTer) | the original FPGA GBA, and `gba_cheats.vhd`, which is the cheat engine this fork restores |
+| [mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA) | the Pocket port this forks. Everything that ships here is theirs apart from the cheat wiring |
+| [budude2/openfpga-GBC](https://github.com/budude2/openfpga-GBC) | reference for MiSTer to Pocket porting patterns |
+| [agg23](https://github.com/agg23) | analogue-pocket-utils, and reference SNES and NES Pocket cores |
+| [libretro/libretro-database](https://github.com/libretro/libretro-database) | the cheat files themselves, CC-BY-SA-4.0, none of them shipped here |
+| [Analogue openFPGA](https://www.analogue.co/developer) | the Pocket framework and core template |
 
 ## License
 
-GPL-2.0 — see [GBA_MiSTer LICENSE](https://github.com/MiSTer-devel/GBA_MiSTer/blob/master/LICENSE) for details.
+The GBA core is **GPL-2.0**. That is what `pkg/Cores/kroy.GBA/info.txt` says and
+what [GBA_MiSTer](https://github.com/MiSTer-devel/GBA_MiSTer) ships under. The
+MiSTer sources carry no per-file notices and no "or any later version" grant, so
+version 2 is the version.
 
-2c5aef5574b6a47c95bb8154197059d99acbd555a7b5b25365112b56b7a79a17
+The cheat engine added here is under the same terms. The files this fork wrote
+into `src/` say `GPL-2.0-or-later` in SPDX headers: *or later* because that is
+this fork's grant to give, version 2 because anything narrower could not be
+combined with the core it links into.
+
+`src/fpga/apf/` is not GPL. Those files are Analogue's Pocket Framework,
+supplied under Analogue's own software licence agreement and the Pocket EULA
+linked from their headers, which provide that where the MIT or GNU licences must
+apply, those prevail.
+
+The host tooling under `tools/` is `GPL-3.0-or-later`. It is not part of the
+bitstream and does not link with any of the above: it is separate programs that
+run on a desktop and write files.
+
+Neither this repository nor upstream carries a LICENSE file, so the per-file
+notices and that `info.txt` are the licence. Binary releases here are built by CI
+from a tagged commit of this repository, which is the corresponding source for
+them.

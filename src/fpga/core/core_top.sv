@@ -997,10 +997,29 @@ synch_3 s_allcomplete(dataslot_allcomplete, dataslot_allcomplete_s, clk_sys);
 wire reset_n_s;
 synch_3 s_reset_n(reset_n, reset_n_s, clk_sys);
 
+// Slot 7 is the cheat file, and it must not reset the game. dataslot_allcomplete
+// is global: it drops while ANY slot is being written, which is right for ROM,
+// BIOS and save - you cannot run a game whose ROM is still streaming in - and
+// wrong for cheats, which are meant to be swapped mid-game. This latches only
+// the slots that do need reset held, so a cheat load leaves the CPU running.
+//
+// Tracked by exception rather than by watching slot 7, because ROM and cheats
+// both load at game start: keying off "a cheat is downloading" would release
+// reset during that ROM load. Anything that is not slot 7 sets it.
+reg other_slot_downloading = 0;
+always @(posedge clk_74a) begin
+    if (dataslot_requestwrite && dataslot_requestwrite_id != 16'd7)
+        other_slot_downloading <= 1;
+    else if (dataslot_allcomplete)
+        other_slot_downloading <= 0;
+end
+wire other_slot_downloading_s;
+synch_3 s_other_dl (other_slot_downloading, other_slot_downloading_s, clk_sys);
+
 wire core_reset_s;
 synch_3 s_core_reset(core_reset, core_reset_s, clk_sys);
 
-wire reset_gba = ~pll_core_locked | ~dataslot_allcomplete_s | ~reset_n_s | core_reset_s | ~save_mem_ready;
+wire reset_gba = ~pll_core_locked | other_slot_downloading_s | ~reset_n_s | core_reset_s | ~save_mem_ready;
 
 // ---- BIOS Loading via data_loader → gba_top internal BRAM ----
 // BIOS (16 KB) loads from data slot 4 at address 0x3xxxxxxx
@@ -1260,6 +1279,143 @@ core_bridge_cmd icb (
 
 
 // ============================================================
+// Cheats: data slot 7 -> cheat_binloader -> gba_cheats
+// ============================================================
+// Data slot 7 streams a packed .chtbin file to 0x5xxxxxxx. The file already
+// holds the 128-bit words gba_cheats consumes, one per entry, so
+// cheat_binloader frames them out of the byte stream and pushes them; it does
+// no parsing. tools/cheats/cht2bin.py turns a libretro .cht into one of these
+// on the host. See src/fpga/core/cheat_binloader.sv, docs/CHEATBIN.md and
+// docs/CHEATS.md.
+//
+// The parse used to happen here, in cheat_loader.sv, and that is what stopped
+// the design fitting: 441 ALMs of parser grew the whole design by 1,285 and
+// cost 0.54 ns of setup. docs/HANDOFF.md has the measurements.
+//
+// The slot's filename is cloned from slot 0 with the slot extension appended,
+// so the file the Pocket looks for is <rom filename>.gba.chtbin.
+
+// Which cheats are on is decided on the host: cht2bin.py resolves each cheat's
+// `enable` key and emits only the enabled ones, so every entry in the file is
+// meant to run. This is the one global switch, on at every launch and
+// deliberately not persisted: a forgotten cheat left on across sessions is
+// indistinguishable from a broken game.
+reg cheats_master = 1'b0;
+
+// Synchronised rather than used raw: cheats_master is written in clk_74a by the
+// menu decode below and read by the cheat engine in clk_sys.
+wire cheats_on;
+synch_3 cheats_master_sync (cheats_master, cheats_on, clk_sys);
+
+// The slot write request is a pulse, not a level, so latch the span of the
+// download the same way the ROM path does.
+reg cheat_downloading = 0;
+always @(posedge clk_74a) begin
+    if (dataslot_requestwrite && dataslot_requestwrite_id == 16'd7)
+        cheat_downloading <= 1;
+    else if (dataslot_allcomplete)
+        cheat_downloading <= 0;
+end
+
+wire cheat_downloading_s;
+synch_3 s_cheat_dl (cheat_downloading, cheat_downloading_s, clk_sys);
+
+// Edges of the download, in clk_sys. The rising edge clears the loader and
+// gba_cheats, so codes never outlive the game they belong to; the falling edge
+// says end of file. The binary loader does not need that to finish an entry,
+// which completes on its sixteenth byte, but it is what lets it notice a file
+// that ended part way through one.
+reg cheat_dl_1, cheat_dl_2;
+always @(posedge clk_sys) begin
+    cheat_dl_1 <= cheat_downloading_s;
+    cheat_dl_2 <= cheat_dl_1;
+end
+
+wire cheat_start = cheat_dl_1 & ~cheat_dl_2;
+wire cheat_eof   = ~cheat_dl_1 & cheat_dl_2;
+
+// A savestate restored into a core holding different codes is a different
+// machine, so the table is wiped on core reset and on every new cheat file.
+wire cheat_reset = ~reset_n_s | ~pll_core_locked | cheat_start;
+
+wire       cheat_wr;
+wire [7:0] cheat_dout;
+
+// WRITE_MEM_CLOCK_DELAY must be small here. data_loader splits each 32-bit APF
+// word into four one-byte FIFO entries and drains one every
+// WRITE_MEM_CLOCK_DELAY clk_sys cycles, through a 4-deep dcfifo with overflow
+// checking off. At a delay of 20 that is 80 cycles to drain a word APF delivers
+// about every microsecond, and the FIFO silently loses bytes. 4 cycles per
+// entry is 16 per word, comfortably ahead of APF and well inside what the
+// loader absorbs, which is a byte per cycle.
+data_loader #(
+    .ADDRESS_MASK_UPPER_4   ( 4'h5 ),      // 0x5xxxxxxx (cheat slot)
+    .ADDRESS_SIZE           ( 28 ),
+    .OUTPUT_WORD_SIZE       ( 1 ),         // 8-bit output: the loader frames bytes
+    .WRITE_MEM_CLOCK_DELAY  ( 4 )
+) cheat_data_loader (
+    .clk_74a            ( clk_74a ),
+    .clk_memory         ( clk_sys ),
+
+    .bridge_wr          ( bridge_wr ),
+    .bridge_endian_little ( bridge_endian_little ),
+    .bridge_addr        ( bridge_addr ),
+    .bridge_wr_data     ( bridge_wr_data ),
+
+    .write_en           ( cheat_wr ),
+    .write_addr         (  ),
+    .write_data         ( cheat_dout )
+);
+
+wire [127:0] cheat_in;
+wire         cheat_on;
+wire [5:0]   cheat_entries, cheat_cheats, cheat_rejected;
+wire [19:0]  cheat_bytes;
+wire         cheat_overrun;
+
+// The readout names are inherited from the ASCII parser and two of them have
+// shifted meaning: cheat_cheats is now the entry count the file's header
+// declared, not a number of cheats, and cheat_overrun now means the file was
+// malformed. See the header of cheat_binloader.sv.
+cheat_binloader #(
+    .MAX_ENTRIES ( 32 )             // must match gba_cheats' CHEATCOUNT
+) cheats_parser (
+    .clk          ( clk_sys ),
+    .reset        ( cheat_reset ),
+    .wr           ( cheat_wr ),
+    .data         ( cheat_dout ),
+    .eof          ( cheat_eof ),
+    .cheat_in     ( cheat_in ),
+    .cheat_on     ( cheat_on ),
+    .entry_count  ( cheat_entries ),
+    .group_count  ( cheat_cheats ),
+    .byte_count   ( cheat_bytes ),
+    .reject_count ( cheat_rejected ),
+    .overrun      ( cheat_overrun )
+);
+
+// These feed the cheat ports restored on gba_top in P1: cheat_clear,
+// cheats_enabled, cheat_on and cheat_in. cheats_active comes back out of the
+// engine and is left open until there is a readout that wants it.
+wire cheats_enabled = cheats_on;
+wire cheat_clear    = cheat_reset;
+
+// Readout, in clk_74a for the bridge. Two flops each: these change while the
+// file streams and are read asynchronously by the Pocket.
+reg [5:0]  cheat_entries_s, cheat_entries_ss;
+reg [5:0]  cheat_cheats_s,  cheat_cheats_ss;
+reg [19:0] cheat_bytes_s,   cheat_bytes_ss;
+reg [5:0]  cheat_rejected_s, cheat_rejected_ss;
+reg        cheat_overrun_s, cheat_overrun_ss;
+always @(posedge clk_74a) begin
+    cheat_entries_ss  <= cheat_entries;   cheat_entries_s  <= cheat_entries_ss;
+    cheat_cheats_ss   <= cheat_cheats;    cheat_cheats_s   <= cheat_cheats_ss;
+    cheat_bytes_ss    <= cheat_bytes;     cheat_bytes_s    <= cheat_bytes_ss;
+    cheat_rejected_ss <= cheat_rejected;  cheat_rejected_s <= cheat_rejected_ss;
+    cheat_overrun_ss  <= cheat_overrun;   cheat_overrun_s  <= cheat_overrun_ss;
+end
+
+// ============================================================
 // Section 3: Bridge Read Mux
 // ============================================================
 
@@ -1275,6 +1431,28 @@ always @(*) begin
     end
     32'hF8xxxxxx: begin
         bridge_rd_data <= cmd_bridge_rd_data;
+    end
+    // What the cheat loader made of the file, so a file that failed to load is
+    // diagnosable on the handheld rather than by guesswork. `CL:` is bytes
+    // received, entries the header declared and entries pushed, so a short or
+    // over-long file shows up as the last two disagreeing; `CD:` is the master
+    // switch, the entries the table had no room for, and the malformed flag,
+    // which is the only thing that separates a wrong file from a valid one
+    // carrying no cheats.
+    32'hF3000000: begin
+        bridge_rd_data <= {cheat_bytes_s, cheat_cheats_s, cheat_entries_s};
+    end
+    // The cheats master switch, readable because its interact entry carries a
+    // mask. A mask asks APF to preserve the other bits at the address, which
+    // it can only do by reading first; declaring one on a write-only address
+    // is a contradiction, and the Pocket restarted the ROM when the box was
+    // toggled. The Game Boy core's equivalent switch is readable and does not.
+    32'hF3000008: begin
+        bridge_rd_data <= {31'd0, cheats_master};
+    end
+    32'hF3000004: begin
+        bridge_rd_data <= {24'd0, cheat_overrun_s, cheats_master,
+                           cheat_rejected_s};
     end
     default: begin
         bridge_rd_data <= 0;
@@ -1359,6 +1537,7 @@ always @(posedge clk_74a) begin
         32'h84: force_rtc      <= bridge_wr_data[0];
         32'h88: turbo_mode     <= bridge_wr_data[1:0];
         32'h8C: ff_video_stable <= bridge_wr_data[0];
+        32'hF3000008: cheats_master <= bridge_wr_data[0];
         endcase
     end
 end
@@ -1375,6 +1554,7 @@ synch_3 #(.WIDTH(2)) turbo_mode_sync(turbo_mode, turbo_mode_s, clk_sys);
 
 wire ff_video_stable_s;
 synch_3 ff_video_stable_sync(ff_video_stable, ff_video_stable_s, clk_sys);
+
 
 // ============================================================
 // Section 4: Video Output — framebuffer + raster scan
@@ -1602,6 +1782,12 @@ gba_top #(
     .RTC_timestampOut    ( rtc_timestamp_out ),
     .RTC_savedtimeOut    ( rtc_savedtime_out ),
     .RTC_inuse           ( rtc_inuse ),
+    // Cheats
+    .cheat_clear         ( cheat_clear ),
+    .cheats_enabled      ( cheats_enabled ),
+    .cheat_on            ( cheat_on ),
+    .cheat_in            ( cheat_in ),
+    .cheats_active       (),
     // SDRAM (ROM reads — muxed with staging in sdram_pocket section)
     .sdram_read_ena      ( sdram_read_req_gba ),
     .sdram_read_done     ( ss_serving_active ? 1'b0 : sdram_rd_ready ),

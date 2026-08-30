@@ -97,6 +97,31 @@
             "value": 1
           }
         ]
+      },
+      {
+        "name": "Cheats Enabled",
+        "id": 40,
+        "type": "check",
+        "enabled": true,
+        "persist": false,
+        "address": "0xF3000008",
+        "defaultval": "0x00000000",
+        "mask": "0xFFFFFFFE",
+        "value": "0x00000001"
+      },
+      {
+        "name": "CL:",
+        "id": 41,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF3000000"
+      },
+      {
+        "name": "CD:",
+        "id": 42,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF3000004"
       }
     ],
     "messages": []
