@@ -24,6 +24,13 @@
 // and on GBATEK (WAITCNT defaults). All wait-state constants remain
 // conservative placeholders and MUST be tuned on real carts.
 //
+// kroy: ROM reads burst. A read request is four consecutive halfwords, so
+// only the first drives an address; words 2..4 keep CS# low and pulse RD#
+// only, letting the cart's internal counter supply the address. See
+// ROM_SEQ_WAIT and S_ROM_SEQ below. The added constants are derived from
+// GBATEK the same way the ones above are, and are placeholders under the
+// same warning.
+//
 // PHI generation: clk_sys ~100.66 MHz / PHI_DIV = 16.78 MHz.
 
 `default_nettype none
@@ -36,6 +43,23 @@ module gba_cart_controller #(
     // ~= 6 clk_sys cycles, so ROM non-sequential ~= 4*6=24 clk_sys cycles
     // and SRAM ~= 9*6=54 clk_sys cycles. Tune on real carts.
     parameter integer ROM_WAIT   = 24,  // clk_sys cycles per 16-bit ROM read
+    // kroy: sequential (burst) ROM read timing. GBATEK default WAITCNT=4317h
+    // gives ROM S = 1 wait against N = 3, so a sequential access is 1+1 = 2
+    // GBA cycles where a non-sequential one is 1+3 = 4. At ~6 clk_sys cycles
+    // per GBA cycle that is 2*6 = 12 clk_sys cycles, against the 4*6 = 24 of
+    // ROM_WAIT. The 12 splits into RD# high (the cart's counter increments on
+    // the RD# rising edge, plus bus turnaround) then RD# low, sampled on the
+    // last low cycle: 4 high (~40 ns) and 8 low (~80 ns) at 100.66 MHz, i.e.
+    // the ~119 ns a real GBA sequential access takes at 16.78 MHz.
+    // Derived from GBATEK, NOT measured on a cart. Conservative placeholders
+    // like every other wait-state constant here, and they MUST be tuned on
+    // real carts.
+    parameter integer ROM_SEQ_WAIT    = 12, // clk_sys cycles per burst halfword
+    parameter integer ROM_SEQ_RD_HIGH = 4,  // of which RD# is held high
+    // 0 = re-drive the full address for every halfword (the original per-word
+    // path, kept as the fallback for a cart that does not honour its own
+    // sequential counter). 1 = burst.
+    parameter integer ROM_BURST       = 1,
     parameter integer SAVE_WAIT  = 54,  // clk_sys cycles per 8-bit SRAM/Flash access
     parameter integer ADDR_SETUP = 4,   // clk_sys cycles driving address
     // GPIO write timing (deliberately close to a real GBA host, not the long
@@ -232,6 +256,9 @@ module gba_cart_controller #(
                                      // then bus release (host-like timing)
     localparam S_GPIO_RECOVER = 4'd13; // GPIO-only settle time between
                                        // accesses (see GPIO_RECOVER)
+    localparam S_ROM_SEQ   = 4'd14;  // kroy: burst halfword. CS# stays low and
+                                     // the address is not re-driven; RD# alone
+                                     // pulses and the cart's counter advances.
 
     reg [3:0]  state;
     reg [1:0]  word_idx;
@@ -269,6 +296,14 @@ module gba_cart_controller #(
     reg        rd_n, cs_n, cs2_n, wr_n;
 
     wire [23:0] word_addr = (byte_addr >> 1) + word_idx;
+
+    // kroy: the cart's sequential counter is 16 bits of halfword address, so
+    // it wraps every 128K bytes of ROM. GBATEK, "GBA Cartridges": the GBA
+    // itself forces a non-sequential access at the start of each 128K block,
+    // e.g. a sequential access to 01FFFEh is followed by a non-sequential one
+    // to 020000h. A request whose halfword address ends in FFFFh therefore
+    // cannot burst into the next word and falls back to re-driving it.
+    wire rom_seq_ok = (ROM_BURST != 0) && (word_addr[15:0] != 16'hFFFF);
 
     // GPIO write timing sweep (see gpio_timing_mode). Combinational so the
     // diag ROM can switch modes between accesses without reconfiguring.
@@ -420,7 +455,13 @@ module gba_cart_controller #(
                 // Per jojolebarjos/gba-cartridge:
                 //   address must be driven before CS# falls (latched on ~CS edge)
                 //   data sampled before ~RD rising edge; ~RD rising increments
-                //   the latched address internally, but we re-drive it anyway.
+                //   the latched address internally.
+                // kroy: this state now runs for the first halfword of a request
+                // only. The rest of the request is served by S_ROM_SEQ off that
+                // internal increment, so the address is driven once per request
+                // instead of once per halfword. It is re-entered mid-request
+                // only when rom_seq_ok is low (128K counter wrap, or ROM_BURST
+                // held at 0).
                 S_ROM_CS: begin
                     // Address setup phase: drive full 24-bit address, CS# high.
                     out_bank1     <= word_addr[23:16];
@@ -462,13 +503,55 @@ module gba_cart_controller #(
                         // drives AD during the RD# low phase).
                         words[word_idx] <= {cart_tran_bank2, cart_tran_bank3};
                         rd_n            <= 1'b1;
-                        cs_n            <= 1'b1;  // end this word's transaction
                         acc_cnt         <= 8'd0;
+                        // kroy: CS# is released only at the end of the request
+                        // (or when the burst cannot continue). This RD# rising
+                        // edge is what advances the cart's internal address
+                        // counter, so the next halfword needs no address.
                         if (word_idx == 2'd3) begin
+                            cs_n  <= 1'b1;          // end of request
                             state <= S_ROM_DONE;
+                        end else if (rom_seq_ok) begin
+                            word_idx <= word_idx + 1'b1;
+                            state    <= S_ROM_SEQ;  // burst: CS# stays low
                         end else begin
+                            cs_n     <= 1'b1;       // end this word's transaction
                             word_idx <= word_idx + 1'b1;
                             state    <= S_ROM_CS;   // next word: re-drive address
+                        end
+                    end
+                end
+
+                // ---- kroy: ROM burst halfword ----
+                // Entered with CS# already low, AD released to the cart, and
+                // the previous word's RD# rising edge already counted by the
+                // cart. Nothing is driven here but RD#: hold it high for
+                // ROM_SEQ_RD_HIGH cycles, then low for the rest of
+                // ROM_SEQ_WAIT, and sample on the last low cycle exactly as
+                // S_ROM_DATA does.
+                S_ROM_SEQ: begin
+                    cs_n <= 1'b0;                  // held low for the burst
+                    wr_n <= 1'b1;
+                    if (acc_cnt < ROM_SEQ_RD_HIGH - 1) begin
+                        rd_n    <= 1'b1;
+                        acc_cnt <= acc_cnt + 1'b1;
+                    end else if (acc_cnt < ROM_SEQ_WAIT - 1) begin
+                        rd_n    <= 1'b0;           // ~RD falling: cart drives
+                        acc_cnt <= acc_cnt + 1'b1;
+                    end else begin
+                        words[word_idx] <= {cart_tran_bank2, cart_tran_bank3};
+                        rd_n            <= 1'b1;
+                        acc_cnt         <= 8'd0;
+                        if (word_idx == 2'd3) begin
+                            cs_n  <= 1'b1;
+                            state <= S_ROM_DONE;
+                        end else if (rom_seq_ok) begin
+                            word_idx <= word_idx + 1'b1;
+                            state    <= S_ROM_SEQ;
+                        end else begin
+                            cs_n     <= 1'b1;
+                            word_idx <= word_idx + 1'b1;
+                            state    <= S_ROM_CS;
                         end
                     end
                 end
