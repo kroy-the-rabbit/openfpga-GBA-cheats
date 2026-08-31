@@ -54,7 +54,7 @@ so a different number means something changed; `docs/BASELINE.md` has the one
 earlier reading that has never been reproduced.
 
 You also need a test `.chtbin`. Make one from a game you own, and **write down
-what `cht2bin.py` printed** — the entry count is what step 3 checks against:
+what `cht2bin.py` printed**. The entry count is what step 3 checks against:
 
 ```
 python3 tools/cheats/cht2bin.py YourGame.gba.cht
@@ -83,7 +83,7 @@ writes into, and it is the interaction nothing in simulation covers.
 ### 2. The file loads
 
 Put `YourGame.gba.chtbin` next to the ROM, named after the **whole** ROM
-filename with `.chtbin` appended — `YourGame.gba` -> `YourGame.gba.chtbin`, not
+filename with `.chtbin` appended: `YourGame.gba` -> `YourGame.gba.chtbin`, not
 `YourGame.chtbin`. Load the game and read `CL:`.
 
 * **`CL:` is 0.** The file never arrived. Wrong name, wrong directory, or
@@ -93,14 +93,14 @@ filename with `.chtbin` appended — `YourGame.gba` -> `YourGame.gba.chtbin`, no
 ### 3. It loaded the right number of entries
 
 `CL:` packs `(bytes << 12) | (declared << 6) | pushed`. Against the converter's
-own output — 4 entries in an 80-byte file — that is `(80 << 12) | (4 << 6) | 4`
+own output, 4 entries in an 80-byte file, that is `(80 << 12) | (4 << 6) | 4`
 = **327,940**.
 
 Compute the expected value for your file and compare. The interesting failures:
 
 * **Declared and pushed both 0, with bytes non-zero.** The header was rejected.
   Check `CD:` bit 7. Almost certainly a `.cht` that got renamed rather than
-  converted, which is exactly what the magic exists to catch — see step 5.
+  converted, which is exactly what the magic exists to catch, see step 5.
 * **Declared higher than pushed.** Truncated file, or more entries than the
   32-slot table holds; `CD:` bits 5:0 say which.
 * **Bytes disagree with the file size.** The slot is reading something else.
@@ -112,7 +112,7 @@ With the numbers right, look at the game.
 * The code visibly does its thing.
 * **Cheats Enabled** off in the core menu: the effect stops. The engine pokes
   on vblank and does not restore, so a value it wrote stays written until the
-  game overwrites it — expect the effect to stop being *reapplied*, not to
+  game overwrites it, so expect the effect to stop being *reapplied*, not to
   rewind. Watching health drain again from a full bar is the pass.
 * Back on: it resumes.
 
@@ -134,10 +134,12 @@ A pass here is what makes the format change safe to ship.
 
 ## What a full pass means
 
-P1, P2's surviving parts and P3 are done — closed at both ends, simulation and
-hardware. That clears P8 (packaging and release) and makes the cartridge
-question in `docs/PLAN.md` §2 the next real decision, to be made against the
-**1,791 ALMs and 26 RAM blocks** left over.
+P1, P2's surviving parts and P3 are done, closed at both ends, simulation and
+hardware. That clears P8 (packaging and release). The cartridge question in
+`docs/PLAN.md` §2 is no longer a decision waiting to be made: P5 is under way on
+`p5-cartridge`. Do not size it against the old **1,791 ALMs and 26 RAM blocks**
+figure, which is withdrawn. Identical RTL spans 81 ALMs across placement seeds,
+so worst-case slack across several seeds is the measure, not utilisation.
 
 Record the result in `docs/BASELINE.md` next to the fit numbers. A green fit
 report and a green hardware pass are different claims and the log should not

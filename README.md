@@ -50,7 +50,7 @@ effect off and back on live.
 | A stray `.cht` loading zero rather than garbage | correct in simulation, **unconfirmed on hardware** |
 | Closing the lid with the engine running | **unconfirmed on hardware** |
 | Encrypted codes: GameShark v3, Action Replay v3, CodeBreaker after a `9` line | refused, and cannot be made to work |
-| Cartridges | **not yet.** The bus front end is vendored, wired and measured; the Pocket does not power the slot. [docs/PLAN.md](docs/PLAN.md) §2 |
+| Cartridges | **bring-up, unconfirmed on hardware.** The slot is powered and a header probe reads the cartridge. Saves are not routed and nothing writes to a cart. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) |
 | 64 MB video carts | do not work |
 
 [docs/HARDWARE.md](docs/HARDWARE.md) is the checklist and says exactly which
@@ -99,9 +99,12 @@ hardware or supply your own copy.
 ## Usage
 
 ROMs go in `/Assets/gba/common/`. Cheats apply to ROMs on the card. A cartridge
-in the slot does nothing: the core does not declare `cartridge_adapter`, so the
-Pocket never powers it. [docs/PLAN.md](docs/PLAN.md) §2 says where that work has
-got to and what is left of it.
+in the slot does nothing until the **Cartridge** menu setting is turned on, and a
+game booted from a cartridge cannot save, because saves are not routed to the
+cart. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) covers the setting and the readout.
+
+Declaring the cartridge adapter raises the firmware this core needs: it will not
+load on a Pocket below **firmware 1.2**.
 
 **This is the one core in the set where the file you pick from is not the file
 the handheld reads.** The core reads `<rom filename>.gba.chtbin`, not a `.cht`.
@@ -206,6 +209,7 @@ hundred database files by hand is tedious.
 |---|---|
 | [docs/CHEATS.md](docs/CHEATS.md) | using cheats: the converter, the file, the menu readout |
 | [docs/CHEATBIN.md](docs/CHEATBIN.md) | the `.chtbin` format contract |
+| [docs/CARTRIDGE.md](docs/CARTRIDGE.md) | using a cartridge: the menu setting, the probe, the readout |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | validating a build on a real Pocket, and what is still unwalked |
 | [docs/PLAN.md](docs/PLAN.md) | design and phasing, including where the cartridge work stands |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | the fit history, and why the parser had to leave the FPGA |

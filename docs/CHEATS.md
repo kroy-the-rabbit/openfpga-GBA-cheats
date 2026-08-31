@@ -197,7 +197,7 @@ Read the low two fields against each other:
   is not next to the ROM. Nothing downstream of this matters.
 * **Bytes, but declared and pushed are both zero.** The file arrived and was
   rejected at the header. Almost always a `.cht` that got renamed rather than
-  converted — see `CD:` bit 7. This is the safety interlock doing its job.
+  converted, see `CD:` bit 7. This is the safety interlock doing its job.
 * **Declared higher than pushed.** The file is truncated, or it declared more
   entries than the 32-slot table holds. `CD:` bits 5:0 tell you which.
 * **Declared equals pushed, game unchanged.** The codes are loading and running

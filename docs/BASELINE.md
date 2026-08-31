@@ -235,9 +235,10 @@ save, the APF declaration, and ROM out of the cart fast enough that the CPU is
 not stalled - but the thing to watch while doing it is worst-case slack across
 several seeds, not the utilisation percentage.
 
-Nothing on that branch is mergeable regardless: `cartridge_adapter` is not
-declared, so the Pocket never powers the slot, and no save or cheat is routed
-through the controller.
+Superseded on 2026-08-30. That work is now on `p5-cartridge`: the APF
+declaration is in, the slot is powered, and a header probe reads the cartridge.
+Still true, and deliberately so: no save, EEPROM or GPIO access is routed, and
+nothing in this core writes to a cartridge.
 
 ### Where these were built
 
@@ -250,11 +251,12 @@ still does not change the result.
 
 ### What this does not establish
 
-- **It is a probe, not an integration.** No ROM, save or cheat is routed
-  through the controller; `rom_source_mux` is vendored but not instantiated,
-  and `cartridge_adapter` is not declared, so the Pocket never powers the slot.
-  A real integration adds the mux and the paths from `gba_top`, which this has
-  not measured.
+- **It is a probe, not an integration.** At the time these were measured no
+  ROM, save or cheat was routed through the controller. Two of those have since
+  changed and the numbers here do not cover either: `rom_source_mux` was
+  instantiated at `a4eaec3`, and `cartridge_adapter` is declared on
+  `p5-cartridge`, so the Pocket now powers the slot. Save, EEPROM and GPIO are
+  still unrouted.
 - **Wokann's wait states are placeholders** their own author says must be
   calibrated on real cartridges, so the timing this controller finally needs is
   not settled.
