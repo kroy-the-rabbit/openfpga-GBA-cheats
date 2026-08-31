@@ -172,14 +172,11 @@ set_multicycle_path -hold 1 \
   -to   [get_registers {*eProcReg_gba*Dout_buffer*}]
 
 # ---------------------------------------------------------------------------
-# Cartridge probe (branch exp-cart-probe). Measurement only; delete with the
-# probe.
+# Cartridge bus controller configuration.
 #
-# phi_sel, gpio_timing_mode and gpio_recover_set are configuration, not data.
-# They are written from the menu and then stand still, so the logic they feed
-# has as long as it likes to settle: gpio_recover_set in particular drives a
-# 14-bit compare whose result reaches the bus state machine, and that compare
-# was the source of the worst path in the unconstrained probe.
+# phi_sel and gpio_timing_mode are configuration, not data. They are written
+# from the bridge and then stand still, so the logic they feed has as long as
+# it likes to settle.
 #
 # 4 rather than something larger because it is enough and because a multicycle
 # is a claim about the hardware: these registers are written by a bridge write
@@ -190,9 +187,22 @@ set_multicycle_path -hold 1 \
 # S_IDLE and out_bank* is loaded from it in S_ROM_CS on the very next cycle,
 # so those paths genuinely have one cycle and constraining them would be a
 # lie that closes timing in the report and fails on a bench.
+#
+# The Cartridge menu switch gets the same treatment. It is written once at
+# boot from the persisted menu value and any later change resets the core, so
+# it is as static as phi_sel is; what makes it worth constraining is its
+# fanout, since it gates the controller's synchronous reset and therefore
+# reaches every register in the module. The pin muxes it also drives are I/O
+# paths, not register to register, so this does not touch them.
 set_multicycle_path -setup 4 \
-  -from [get_registers {*cart_probe_cfg_sync|o[*]}] \
+  -from [get_registers {*cart_cfg_sync|o[*]}] \
   -to   [get_registers {*gba_cart_controller*}]
 set_multicycle_path -hold 3 \
-  -from [get_registers {*cart_probe_cfg_sync|o[*]}] \
+  -from [get_registers {*cart_cfg_sync|o[*]}] \
+  -to   [get_registers {*gba_cart_controller*}]
+set_multicycle_path -setup 4 \
+  -from [get_registers {*cart_menu_sync|o[*]}] \
+  -to   [get_registers {*gba_cart_controller*}]
+set_multicycle_path -hold 3 \
+  -from [get_registers {*cart_menu_sync|o[*]}] \
   -to   [get_registers {*gba_cart_controller*}]

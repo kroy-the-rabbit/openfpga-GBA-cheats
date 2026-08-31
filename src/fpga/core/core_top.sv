@@ -230,7 +230,27 @@ assign port_ir_rx_disable = 1;
 // bridge endianness
 assign bridge_endian_little = 0;
 
+// ---- Cartridge control ----
+// Declared here because the reset, the save size and the quirk table all read
+// them long before the cartridge block at the bottom of this file. Two axes,
+// deliberately not one switch:
+//
+//   cart_hw_enable_s   the controller owns the slot pins and probes the header
+//   cart_rom_mode      gba_top's ROM reads come from the cart instead of SDRAM
+//
+// cart_rom_mode is the second axis ANDed with a passing header probe, so
+// asking for a cart ROM with an empty or half-inserted slot leaves the SD path
+// exactly as it was rather than booting into a bus of floating pins.
+wire       cart_hw_enable_s;    // clk_sys, from the Cartridge menu list
+wire       cart_rom_select_s;   // clk_sys, menu asked for ROM from the cart
+reg        cart_detect = 1'b0;  // header probe passed, driven at the bottom
+reg        cprobe_done = 1'b0;  // header probe has finished, pass or fail
+reg [31:0] cart_hdr_id = 32'd0; // header 0xAC..0xAF, the game code
+wire       cart_rom_mode = cart_rom_select_s & cart_detect;
 
+// Menu readouts, in clk_74a for the bridge read mux. Driven at the bottom.
+wire [31:0] cart_readout_id_s;
+wire [31:0] cart_readout_st_s;
 
 // ---- Link Cable ----
 // Supported: 2-player multi-player mode on SD/SC with SO/SI terminal detect.
@@ -463,7 +483,10 @@ reg  [16:0] clr_addr;    // [16]=done flag, [15:0]=word addr (128 KB = 64K words
 reg         clr_wr;       // 1-cycle write pulse
 reg         clr_guard;    // 1-cycle guard for psram_busy propagation
 wire        save_clear_done = clr_addr[16];
-wire        save_mem_ready  = save_data_received | save_clear_done;
+// In cart ROM mode the Pocket is told the save size is zero, so it sends no
+// save and save_data_received may never arrive. Do not hold the core in reset
+// waiting for a PSRAM save area nothing is going to fill.
+wire        save_mem_ready  = cart_rom_mode | save_data_received | save_clear_done;
 
 always @(posedge clk_sys) begin
     clr_wr <= 0;
@@ -858,10 +881,24 @@ wire        quirk_gpio;       // → specialmodule
 wire        quirk_memory_remap; // → memory_remap
 wire        quirk_sprite;     // → maxpixels
 
+// The quirk table has to describe the ROM that is actually running.
+// save_type_detector reads cart_id out of the SD download stream, and in cart
+// ROM mode there is no download stream, so the header probe supplies it
+// instead. Selected on cart_rom_mode and not on cart_hw_enable_s: with the
+// menu on Detect Only the running ROM is still the SD one, and its own cart_id
+// is the right answer.
+//
+// det_flash_1m is NOT resolved the same way and is left on the SD stream. It
+// only sizes the save area, and in cart ROM mode the save size reported to the
+// Pocket is forced to zero, so nothing reads it. That stops being true the day
+// saves route to the cartridge.
+wire [31:0] active_cart_id    = cart_rom_mode ? cart_hdr_id : detected_cart_id;
+wire        active_cart_valid = cart_rom_mode ? cprobe_done : det_cart_id_valid;
+
 cart_quirks quirks (
     .clk           ( clk_sys ),
-    .cart_id       ( detected_cart_id ),
-    .valid         ( det_cart_id_valid ),
+    .cart_id       ( active_cart_id ),
+    .valid         ( active_cart_valid ),
     .sram_quirk    ( quirk_sram ),
     .gpio_quirk    ( quirk_gpio ),
     .tilt_quirk    (),
@@ -1014,7 +1051,12 @@ synch_3 s_other_dl (other_slot_downloading, other_slot_downloading_s, clk_sys);
 wire core_reset_s;
 synch_3 s_core_reset(core_reset, core_reset_s, clk_sys);
 
-wire reset_gba = ~pll_core_locked | other_slot_downloading_s | ~reset_n_s | core_reset_s | ~save_mem_ready;
+// The header probe is added to the reset condition so the ROM source, the
+// quirk table and the reported save size are all settled before the CPU
+// starts. It only extends reset when the Cartridge menu is on, so the SD path
+// is untouched, and the probe times out rather than hanging if nothing answers.
+wire reset_gba = ~pll_core_locked | other_slot_downloading_s | ~reset_n_s | core_reset_s |
+                 ~save_mem_ready | (cart_hw_enable_s & ~cprobe_done);
 
 // ---- BIOS Loading via data_loader → gba_top internal BRAM ----
 // BIOS (16 KB) loads from data slot 4 at address 0x3xxxxxxx
@@ -1445,10 +1487,14 @@ always @(*) begin
     32'hF3000008: begin
         bridge_rd_data <= {31'd0, cheats_master};
     end
-    // Cartridge probe, measurement only. Reading it is what stops the fitter
-    // trimming the controller in front of it; see the probe block above.
+    // What the cartridge header probe found. `CI:` is the four-character game
+    // code from header 0xAC..0xAF; `CP:` is the status word, laid out in the
+    // cartridge section at the bottom of this file.
     32'hF4000000: begin
-        bridge_rd_data <= cart_probe_out_s;
+        bridge_rd_data <= cart_readout_id_s;
+    end
+    32'hF4000004: begin
+        bridge_rd_data <= cart_readout_st_s;
     end
     32'hF3000004: begin
         bridge_rd_data <= {24'd0, cheat_overrun_s, cheats_master,
@@ -1495,7 +1541,16 @@ synch_3 gpio_quirk_sync (
 // sizes match the actual save type sizes. No 4× DWORD expansion.
 // Only add 16 bytes for RTC data when the game uses GPIO/RTC or force_rtc is on.
 wire        rtc_active = gpio_quirk_s | force_rtc;
-wire [31:0] save_size_bytes = flash_1m_s ? (32'h0002_0000 + (rtc_active ? 32'd16 : 32'd0)) :
+// In cart ROM mode the game running is the cartridge's, but the .sav on the SD
+// card is named after whatever ROM was used to launch the core. Writing that
+// game's save file with this game's data would destroy it. Report zero and the
+// Pocket neither loads nor writes back, so the SD save is not touched at all.
+// The cartridge's own save is not written either: nothing in this core writes
+// to a cartridge yet. Taken from Wokann/openfpga-GBA, commit 243fb6a.
+wire        cart_rom_mode_74a;
+synch_3 cart_rom_mode_74a_sync(cart_rom_mode, cart_rom_mode_74a, clk_74a);
+wire [31:0] save_size_bytes = cart_rom_mode_74a ? 32'd0 :
+                              flash_1m_s ? (32'h0002_0000 + (rtc_active ? 32'd16 : 32'd0)) :
                                            (32'h0001_0000 + (rtc_active ? 32'd16 : 32'd0));
 
 // Continuously drive datatable port A with save size.
@@ -1523,11 +1578,20 @@ reg force_rtc = 0;        // 0 = Off, 1 = Force enable RTC/GPIO
 reg [1:0] turbo_mode = 0; // 0 = Disabled, 1 = Turbo A, 2 = Turbo B
 reg ff_video_stable = 1'b1; // 0 = Classic FF, 1 = wait for complete rendered lines
 
-// Cartridge probe input, written at 0x94. Declared here with the other menu
-// registers because the block that writes them is directly below; the probe
-// itself is at the bottom of this file.
-reg [31:0] cart_probe_in  = 32'd0;   // per-access: addresses, requests, data
-reg [31:0] cart_probe_cfg = 32'd0;   // quasi-static: phi_sel, gpio timing
+// Cartridge mode, written at 0x90 by the "Cartridge" menu list.
+//   0 = Off             controller held in reset, slot pins at the idle values
+//                       the pre-cartridge core used
+//   1 = Detect Only     controller owns the slot and reads the header; the ROM
+//                       still comes from SD
+//   2 = Boot From Cart  as 1, and gba_top's ROM reads route to the cart once
+//                       the header probe has passed
+reg [1:0] cart_menu = 2'd0;
+reg       cart_menu_seen = 1'b0;   // first write is the boot-time persist
+
+// Controller tuning, written at 0x98. Quasi-static: phi_sel and the GPIO
+// timing mode are settings, not per-access data, which is what the multicycle
+// in core_constraints.sdc asserts about them.
+reg [31:0] cart_cfg = 32'd0;
 
 reg [13:0] reset_counter = 0;
 wire       core_reset = (reset_counter != 0);
@@ -1544,8 +1608,24 @@ always @(posedge clk_74a) begin
         32'h88: turbo_mode     <= bridge_wr_data[1:0];
         32'h8C: ff_video_stable <= bridge_wr_data[0];
         32'hF3000008: cheats_master <= bridge_wr_data[0];
-        32'h94: cart_probe_in    <= bridge_wr_data;   // cartridge probe only
-        32'h98: cart_probe_cfg   <= bridge_wr_data;   // cartridge probe only
+        // 0x90 is free in this core: PLAN.md section 1c reserved it for the
+        // cheats master switch, but that ended up at 0xF3000008 because APF
+        // will only preserve the other bits at an address it can read back.
+        // Wokann put their cart-hardware toggle at 0x90 too, so this keeps the
+        // two branches aligned.
+        32'h90: begin
+            // The Pocket writes the persisted value at boot; that one applies
+            // without a reset. Any later change restarts the core, because the
+            // save size reported to the OS, the ROM source and the quirk table
+            // all follow this switch and none of them may change under a
+            // running game. Same rule Wokann arrived at.
+            cart_menu <= bridge_wr_data[1:0];
+            if (cart_menu_seen && (cart_menu != bridge_wr_data[1:0]))
+                reset_counter <= 14'd8000;
+            else
+                cart_menu_seen <= 1'b1;
+        end
+        32'h98: cart_cfg <= bridge_wr_data;           // controller tuning
         endcase
     end
 end
@@ -1562,6 +1642,21 @@ synch_3 #(.WIDTH(2)) turbo_mode_sync(turbo_mode, turbo_mode_s, clk_sys);
 
 wire ff_video_stable_s;
 synch_3 ff_video_stable_sync(ff_video_stable, ff_video_stable_s, clk_sys);
+
+// ---- CDC: cartridge mode → clk_sys ----
+// cart_hw_enable_s hands the slot to the controller. cart_rom_select_s asks
+// for the ROM to come from the cart as well; it still has to get past the
+// header probe before rom_source_mux switches over.
+wire [1:0] cart_menu_s;
+synch_3 #(.WIDTH(2)) cart_menu_sync(cart_menu, cart_menu_s, clk_sys);
+assign cart_hw_enable_s  = cart_menu_s != 2'd0;
+assign cart_rom_select_s = cart_menu_s == 2'd2;
+
+// Only the bits with a consumer are carried across. gpio_recover_set is left
+// at the controller's own hardware-proven constant because nothing drives the
+// GPIO port here, and a constant lets the fitter fold its 14-bit compare away.
+wire [4:0] cart_cfg_s;
+synch_3 #(.WIDTH(5)) cart_cfg_sync(cart_cfg[4:0], cart_cfg_s, clk_sys);
 
 
 // ============================================================
@@ -1769,7 +1864,11 @@ gba_top #(
     .GBA_flash_1m        ( det_flash_1m ),
     .CyclePrecalc        ( 16'd100 ),
     .Underclock          ( 2'b00 ),
-    .MaxPakAddr          ( max_rom_addr ),
+    // max_rom_addr is measured from the SD download, which in cart ROM mode
+    // describes the wrong ROM. A cart is addressed to its full 32 MB window
+    // and mirrors itself; give gba_top the whole window rather than the size
+    // of whatever file was used to launch the core.
+    .MaxPakAddr          ( cart_rom_mode ? 25'h800000 : max_rom_addr ),
     .CyclesMissing       (),
     .CyclesVsyncSpeed    (),
     .SramFlashEnable     ( ~quirk_sram ),
@@ -1880,54 +1979,54 @@ gba_top #(
 
 
 // ============================================================
-// CARTRIDGE PROBE - MEASUREMENT ONLY, NOT A FEATURE
+// Section 6: Physical cartridge
 // ============================================================
-// This instantiates Wokann's cart bus controller so the fitter has to place
-// and route it, and reports what that costs in ALMs, RAM and slack. It does
-// not implement cartridge support and must not be merged: no cheat, no ROM,
-// no save ever goes through it, `cartridge_adapter` is not declared in
-// core.json, and the Pocket therefore never powers the slot.
+// Bus controller from Wokann/openfpga-GBA (src/fpga/han/gba_cart_controller.sv,
+// vendored unchanged); ROM source mux likewise. What is here is the bring-up
+// path around them: who owns the slot pins, when the cart is powered enough to
+// talk to, and what the header says.
 //
-// It has to be instantiated rather than merely compiled. A module nothing
-// instantiates is synthesised away and measures as free, which is the
-// answer this experiment exists to avoid believing.
-//
-// Everything it needs is driven from a register the bridge writes, and
-// everything it produces is folded into a word the bridge reads. Both
-// directions matter: a constant input lets the fitter fold the logic behind
-// it away, and an unobserved output lets it trim the logic in front. Either
-// one would make the controller measure smaller than it is.
-//
-// The cart pins were tied off here before this. The controller drives them
-// now, which is the one part of this that is real: the pins already exist in
-// the 224/224 pin budget, so they cost nothing to claim.
-wire cart_probe_reset_n_s;
-synch_3 cart_probe_reset_sync(reset_n, cart_probe_reset_n_s, clk_sys);
+// The previous version of this block was a measurement harness. Its inputs
+// came from a bridge register and its outputs were XORed into one readable
+// word so the fitter could not optimise the controller away. That is gone: the
+// save, EEPROM and GPIO request lines are now tied off rather than driven from
+// a bridge write, because a stray write to a debug register with a real
+// cartridge in the slot would have issued a real write to somebody's save.
 
-wire [31:0] cart_probe_in_s;
-synch_3 #(.WIDTH(32)) cart_probe_sync(cart_probe_in, cart_probe_in_s, clk_sys);
+// Held in reset whenever the Cartridge menu is Off. That is what restores the
+// slot to the idle posture the pre-cartridge core used, and it is a property
+// of the controller's own reset block rather than a promise made here:
+// out_bank1/2/3_dir all reset to 0 (banks tri-stated, translators pointed in),
+// rd_n/wr_n/cs_n all reset to 1 (every strobe deasserted), res_n resets to 0
+// (RES# asserted). Coming out of reset gives the cart a RESET_LEN power-on
+// RES# pulse before anything reads it.
+wire cart_reset_n_s;
+synch_3 cart_reset_sync(reset_n, cart_reset_n_s, clk_sys);
+wire cart_ctl_reset_n = cart_reset_n_s & cart_hw_enable_s;
 
-// The controller's configuration inputs, kept in a separate register from the
-// per-access ones so they can be constrained separately. phi_sel, the GPIO
-// timing mode and the GPIO recovery count are settings: they change when
-// somebody changes a setting, not once per bus cycle. Sharing one register
-// with rd_addr made that impossible to say in the SDC, and gpio_recover_set
-// feeds a 14-bit compare that lands in the state machine, so it was the
-// source of the worst path in the first probe.
-wire [31:0] cart_probe_cfg_s;
-synch_3 #(.WIDTH(32)) cart_probe_cfg_sync(cart_probe_cfg, cart_probe_cfg_s,
-                                          clk_sys);
+// Private nets for the two pins whose idle value the controller does not
+// already match. Everything else connects straight through, so the controller
+// keeps its bidirectional read path on the AD banks, which the header probe
+// depends on.
+wire [7:4] ctl_bank0;
+wire       ctl_bank0_dir;
+wire       ctl_pin30, ctl_pin30_dir;
 
 wire [31:0] cart_rd_data, cart_rd_data_second;
-wire        cart_rd_ready, cart_save_done, cart_eeprom_dout, cart_eeprom_done;
-wire  [7:0] cart_save_dout, cart_gpio_diag, cart_err_count;
-wire  [3:0] cart_gpio_dout;
-wire        cart_gpio_done, cart_present_w, cart_pwroff_reset_w;
+wire        cart_rd_ready;
+wire        cart_present_w, cart_pwroff_reset_w;
 
-gba_cart_controller cart_probe (
+// Header probe request, muxed ahead of the ROM mux's own request. The probe
+// only runs before the game starts, so the two never contend.
+reg         cprobe_req  = 1'b0;
+reg  [5:0]  cprobe_idx  = 6'd0;
+wire        cart_rd_req_ctl  = cprobe_req ? 1'b1 : romsrc_cart_rd_req;
+wire [24:0] cart_rd_addr_ctl = cprobe_req ? {19'd0, cprobe_idx} : romsrc_cart_rd_addr;
+
+gba_cart_controller cart_ctl (
     .clk                    ( clk_sys ),
-    .reset_n                ( cart_probe_reset_n_s ),
-    .phi_sel                ( cart_probe_cfg_s[1:0] ),
+    .reset_n                ( cart_ctl_reset_n ),
+    .phi_sel                ( cart_cfg_s[1:0] ),
 
     .cart_tran_bank2        ( cart_tran_bank2 ),
     .cart_tran_bank2_dir    ( cart_tran_bank2_dir ),
@@ -1935,71 +2034,274 @@ gba_cart_controller cart_probe (
     .cart_tran_bank3_dir    ( cart_tran_bank3_dir ),
     .cart_tran_bank1        ( cart_tran_bank1 ),
     .cart_tran_bank1_dir    ( cart_tran_bank1_dir ),
-    .cart_tran_bank0        ( cart_tran_bank0 ),
-    .cart_tran_bank0_dir    ( cart_tran_bank0_dir ),
-    .cart_tran_pin30        ( cart_tran_pin30 ),
-    .cart_tran_pin30_dir    ( cart_tran_pin30_dir ),
+    .cart_tran_bank0        ( ctl_bank0 ),
+    .cart_tran_bank0_dir    ( ctl_bank0_dir ),
+    .cart_tran_pin30        ( ctl_pin30 ),
+    .cart_tran_pin30_dir    ( ctl_pin30_dir ),
     .cart_pin30_pwroff_reset( cart_pwroff_reset_w ),
     .cart_tran_pin31        ( cart_tran_pin31 ),
     .cart_tran_pin31_dir    ( cart_tran_pin31_dir ),
 
-    // Every input from the probe register, so none of it folds to a constant.
-    .rd_req                 ( romsrc_cart_rd_req ),
-    .rd_addr                ( romsrc_cart_rd_addr ),
+    .rd_req                 ( cart_rd_req_ctl ),
+    .rd_addr                ( cart_rd_addr_ctl ),
     .rd_data                ( cart_rd_data ),
     .rd_data_second         ( cart_rd_data_second ),
     .rd_ready               ( cart_rd_ready ),
 
-    .save_req               ( cart_probe_in_s[3] ),
-    .save_addr              ( cart_probe_in_s[24:8] ),
-    .save_rnw               ( cart_probe_in_s[4] ),
-    .save_din               ( cart_probe_in_s[15:8] ),
-    .save_dout              ( cart_save_dout ),
-    .save_done              ( cart_save_done ),
+    // Saves, EEPROM and GPIO stay on the core's own paths. Nothing this core
+    // does writes to a cartridge, which is the rule in PLAN.md section 5: a
+    // cart write touches somebody's real save and stays behind an explicit
+    // toggle until it has been proven on a cart nobody minds losing.
+    .save_req               ( 1'b0 ),
+    .save_addr              ( 17'd0 ),
+    .save_rnw               ( 1'b1 ),
+    .save_din               ( 8'd0 ),
+    .save_dout              (),
+    .save_done              (),
 
-    .eeprom_req             ( cart_probe_in_s[5] ),
-    .eeprom_rnw             ( cart_probe_in_s[6] ),
-    .eeprom_din             ( cart_probe_in_s[7] ),
-    .eeprom_dma             ( cart_probe_in_s[16] ),
-    .eeprom_dout            ( cart_eeprom_dout ),
-    .eeprom_done            ( cart_eeprom_done ),
+    .eeprom_req             ( 1'b0 ),
+    .eeprom_rnw             ( 1'b1 ),
+    .eeprom_din             ( 1'b0 ),
+    .eeprom_dma             ( 1'b0 ),
+    .eeprom_dout            (),
+    .eeprom_done            (),
 
-    .gpio_req               ( cart_probe_in_s[17] ),
-    .gpio_rnw               ( cart_probe_in_s[18] ),
-    .gpio_addr              ( cart_probe_in_s[20:19] ),
-    .gpio_din               ( cart_probe_in_s[27:24] ),
-    .gpio_dout              ( cart_gpio_dout ),
-    .gpio_done              ( cart_gpio_done ),
-    .gpio_timing_mode       ( cart_probe_cfg_s[4:2] ),
-    .gpio_recover_set       ( cart_probe_cfg_s[18:5] ),
-    .gpio_diag              ( cart_gpio_diag ),
+    .gpio_req               ( 1'b0 ),
+    .gpio_rnw               ( 1'b1 ),
+    .gpio_addr              ( 2'd0 ),
+    .gpio_din               ( 4'd0 ),
+    .gpio_dout              (),
+    .gpio_done              (),
+    .gpio_timing_mode       ( cart_cfg_s[4:2] ),
+    .gpio_recover_set       ( 14'd10000 ),
+    .gpio_diag              (),
 
     .cart_present           ( cart_present_w ),
-    .err_count              ( cart_err_count )
+    .err_count              ()
 );
 
-// Every output reduced into one readable word. XOR rather than concatenation
-// so that all 32 bits of rd_data reach it: a 32-bit slice of a wider bus
-// would let the fitter trim whatever did not survive to the mux.
-wire [31:0] cart_probe_out =
-      cart_rd_data ^ cart_rd_data_second
-    ^ {24'd0, cart_save_dout}
-    ^ {24'd0, cart_gpio_diag}
-    ^ {24'd0, cart_err_count}
-    ^ {28'd0, cart_gpio_dout}
-    ^ {26'd0, cart_rd_ready, cart_save_done, cart_eeprom_dout,
-              cart_eeprom_done, cart_gpio_done, cart_present_w};
-wire [31:0] cart_probe_out_s;
-synch_3 #(.WIDTH(32)) cart_probe_out_sync(cart_probe_out, cart_probe_out_s,
-                                          clk_74a);
+// ---- Slot pins ----
+// Out of cart mode these are exactly the values the pre-cartridge core drove,
+// which are also the APF template's. In cart mode the controller has them.
+//
+// bank1/2/3 and pin31 need no mux: the controller in reset already drives
+// 8'hzz with dir 0, which is the idle value, and muxing them here would break
+// the read-back the header probe needs.
+//
+// bank0 does need one. The controller tri-states bank0[7] (PHI#) while PHI is
+// disabled, matching a real GBA, but the idle core drove 4'hf. A driven high
+// is the safer of the two for an idle slot: every one of these lines is active
+// low, so 1 means deasserted, where a floating input on a powered cart is not
+// defined. The cost of routing bank0 through a private net is that the
+// controller's gpio_diag[5] now reads back its own output rather than the pin;
+// nothing here uses gpio_diag.
+assign cart_tran_bank0     = cart_hw_enable_s ? ctl_bank0     : 4'hf;
+assign cart_tran_bank0_dir = cart_hw_enable_s ? ctl_bank0_dir : 1'b1;
 
-// The ROM source mux, wired for real: gba_top's ROM reads go through it and
-// out to SDRAM exactly as before while cart_mode is low. cart_mode comes from
-// the probe register rather than a constant, because tying it low would let
-// the fitter delete the cartridge branch and the measurement with it.
+// pin30 is CS2#/RES#, the one pin that can hold a cartridge in reset or select
+// its save chip, so it gets the most conservative treatment. Out of cart mode
+// the direction pin goes back to floating, which is the APF template's "let
+// the hardware control it by itself", and the output value to 0. In cart mode
+// the controller drives it: low through its power-on reset window, then RES#
+// released, and low again only while a save access is selected, which cannot
+// happen here because save_req is tied off.
+assign cart_tran_pin30     = cart_hw_enable_s ? ctl_pin30     : 1'b0;
+assign cart_tran_pin30_dir = cart_hw_enable_s ? ctl_pin30_dir : 1'bz;
+
+// The power-off reset line is 0 in both modes: 0 in the pre-cartridge core, 0
+// in the APF template, and 0 in the controller. Passed through rather than
+// tied so the controller keeps the say if it ever wants it.
+assign cart_pin30_pwroff_reset = cart_hw_enable_s ? cart_pwroff_reset_w : 1'b0;
+
+// ---- Cartridge header probe ----
+// Read the whole 192-byte header, 0x00..0xBF, twice, and require the two
+// passes to agree. Detection and both hardening steps are Wokann's, learned on
+// real hardware:
+//   - cart_present alone cannot detect an empty slot: the controller only
+//     latches it after a ROM read completes, which it does whether or not
+//     anything answered.
+//   - do not test for a 0xEA branch opcode at 0x00. Some carts do not have
+//     one. Test the range for being neither all-ones nor all-zero instead.
+//   - read twice. A half-inserted cart gives a flaky bus, some pins touching
+//     and others floating, which reads as mixed FF and data and can wedge the
+//     game at BIOS init. Two disagreeing passes mean no usable cart.
+// The all-ones half of that test needs the weak pull-ups on the AD banks in
+// ap_core.qsf, or an empty slot reads a random pattern instead of all-FF.
+//
+// The accumulators are folded to 16 bits: every halfword of the header is
+// ORed and ANDed into them. The blank tests are exactly as strong that way
+// (all-FF and all-zero fold to themselves) and it halves the registers.
+//
+// One request returns two DWORDs, so a pass is 24 requests. The request line
+// is dropped and a settling gap counted out between them rather than held
+// high across the pass: the controller samples rd_req level in its idle state,
+// which it enters on the same cycle it raises rd_ready, so a held request
+// starts one more read before the next address can reach it. The gap absorbs
+// that read, whose data is discarded, and keeps every accumulated word matched
+// to the address that was presented for it. It costs about 450 us at boot.
+localparam CP_IDLE = 2'd0, CP_REQ = 2'd1, CP_WAIT = 2'd2, CP_GAP = 2'd3;
+localparam [15:0] CP_TIMEOUT = 16'd4000;   // ~40 us, a read that never answers
+localparam [15:0] CP_SETTLE  = 16'd768;    // longer than one 8-byte cart read
+
+reg  [1:0]  cprobe_state = CP_IDLE;
+reg         cprobe_pass  = 1'b0;
+reg  [15:0] cprobe_timer = 16'd0;
+reg  [15:0] cp_or  = 16'd0,     cp_and  = 16'hFFFF;
+reg  [15:0] cp_or_ref = 16'd0,  cp_and_ref = 16'hFFFF;
+reg         cprobe_timeout = 1'b0;
+reg         cprobe_mismatch = 1'b0;
+reg         cprobe_allff = 1'b0, cprobe_allzero = 1'b0;
+
+// Header identity. cart_hdr_id is declared with the cartridge control signals
+// at the top of this file because the quirk table reads it. Byte order matches
+// save_type_detector: the cart bus returns a little-endian DWORD, cart_quirks
+// wants the byte at 0xAC in bits 31:24.
+reg  [7:0]  cart_hdr_fixed = 8'd0; // 0xB2, which is 0x96 on every licensed cart
+
+wire [15:0] cp_fold_or  = cart_rd_data[31:16] | cart_rd_data[15:0]
+                        | cart_rd_data_second[31:16] | cart_rd_data_second[15:0];
+wire [15:0] cp_fold_and = cart_rd_data[31:16] & cart_rd_data[15:0]
+                        & cart_rd_data_second[31:16] & cart_rd_data_second[15:0];
+
+// DWORD 43 is 0xAC and lands in rd_data_second of the request at index 42;
+// DWORD 44 is 0xB0 and is the rd_data of the request at index 44.
+localparam [5:0] CP_LAST = 6'd46;   // last request index, 48 DWORDs in pairs
+
+always @(posedge clk_sys) begin
+    if (~pll_core_locked || ~cart_hw_enable_s || core_reset_s) begin
+        // Re-probe on every core restart, so a cart inserted after a failed
+        // probe is picked up by toggling the menu or resetting.
+        cprobe_state    <= CP_IDLE;
+        cprobe_req      <= 1'b0;
+        cprobe_done     <= 1'b0;
+        cart_detect     <= 1'b0;
+        cprobe_idx      <= 6'd0;
+        cprobe_pass     <= 1'b0;
+        cprobe_timer    <= 16'd0;
+        cp_or           <= 16'd0;
+        cp_and          <= 16'hFFFF;
+        cprobe_timeout  <= 1'b0;
+        cprobe_mismatch <= 1'b0;
+        cprobe_allff    <= 1'b0;
+        cprobe_allzero  <= 1'b0;
+        // Cleared so a stale header from an earlier probe cannot be read back
+        // as if this one had succeeded.
+        cart_hdr_id     <= 32'd0;
+        cart_hdr_fixed  <= 8'd0;
+    end else begin
+        case (cprobe_state)
+        CP_IDLE: begin
+            // Wait for the data slots so the probe does not compete with the
+            // ROM download for clk_sys, and so a menu change re-runs it.
+            if (dataslot_allcomplete_s && !cprobe_done)
+                cprobe_state <= CP_REQ;
+        end
+
+        CP_REQ: begin
+            cprobe_req   <= 1'b1;
+            cprobe_timer <= CP_TIMEOUT;
+            cprobe_state <= CP_WAIT;
+        end
+
+        CP_WAIT: begin
+            if (cart_rd_ready) begin
+                cp_or  <= cp_or  | cp_fold_or;
+                cp_and <= cp_and & cp_fold_and;
+                if (cprobe_idx == 6'd42)
+                    cart_hdr_id <= {cart_rd_data_second[7:0],  cart_rd_data_second[15:8],
+                                    cart_rd_data_second[23:16], cart_rd_data_second[31:24]};
+                if (cprobe_idx == 6'd44)
+                    cart_hdr_fixed <= cart_rd_data[23:16];
+                cprobe_req   <= 1'b0;
+                cprobe_timer <= CP_SETTLE;
+                cprobe_state <= CP_GAP;
+            end else if (cprobe_timer == 16'd0) begin
+                // Nothing answered. Give up rather than hold the core in reset.
+                cprobe_req     <= 1'b0;
+                cprobe_timeout <= 1'b1;
+                cprobe_done    <= 1'b1;
+                cart_detect    <= 1'b0;
+                cprobe_state   <= CP_IDLE;
+            end else begin
+                cprobe_timer <= cprobe_timer - 1'b1;
+            end
+        end
+
+        CP_GAP: begin
+            if (cprobe_timer != 16'd0) begin
+                cprobe_timer <= cprobe_timer - 1'b1;
+            end else if (cprobe_idx != CP_LAST) begin
+                cprobe_idx   <= cprobe_idx + 6'd2;
+                cprobe_state <= CP_REQ;
+            end else if (cprobe_pass == 1'b0) begin
+                // End of the first pass: keep its fingerprint and go again.
+                cp_or_ref    <= cp_or;
+                cp_and_ref   <= cp_and;
+                cp_or        <= 16'd0;
+                cp_and       <= 16'hFFFF;
+                cprobe_idx   <= 6'd0;
+                cprobe_pass  <= 1'b1;
+                cprobe_state <= CP_REQ;
+            end else begin
+                cprobe_allzero  <= (cp_or  == 16'd0);
+                cprobe_allff    <= (cp_and == 16'hFFFF);
+                cprobe_mismatch <= (cp_or != cp_or_ref) || (cp_and != cp_and_ref);
+                cart_detect     <= (cp_or != 16'd0) && (cp_and != 16'hFFFF) &&
+                                   (cp_or == cp_or_ref) && (cp_and == cp_and_ref);
+                cprobe_done     <= 1'b1;
+                cprobe_state    <= CP_IDLE;
+            end
+        end
+        endcase
+    end
+end
+
+// ---- Menu readouts ----
+// The Pocket has no console, so these are the whole diagnostic surface, the
+// same trick the cheat loader uses for CL: and CD:.
+//
+// `CI:` is the four-character game code from header 0xAC..0xAF, big-endian, so
+// the byte at 0xAC is bits 31:24. Read it as hex and it is four ASCII letters:
+// "AXVE" is 0x41585645, which the menu prints as 1096287813.
+//
+// `CP:` is the status word:
+//
+//   bits 31:16  header fingerprint: every halfword of the 192-byte header
+//               ORed together. 0000 means nothing was read, FFFF means an
+//               empty slot, anything else is a header that came back.
+//   bits 15:8   header byte 0xB2. 0x96 on every licensed cartridge, so 150 in
+//               the menu's decimal is the single strongest sign the read is
+//               real. It is reported, not gated on.
+//   bit     7   the Cartridge menu is not Off
+//   bit     6   cart detected: the probe passed and the ROM may come from it
+//   bit     5   the probe has finished, pass or fail
+//   bit     4   the probe timed out: the controller never answered a read
+//   bit     3   the two passes disagreed, which is a half-inserted cartridge
+//   bit     2   every halfword read as FFFF, which is an empty slot
+//   bit     1   every halfword read as 0000
+//   bit     0   the controller completed at least one ROM read
+wire [31:0] cart_readout_id = cart_hdr_id;
+wire [31:0] cart_readout_st = {cp_or,             // 31:16 header fingerprint
+                               cart_hdr_fixed,    // 15:8  header byte 0xB2
+                               cart_hw_enable_s,  // 7
+                               cart_detect,       // 6
+                               cprobe_done,       // 5
+                               cprobe_timeout,    // 4
+                               cprobe_mismatch,   // 3
+                               cprobe_allff,      // 2
+                               cprobe_allzero,    // 1
+                               cart_present_w};   // 0
+
+synch_3 #(.WIDTH(32)) cart_readout_id_sync(cart_readout_id, cart_readout_id_s, clk_74a);
+synch_3 #(.WIDTH(32)) cart_readout_st_sync(cart_readout_st, cart_readout_st_s, clk_74a);
+
+// ---- ROM source ----
+// cart_mode is real now: the menu asked for a cart ROM and the header probe
+// agreed there is one. With it low the mux passes gba_top's reads straight to
+// SDRAM, which is the pre-cartridge behaviour bit for bit.
 rom_source_mux romsrc (
     .clk                  ( clk_sys ),
-    .cart_mode            ( cart_probe_cfg_s[19] ),
+    .cart_mode            ( cart_rom_mode ),
 
     .gba_rd_req           ( sdram_read_req_gba ),
     .gba_rd_addr          ( sdram_read_addr_gba ),
@@ -2019,9 +2321,5 @@ rom_source_mux romsrc (
     .cart_rd_data         ( cart_rd_data ),
     .cart_rd_data_second  ( cart_rd_data_second )
 );
-
-// The controller drives pin30 through its own output; the framework's
-// power-off reset line still has to be driven from somewhere.
-assign cart_pin30_pwroff_reset = cart_pwroff_reset_w;
 
 endmodule

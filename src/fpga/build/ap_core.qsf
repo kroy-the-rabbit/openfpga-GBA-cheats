@@ -914,6 +914,26 @@ set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to bridge_spimosi
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to port_tran_si
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to port_tran_sck
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to port_tran_sd
+# Cartridge AD bus. Without these the pins float with no cart in the slot
+# and the header probe in core_top.sv can read a random pattern instead of
+# all-FF, which is what its empty-slot test relies on. Cart driving is
+# push-pull and unaffected. From Wokann/openfpga-GBA, commit 1fe809c.
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank2[0]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank2[1]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank2[2]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank2[3]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank2[4]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank2[5]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank2[6]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank2[7]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank3[0]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank3[1]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank3[2]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank3[3]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank3[4]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank3[5]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank3[6]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cart_tran_bank3[7]
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
 set_global_assignment -name NUM_PARALLEL_PROCESSORS 4
 set_global_assignment -name SEED 8

@@ -122,6 +122,44 @@
         "type": "number_u32",
         "enabled": true,
         "address": "0xF3000004"
+      },
+      {
+        "name": "Cartridge",
+        "id": 50,
+        "type": "list",
+        "enabled": true,
+        "address": "0x90",
+        "persist": true,
+        "writeonly": true,
+        "defaultval": 0,
+        "options": [
+          {
+            "name": "Off",
+            "value": 0
+          },
+          {
+            "name": "Detect Only",
+            "value": 1
+          },
+          {
+            "name": "Boot From Cart",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "name": "CI:",
+        "id": 51,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF4000000"
+      },
+      {
+        "name": "CP:",
+        "id": 52,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF4000004"
       }
     ],
     "messages": []
