@@ -22,7 +22,7 @@ with two partial implementations to draw on.
 |---|---|
 | Base | `upstream/master` v0.6.2 (`b08568f`, 2026-06-16) |
 | Branch | `master`, the only one on the remote; releases are built from it and CI refuses a tag that is not |
-| Status | P0-P3 done and merged; P4 closed as not wanted; P5-P8 open. Nothing has run on hardware yet. |
+| Status | P0-P3 done and merged and confirmed on hardware; P4 closed as not wanted; P5 part done on branch `p5-cartridge`, see §2; P6-P8 open. |
 | Core identity | `pkg/Cores/kroy.GBA`, author `kroy`, description `Game Boy Advance (cheats)` |
 | Platform id | `gba`, unchanged, so `/Assets/gba/common` is shared with any other GBA core |
 | Licence | upstream MiSTer core is GPL-2.0 (`pkg/Cores/kroy.GBA/info.txt`); no LICENSE file in the port, so per-file notices and that info.txt govern |
@@ -32,8 +32,8 @@ Remotes, and what each is for:
 | Remote | Repo | Why |
 |---|---|---|
 | `origin` | `kroy-the-rabbit/openfpga-GBA-cheats` | this fork |
-| `upstream` | `mincer-ray/openfpga-GBA` | the live core, still moving |
-| `wokann` | `Wokann/openfpga-GBA` | cartridge bus controller, furthest along |
+| `upstream` | `mincer-ray/openfpga-GBA` | the base. Unchanged since v0.6.2: `b08568f..upstream/master` is 0 commits |
+| `wokann` | `Wokann/openfpga-GBA` | cartridge bus controller, furthest along. 45 commits ahead of v0.6.2, tip `6870814`, 2026-08-13 |
 | `rai` | `Rai/openfpga-GBA` branch `feat/cartridge-support` | ROM-from-cart path and the APF plumbing |
 
 Identity rename: only `author`, `description` and `url` in
@@ -140,18 +140,111 @@ engine and any cart controller live in. For comparison, the GBC fork started at
 50 % ALMs and 2.374 ns. Every design decision below is downstream of this.
 
 **Where the shipping design landed.** With cheats in, at STANDARD FIT:
-16,689 ALMs (90 %), 282 RAM blocks and setup **+0.090 ns** — the same margin
+16,689 ALMs (90 %), 282 RAM blocks and setup **+0.090 ns**, the same margin
 upstream's own build closes at. Confirmed twice, locally and on CI, agreeing in
-every figure. Headroom for everything after P4 is **1,791 ALMs and 26 RAM
-blocks**. Getting there took fifteen builds and cost the ASCII parser; the whole
-argument is in `docs/HANDOFF.md`, and the rule that came out of it is: **every
-fit comparison runs at STANDARD FIT**, or the delta is not attributable.
+every figure. Getting there took fifteen builds and cost the ASCII parser; the
+whole argument is in `docs/HANDOFF.md`, and the rule that came out of it is:
+**every fit comparison runs at STANDARD FIT**, or the delta is not attributable.
+
+**The headroom figure that used to sit here, 1,791 ALMs and 26 RAM blocks, no
+longer sizes anything.** At 96-97 % occupancy identical RTL spans 81 ALMs across
+placement seeds, which is as large as the modules being weighed against it. See
+§2a and `docs/BASELINE.md`. RAM blocks still count; ALMs do not.
 
 ---
 
 ## 2. Cartridge support
 
-### 2a. Prior art
+### 2a. Where it actually stands
+
+Branch `p5-cartridge`, and it is further along than a design study. Wokann's
+`gba_cart_controller.sv` (905 lines) and `rom_source_mux.sv` are vendored
+verbatim from the `wokann` remote, authored by Wokann, unmodified so their tree
+stays diffable. Both are still byte-identical to `wokann/master`'s copies as of
+2026-08-30, so the vendored pair is current and every fix they have made since
+sits outside these two files.
+
+Both are **instantiated**, not merely listed in the qsf, because a module nobody
+instantiates is optimised away and measures as free. Every controller input
+comes from a register and every output is observed, so neither side folds. `gba_top`'s ROM reads run through `rom_source_mux` and out to SDRAM
+with the cart side idle, and `cart_mode` comes off a live register rather than a
+constant, so the cartridge branch of the mux and the ROM path behind it survive
+the fitter. What was measured is therefore what it costs.
+
+**Timing.** The first build missed by 1.191 ns. All of it was three
+configuration inputs sharing a register with the per-access inputs:
+`gpio_recover_set`, `phi_sel` and `gpio_timing_mode` are settings, written from
+the menu and then still, and `gpio_recover_set` feeds a 14-bit compare that
+reaches the bus state machine. Given their own register and a multicycle of 4,
+the whole 1.191 ns came back. The per-access paths were deliberately left
+unconstrained, because `byte_addr` is loaded in `S_IDLE` and `out_bank*` from it
+in `S_ROM_CS` on the next cycle, so they genuinely have one cycle. The bus logic
+already met 100 MHz unaided.
+
+**Result, nine builds back to back on one host:**
+
+| | ALMs | Setup | |
+|---|---|---|---|
+| `main` `6994156` | 17,744 (96 %) | **+0.059** | pass, 4 builds identical |
+| + cart front end, seed 1 | 17,814 (96 %) | -0.410 | fail |
+| + cart front end, seed 2 | 17,787 (96 %) | -0.125 | fail |
+| + cart front end, seed 3 | 17,868 (97 %) | **+0.087** | pass |
+
+**It closes on one placement seed in three.** What fails on the other two is
+`sys_pll_i|...|PLL_OUTPUT_COUNTER|divclk`, which is `main`'s own worst path at
++0.059 before any of this is added. Nothing inside `gba_cart_controller`
+appears, and the multicycle constraints hold. `release.yml` retries seeds 2 and
+3 on a timing miss, so this would ship, on the third try, with 87 ps behind it.
+
+**Do not size the rest of this work by area.** Identical RTL spans 81 ALMs
+across those seeds, the same order as the apparent cost of the whole front end,
+and the register count *falls* by about 400 when a 905-line controller is added:
+that is packing and retiming, not size. At this occupancy the fitter pays for
+new logic in slack rather than in area. An earlier reading of this branch put
+**640 ALMs left** and planned against it. **That figure is withdrawn.** Watch
+worst-case slack across several seeds instead.
+
+**Still unexplained, and open:** the same RTL fits at 16,689 ALMs on the
+workstation and in CI, and at 17,744 on the build runner. About 1,050 ALMs,
+never reproduced into a cause. It is why every comparison above was built on one
+host, back to back. `docs/BASELINE.md` carries the full tables.
+
+### 2b. Done and not done
+
+| | |
+|---|---|
+| Controller and mux vendored, instantiated, defended from the optimiser | done |
+| Timing closure with the front end in | done, on one placement seed in three |
+| `gba_top` ROM reads routed through `rom_source_mux`, cart side idle | done |
+| APF declaration: `version_required` `1.2` and `cartridge_adapter` | **not done**, which is why the Pocket has never powered the slot |
+| Cart pin handover from the APF defaults to the controller | **not done** |
+| Cart detection and header read | **not done** |
+| ROM out of the cart fast enough not to stall the CPU | **not done** |
+| Save, EEPROM and GPIO routed to the cart | **not done** |
+| `save_size = 0` in cart mode | **not done** |
+
+Nothing on the branch is mergeable while the APF half is missing: no ROM, save
+or cheat reaches the cartridge, and the slot is unpowered.
+
+**Most of what is not done is not unsolved.** Wokann has done it on
+`wokann/master`, debugged on real hardware, and it is available to import. None
+of it is in this tree:
+
+| `wokann/master` | |
+|---|---|
+| `ef22963` | one-shot cart ROM header probe |
+| `5ea6efe` | header heuristic revised: read `0xB0..0xBF`, no `0xEA` check |
+| `3074491` | header read twice, identical passes required, so a half-inserted cart is rejected |
+| `1fe809c` | weak pull-ups so an empty slot reads all-FF |
+| `33e4453` | interact menu toggle for cart-hardware mode |
+| `ce0d395` | GPIO write hang when cart mode is off |
+| `243fb6a` | `save_size = 0` in cart mode, SD save fully exits |
+
+What nobody has done, here or there, is **ROM out of the cart as the boot
+path**. That and integrating the rest into a design that closes on one placement
+seed in three are the parts that are actually ours.
+
+### 2c. Prior art
 
 Nobody ships it. mincer-ray's issue
 [#17](https://github.com/mincer-ray/openfpga-GBA/issues/17) is the request, and
@@ -179,12 +272,15 @@ the APF side nobody else has done - `core.json` `version_required` bumped to
 offer "Play Cartridge" and power the slot. Rai posted a photo of it partly
 running and described timing problems.
 
-### 2b. What to take
+### 2d. What to take
 
 Take Wokann's controller as the bus layer and Rai's APF plumbing and ROM path.
-Neither is a merge: both are built against a moving upstream and one is 27
-commits behind. Import them as vendored modules on our own branch, with their
+Neither is a merge: both are built against upstream rather than against this
+fork, and one is 27 commits behind. Import them as vendored modules on our own branch, with their
 authorship preserved in the commits.
+
+**The Wokann half is taken**, verbatim and under Wokann's authorship, and
+measured; see §2a. The Rai half, the APF declaration, is not.
 
 The parts that stay ours to finish:
 
@@ -192,8 +288,8 @@ The parts that stay ours to finish:
   been the boot path. This is the hard part: sequential burst reads with the
   address auto-increment on RD#, feeding the same interface `sdram_pocket.sv`
   serves today, fast enough that the CPU is not stalled to a crawl.
-- **The SD/cart source mux.** `rom_source_mux.sv` is the seed; it has to sit
-  where the ROM `data_loader` and SDRAM read path meet in `core_top.sv`.
+- ~~**The SD/cart source mux.**~~ Done: `rom_source_mux` sits on `gba_top`'s ROM
+  reads and passes them to SDRAM while `cart_mode` is low. §2a.
 - **Save routing.** In cart mode the cart owns the save. That means reporting
   `save_size = 0` to the Pocket, which Wokann already does, and keeping the
   savestate path honest about memory it no longer owns.
@@ -202,7 +298,7 @@ The parts that stay ours to finish:
   bank direction mid-cycle. Wokann's parameters are conservative placeholders,
   and calibrating them is hardware work, not simulation work.
 
-### 2c. What cartridge mode gets you for free, and what it does not
+### 2e. What cartridge mode gets you for free, and what it does not
 
 Because `gba_cheats` pokes RAM through the internal bus rather than patching
 ROM reads, cheats that write EWRAM, IWRAM or IO work identically whether the
@@ -211,7 +307,10 @@ apply to a cart, since there is nothing writable there.
 
 The APF caveat from the GBC work applies unchanged: in Play Cartridge mode slot
 0 is not loaded, so a `.cht` named after slot 0 never loads. Parameter bit 9
-(persist browsed filename) is the fallback, exactly as in the GBC core.
+(persist browsed filename) is the fallback, exactly as in the GBC core, and it
+is **already set**: the Cheats slot in `pkg/Cores/kroy.GBA/data.json` is slot 7
+with parameters `0x205`, and `0x200` is bit 9. Nothing to do here, but it is
+untested in cart mode because cart mode does not run yet.
 
 ---
 
@@ -254,21 +353,21 @@ it works" property the GBC core has. Decide before writing the emitter.
 | Phase | Deliverable | Done when |
 |---|---|---|
 | **P0** | Reproducible local build. Upstream ships `scripts/build.sh` on `raetro/quartus:21.1` under Docker plus `print_timing.sh`, `seed_sweep.sh` and custom STA reports. Convert to Podman to match the GBC harness, keep Quartus 21.1, and make the wrapper fail the build on negative slack the way `tools/podman/build-core.sh` does in the GBC repo. | Unmodified v0.6.2 builds locally, boots a ROM on hardware, and `docs/BASELINE.md` carries our own numbers next to upstream's. |
-| **P1** done | Restore the cheat engine: `gba_cheats.vhd` and `SyncFifo` wiring, the five `gba_top` ports, the third debug-bus branch, `sleep_cheats` in the run condition, qsf entries. Feed it one hardcoded 128-bit word. | Fit closes: 16,624 ALMs, +0.090 ns, i.e. the engine is nearly free. The hardware half of this criterion is still outstanding. |
+| **P1** done | Restore the cheat engine: `gba_cheats.vhd` and `SyncFifo` wiring, the five `gba_top` ports, the third debug-bus branch, `sleep_cheats` in the run condition, qsf entries. Feed it one hardcoded 128-bit word. | Fit closes: 16,624 ALMs, +0.090 ns, i.e. the engine is nearly free. Confirmed on hardware since. |
 | **P2** superseded by P3 | Data slot 7, a fourth `data_loader`, `cheat_loader.sv` ported with the 128-bit emitter, master switch on `0x90`. | Written and correct in simulation (513/513 corpus), but **it does not fit**: 17,903 ALMs at 97 %, setup -0.452 ns. The slot, the `data_loader` and the `0x90` switch all survive into P3; only the on-FPGA ASCII parser was cut. |
-| **P3** done | The format decision from §3, resolved harder than planned: **the whole parse moved off the FPGA.** `tools/cheats/cht2bin.py` converts `.cht` to a 16-byte-per-entry `.chtbin`, and `cheat_binloader.sv` is a byte counter plus a 72-bit shift register in place of the 648-line parser. Format contract in `docs/CHEATBIN.md`. | **Closes at 16,689 ALMs (90 %), 282 RAM, setup +0.090 ns** — upstream's own margin, reproduced on CI. The loader costs 61 ALMs with zero physical-synthesis churn, against 441 and 12.7 % of all churn for the parser. `docs/CHEATS.md` describes the `.chtbin` workflow. |
+| **P3** done | The format decision from §3, resolved harder than planned: **the whole parse moved off the FPGA.** `tools/cheats/cht2bin.py` converts `.cht` to a 16-byte-per-entry `.chtbin`, and `cheat_binloader.sv` is a byte counter plus a 72-bit shift register in place of the 648-line parser. Format contract in `docs/CHEATBIN.md`. | **Closes at 16,689 ALMs (90 %), 282 RAM, setup +0.090 ns**, upstream's own margin, reproduced on CI. The loader costs 61 ALMs with zero physical-synthesis churn, against 441 and 12.7 % of all churn for the parser. `docs/CHEATS.md` describes the `.chtbin` workflow. |
 | **P4** closed, will not happen | On-screen readout re-attached to `video_adapter.sv`. **Authorised to drop outright if the fit proves there is no room**, which is where the evidence currently points: the P1+P2 build carries no OSD at all and still misses setup by 0.846 ns at 97 % ALMs. Dropping it therefore saves nothing today; it means the phase does not happen unless the budget recovers first. The `CL:`/`CD:` menu readouts already cover the diagnostics the OSD existed for. | Closed on 2026-08-26 by user decision, not by the budget: the overlay is not wanted. The `CL:`/`CD:` menu readouts carry the diagnostics. |
-| **P5** | Cartridge bring-up: import Wokann's controller and Rai's APF plumbing, cart detected, header read, `cartridge_adapter` enabled. | The core boots with a cart inserted and reads a correct header, on hardware. |
+| **P5** part done | Cartridge bring-up: import Wokann's controller and Rai's APF plumbing, cart detected, header read, `cartridge_adapter` enabled. | Branch `p5-cartridge`. The controller and `rom_source_mux` are vendored, instantiated and wired to `gba_top`'s ROM reads with the cart side idle, and the design closes on one placement seed in three at +0.087 ns against `main`'s +0.059. The APF declaration, the pin handover, detection and the header read are all still open, so the Pocket has never powered the slot. §2a. |
 | **P6** | ROM from cart as the boot path, source mux, save routing to the cart. | A real cart boots and plays, saves land on the cart. |
 | **P7** | Cheats on cart games, cart-mode `.cht` loading via parameter bit 9. | Both features work together in one session. |
 | **P8** | README, `docs/CHEATS.md`, release packaging as `kroy.GBA_<version>.zip`, and upstreaming whatever belongs upstream. `tools/podman/build.sh` already emits the zip. | Release published. |
 
-**The gate everything now sits behind: none of P1-P3 has run on a Pocket.**
-Every "done" above is a simulation and fit result. The hardware pass is one
-session with an SD card, laid out step by step in `docs/HARDWARE.md`, and is
-the next thing to happen; until it does, the
-cheat feature is unproven, and sizing the cartridge work against the remaining
-1,791 ALMs and 26 RAM blocks is premature.
+P1-P3 have run on a Pocket: the core boots, a `.chtbin` loads, a code takes
+effect and the toggle works live. Two items on `docs/HARDWARE.md` are still
+unwalked, the stray `.cht` and sleep with the engine running.
+
+The cartridge work cannot be sized against a remaining ALM count, and no longer
+is; see §1d and §2a. Slack across several seeds is the measure.
 
 P1 is deliberately before any file I/O, and P5 deliberately after the cheat work
 is closed: cartridge bring-up is the phase most likely to stall on hardware
@@ -292,8 +391,10 @@ timing, and it should not block a feature that is a re-port of working code.
   and only then anything that costs an upstream feature.
 - **Do not casually bump Quartus.** Upstream tuned constraints, seeds and custom
   STA reports against 21.1. The GBC harness uses 25.1; keep them separate.
-- **Upstream is moving.** v0.6.2 is two months old and mincer-ray is active.
-  Rebase on upstream at phase boundaries, never mid-phase.
+- **Upstream has not moved since v0.6.2.** `b08568f..upstream/master` is 0
+  commits, tip `b08568f`, 2026-06-16, checked 2026-08-30. No rebase is pending.
+  The rule stands for when it does move: rebase at phase boundaries, never
+  mid-phase.
 - **Cart writes touch someone's real save.** Wokann's own notes record Flash
   writes that reported success and did not persist. Every write path stays
   behind an explicit toggle until it is proven on a cart nobody minds losing.
@@ -330,3 +431,6 @@ timing, and it should not block a feature that is a re-port of working code.
 5. Do we contribute the cartridge work back to mincer-ray, or keep it here? Rai
    and Wokann are both working the same problem, and three private branches is
    the worst outcome for everyone.
+6. Why does the same RTL fit at 16,689 ALMs on the workstation and in CI and at
+   17,744 on the build runner? Never reproduced into a cause, and it is the
+   reason every fit comparison has to be built on one host, back to back.

@@ -1,6 +1,6 @@
 # Handoff
 
-State of the fork as of 2026-08-26. Written so the work can be picked up cold.
+State of the fork as of 2026-08-30. Written so the work can be picked up cold.
 Read this first, then `PLAN.md` for the design and `BASELINE.md` for the fit
 history.
 
@@ -30,10 +30,11 @@ nothing has been able to repeat.
 
 It closes at exactly the margin upstream itself ships. Merged as `d7a2138`; format contract in `docs/CHEATBIN.md`.
 
-**What is still not done: none of this has run on a Pocket.** Simulation is
-green end to end (24 converter, 19 binloader, 10 fixture, 9 e2e, 513 corpus),
-but no cheat has ever taken effect on real hardware. `docs/HARDWARE.md` is the
-checklist that closes it.
+**This has since run on a Pocket.** The core boots, a `.chtbin` loads, a code
+takes effect in game and the toggle works live. Two items on `docs/HARDWARE.md`
+are still unwalked: the stray `.cht`, and sleep with the engine running.
+Simulation was green end to end throughout (24 converter, 19 binloader, 10
+fixture, 9 e2e, 513 corpus).
 
 ## Standing constraints
 
@@ -257,7 +258,7 @@ wrong:
 
 Outcome against the target: P2's growth was 1,285 ALMs, the goal was about 300,
 and the measured cost is **61 ALMs with zero physical-synthesis churn**.
-`cheat_loader.sv` is still in the tree and is not dead code — `tools/sim/run.py`
+`cheat_loader.sv` is still in the tree and is not dead code: `tools/sim/run.py`
 compiles it as the reference that cross-checks `gbacht.py`, which is what the
 shipping converter parses with.
 
@@ -322,6 +323,7 @@ and `rumble-support`.
 | Branch | Tip | Holds |
 |---|---|---|
 | `master` | (tip) | **the integration branch**, and the only one on the remote. P1 + P3, closes timing. Releases are built from here and CI refuses a tag that is not on it. |
+| `p5-cartridge` | (tip) | **the cartridge branch.** Wokann's controller and `rom_source_mux` vendored and instantiated, ROM reads through the mux with the cart side idle. Closes on one seed in three. Not mergeable: no APF declaration, so the slot is never powered. |
 | `p3-binary` | `d7a2138`^ | P3 assembled: format, converter, binloader. Merged. |
 | `p3-format` / `p3-converter` / `p3-binloader` | | the three P3 strands, merged into `p3-binary`. |
 | `p2-cheat-loader` | `c7aebd5` | P1+P2 with the ASCII parser. The design that failed timing. |
@@ -347,9 +349,10 @@ Two git-ignored things went with the worktrees, both regenerable:
 
 ## Next steps, in order
 
-1. **Hardware validation. Nothing else is blocking, and nothing here has ever
-   run on a Pocket.** `docs/HARDWARE.md` is the checklist, with the expected
-   `CL:` value worked out for each case. In short, what has to be seen work:
+1. **Hardware validation, mostly done.** `docs/HARDWARE.md` is the checklist,
+   with the expected `CL:` value worked out for each case. Everything below has
+   been seen work on a Pocket except the last item, and sleep with the engine
+   running is still unreported. What had to be seen:
    - the core boots a ROM at all, i.e. P1's engine did not break the build;
    - `<rom>.gba.chtbin` loads and the `CL:`/`CD:` menu readouts show a
      plausible entry count;
@@ -358,15 +361,40 @@ Two git-ignored things went with the worktrees, both regenerable:
    - a stray `.cht` renamed to `.chtbin` loads **zero** entries rather than
      corrupting anything. This is what the `GBAC` magic is for and it is the
      one failure mode simulation cannot fully vouch for.
-2. **P8 packaging**, once 1 passes: README, release zip, and decide whether any
-   of this goes back to mincer-ray.
-3. **Cartridge (P5-P7) is a separate decision** and has not been made. The
-   headroom is **1,791 ALMs and 26 RAM blocks**. Wokann's controller is 905 lines
-   and has never been anyone's boot path. The cheap way to size it before
-   committing: drop the controller in unwired, build once at STANDARD FIT, read
-   the delta. Note that `mincer-ray/openfpga-GBA` reports `parent: none` — it is
-   the root of the lineage, so there is no better base to rebase onto; all 14
-   forks are downstream additions.
+2. **P8 packaging**, done for the cheat feature: shipped as v0.9999.
+3. **Cartridge (P5) is under way on branch `p5-cartridge`, and the sizing
+   question this item used to propose has been answered.** Wokann's
+   `gba_cart_controller.sv` and `rom_source_mux.sv` are vendored verbatim under
+   Wokann's authorship, instantiated rather than merely listed in the qsf, and
+   `gba_top`'s ROM reads run through the mux with the cart side idle and
+   `cart_mode` off a live register, so nothing folds away and the measurement is
+   real.
+
+   Nine builds on one host: `main` `6994156` at 17,744 ALMs (96 %) and +0.059 ns
+   setup, the branch at -0.410, -0.125 and **+0.087** on seeds 1, 2 and 3. **It
+   closes on one placement seed in three**, and what fails on the other two is
+   the PLL output counter that is already `main`'s worst path, not anything in
+   the controller. An initial 1.191 ns miss was entirely three configuration
+   inputs sharing a register with the per-access inputs; splitting them out with
+   a multicycle of 4 recovered all of it, and the bus logic met 100 MHz unaided.
+
+   **The area half of this item cannot be answered.** Identical RTL spans 81
+   ALMs across seeds, which is the size of the thing being measured, so the
+   1,791-ALM headroom figure above cannot size a 905-line module, and the
+   "640 ALMs left" reading taken mid-branch is **withdrawn**. Slack across
+   several seeds is the measure now. Also still unexplained: 16,689 ALMs on the
+   workstation and in CI against 17,744 on the build runner, for identical RTL.
+
+   What is left is listed in `PLAN.md` §2b: the APF declaration, the cart pin
+   handover, detection and header read, ROM read speed, save/EEPROM/GPIO routing
+   and `save_size = 0` in cart mode. All but the ROM boot path already exist on
+   `wokann/master`, debugged on real hardware, so they are there to import
+   rather than to solve.
+
+   Tables in `docs/BASELINE.md`. Note that `mincer-ray/openfpga-GBA` reports
+   `parent: none` - it is the root of the lineage, so there is no better base to
+   rebase onto; all 14 forks are downstream additions. Upstream has not moved
+   since v0.6.2, so no rebase is pending.
 4. **Retire `exp-nolink`.** Do not merge it. See the branch map.
 5. **P4 (OSD) is closed, not deferred.** The user has confirmed the overlay is
    not wanted. The `CL:`/`CD:` menu readouts carry the diagnostics.
@@ -413,7 +441,7 @@ existing `.rbf`. Three concurrent builds is the practical ceiling on 14 cores.
 
 ## Simulation
 
-Green end to end on `master`, and it always was — the fit problem was never a
+Green end to end on `master`, and it always was: the fit problem was never a
 correctness problem. `make test`:
 
 | Pass | Result | Covers |

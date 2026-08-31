@@ -50,7 +50,7 @@ effect off and back on live.
 | A stray `.cht` loading zero rather than garbage | correct in simulation, **unconfirmed on hardware** |
 | Closing the lid with the engine running | **unconfirmed on hardware** |
 | Encrypted codes: GameShark v3, Action Replay v3, CodeBreaker after a `9` line | refused, and cannot be made to work |
-| Cartridges | not supported. [docs/PLAN.md](docs/PLAN.md) §2 is the design study, unstarted |
+| Cartridges | **not yet.** The bus front end is vendored, wired and measured; the Pocket does not power the slot. [docs/PLAN.md](docs/PLAN.md) §2 |
 | 64 MB video carts | do not work |
 
 [docs/HARDWARE.md](docs/HARDWARE.md) is the checklist and says exactly which
@@ -98,8 +98,10 @@ hardware or supply your own copy.
 
 ## Usage
 
-ROMs go in `/Assets/gba/common/`. Cartridges are not supported; cheats apply to
-ROMs on the card.
+ROMs go in `/Assets/gba/common/`. Cheats apply to ROMs on the card. A cartridge
+in the slot does nothing: the core does not declare `cartridge_adapter`, so the
+Pocket never powers it. [docs/PLAN.md](docs/PLAN.md) §2 says where that work has
+got to and what is left of it.
 
 **This is the one core in the set where the file you pick from is not the file
 the handheld reads.** The core reads `<rom filename>.gba.chtbin`, not a `.cht`.
@@ -205,7 +207,7 @@ hundred database files by hand is tedious.
 | [docs/CHEATS.md](docs/CHEATS.md) | using cheats: the converter, the file, the menu readout |
 | [docs/CHEATBIN.md](docs/CHEATBIN.md) | the `.chtbin` format contract |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | validating a build on a real Pocket, and what is still unwalked |
-| [docs/PLAN.md](docs/PLAN.md) | design and phasing, including the unstarted cartridge work |
+| [docs/PLAN.md](docs/PLAN.md) | design and phasing, including where the cartridge work stands |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | the fit history, and why the parser had to leave the FPGA |
 | [docs/BASELINE.md](docs/BASELINE.md) | measured area and timing, build by build |
 | [docs/BUILD-RUNNER.md](docs/BUILD-RUNNER.md) | standing up a dedicated build runner, if a workstation is not the place for a 40-minute fit |
