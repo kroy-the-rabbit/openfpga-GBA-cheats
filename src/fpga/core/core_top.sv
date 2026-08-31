@@ -885,7 +885,7 @@ wire        quirk_sprite;     // → maxpixels
 // save_type_detector reads cart_id out of the SD download stream, and in cart
 // ROM mode there is no download stream, so the header probe supplies it
 // instead. Selected on cart_rom_mode and not on cart_hw_enable_s: with the
-// menu on Detect Only the running ROM is still the SD one, and its own cart_id
+// menu on Detect the running ROM is still the SD one, and its own cart_id
 // is the right answer.
 //
 // det_flash_1m is NOT resolved the same way and is left on the SD stream. It
@@ -1487,8 +1487,8 @@ always @(*) begin
     32'hF3000008: begin
         bridge_rd_data <= {31'd0, cheats_master};
     end
-    // What the cartridge header probe found. `CI:` is the four-character game
-    // code from header 0xAC..0xAF; `CP:` is the status word, laid out in the
+    // What the cartridge header probe found. `CG:` is the four-character game
+    // code from header 0xAC..0xAF; `CS:` is the status word, laid out in the
     // cartridge section at the bottom of this file.
     32'hF4000000: begin
         bridge_rd_data <= cart_readout_id_s;
@@ -1581,9 +1581,9 @@ reg ff_video_stable = 1'b1; // 0 = Classic FF, 1 = wait for complete rendered li
 // Cartridge mode, written at 0x90 by the "Cartridge" menu list.
 //   0 = Off             controller held in reset, slot pins at the idle values
 //                       the pre-cartridge core used
-//   1 = Detect Only     controller owns the slot and reads the header; the ROM
+//   1 = Detect          controller owns the slot and reads the header; the ROM
 //                       still comes from SD
-//   2 = Boot From Cart  as 1, and gba_top's ROM reads route to the cart once
+//   2 = Boot            as 1, and gba_top's ROM reads route to the cart once
 //                       the header probe has passed
 reg [1:0] cart_menu = 2'd0;
 reg       cart_menu_seen = 1'b0;   // first write is the boot-time persist
@@ -2260,11 +2260,11 @@ end
 // The Pocket has no console, so these are the whole diagnostic surface, the
 // same trick the cheat loader uses for CL: and CD:.
 //
-// `CI:` is the four-character game code from header 0xAC..0xAF, big-endian, so
+// `CG:` is the four-character game code from header 0xAC..0xAF, big-endian, so
 // the byte at 0xAC is bits 31:24. Read it as hex and it is four ASCII letters:
 // "AXVE" is 0x41585645, which the menu prints as 1096287813.
 //
-// `CP:` is the status word:
+// `CS:` is the status word:
 //
 //   bits 31:16  header fingerprint: every halfword of the 192-byte header
 //               ORed together. 0000 means nothing was read, FFFF means an

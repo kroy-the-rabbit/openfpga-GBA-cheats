@@ -27,11 +27,11 @@ core at all rather than start it without the slot.
 
 ## Quick start
 
-1. Set **Cartridge** in the core menu to `Detect Only`. The core restarts.
+1. Set **Cartridge** in the core menu to `Detect`. The core restarts.
 2. Insert a cartridge and restart the core.
-3. Read `CI:` and `CP:` in the menu. `CI:` is the game code, `CP:` says whether
+3. Read `CG:` and `CS:` in the menu. `CG:` is the game code, `CS:` says whether
    the read is trustworthy. Both are below.
-4. If `CP:` looks right, set **Cartridge** to `Boot From Cart`.
+4. If `CS:` looks right, set **Cartridge** to `Boot`.
 
 ## The three settings
 
@@ -42,12 +42,12 @@ game-quirk table all follow it, and none may change under a running game.
 | | |
 |---|---|
 | `Off` | The controller is held in reset and the slot pins sit at the same idle values every previous build of this core used. A cartridge in the slot does nothing. |
-| `Detect Only` | The controller owns the slot and the header probe runs. The ROM still comes from the SD card. This is the setting to read `CP:` in. |
-| `Boot From Cart` | As `Detect Only`, and the ROM comes from the cartridge, but only if the probe passed. |
+| `Detect` | The controller owns the slot and the header probe runs. The ROM still comes from the SD card. This is the setting to read `CS:` in. |
+| `Boot` | As `Detect`, and the ROM comes from the cartridge, but only if the probe passed. |
 
-`Boot From Cart` is deliberately not a promise. If the probe does not pass, the
-ROM comes from the SD card exactly as it always did. An empty slot or a
-half-inserted cartridge cannot leave you with a core that will not start.
+`Boot` is deliberately not a promise. If the probe does not pass, the ROM comes
+from the SD card exactly as it always did. An empty slot or a half-inserted
+cartridge cannot leave you with a core that will not start.
 
 ## The probe
 
@@ -66,10 +66,10 @@ Some cartridges do not have one.
 
 ## The readout
 
-The Pocket has no console, so `CI:` and `CP:` are the whole diagnostic surface,
+The Pocket has no console, so `CG:` and `CS:` are the whole diagnostic surface,
 the same trick the cheat loader uses for `CL:` and `CD:`.
 
-### `CI:`, the game code
+### `CG:`, the game code
 
 The four characters at header `0xAC..0xAF`, big-endian. Read the decimal as hex
 and it is four ASCII letters. Pokemon Ruby is `AXVE`, which is `0x41585645`, and
@@ -77,7 +77,7 @@ the menu prints `1096287813`.
 
 If it spells the game you inserted, the bus is working.
 
-### `CP:`, the status word
+### `CS:`, the status word
 
 ```
 bits 31:16  header fingerprint: every halfword of the header ORed together

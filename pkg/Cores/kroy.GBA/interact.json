@@ -138,24 +138,24 @@
             "value": 0
           },
           {
-            "name": "Detect Only",
+            "name": "Detect",
             "value": 1
           },
           {
-            "name": "Boot From Cart",
+            "name": "Boot",
             "value": 2
           }
         ]
       },
       {
-        "name": "CI:",
+        "name": "CG:",
         "id": 51,
         "type": "number_u32",
         "enabled": true,
         "address": "0xF4000000"
       },
       {
-        "name": "CP:",
+        "name": "CS:",
         "id": 52,
         "type": "number_u32",
         "enabled": true,
