@@ -1,7 +1,68 @@
 # Handoff
 
+State of the fork as of 2026-09-05, on top of the 2026-08-30 handoff that
+follows. Read this section first; the sections below it predate the release
+and still say `master` and "nothing is pushed". `main` is the branch, `v0.9999`
+is released from it, and CI is verify-only. `p5-cartridge` is not on the remote.
+
+## 2026-09-05: the cartridge branch, one hardware run, one fix, no bitstream
+
+**Branch** `p5-cartridge` at `cfd4264`, 16 commits past `main` `9002617`,
+unpushed. Everything is committed.
+
+**What happened.** Seed 3 of `60990db` was installed on the card and hash
+verified. Booting Minish Cap from the slot froze at the GBA logo. The menu read
+`CG:` 0 and `CS:` `0x000000B0`: probe done, timed out, nothing read. The cause
+is the probe starting on `dataslot_allcomplete` while the controller resets on
+APF `reset_n`, and the Pocket sends allcomplete before Reset Exit, so every
+boot-time probe asked a controller in reset. `docs/CARTRIDGE.md` "First
+hardware run" has the decode; the Analogue docs do not state the command order,
+the readout is the evidence.
+
+**The fix** is `cfd4264`: `~reset_n_s` added to the probe's reset condition in
+`core_top.sv`. No testbench covers the probe. Proven only by a build and the
+slot.
+
+**Fits, Quartus 25.1std, STANDARD FIT**, all in `docs/BASELINE.md`:
+
+| Commit | Seed | ALMs | Setup | Hold | Runner |
+|---|---|---|---|---|---|
+| `60990db` | 8 | 17,779 | -0.448 | | sisko |
+| `60990db` | 2 | 17,821 | -0.562 | | sisko |
+| `60990db` | 3 | 17,828 | +0.092 | +0.111 | kira, 2010 s |
+| `60990db` | 1 | 17,910 | +0.075 | +0.037 | sisko, 1376 s |
+| `cfd4264` | 3 | 17,744 | **-0.098** | +0.024 | sisko, 1430 s |
+
+The `cfd4264` seed 3 package is in `build/gba` renamed `seed3-FAILED`. Do not
+flash it.
+
+**The card** still holds the seed 3 build of `60990db`, the one that froze.
+The released `v0.9999` is not on it.
+
+**Tomorrow, in order.**
+
+1. Fit `cfd4264` at seed 1 on sisko: `SEED=1 ../tools/runner-build start sisko
+   pocket-gba gba p5cart-s1 cfd4264`, then `job` to poll and `fetch`. Seed 1
+   closed on the previous commit. If it misses, try 2 and 3 on both runners.
+2. Install the passing package, set Cartridge to `Detect`, restart with Minish
+   Cap in the slot, read `CS:`. Expected low byte `E1` and bits 15:8 `96`;
+   `CG:` should be `BZME` as hex. Then `Boot`.
+3. Still unknown and worth checking on the same visit: whether a card ROM boots
+   on this build with the setting off, and whether the persisted `Detect`
+   setting probes correctly on a cold core load rather than only after a menu
+   toggle.
+4. No GBA tag until a cartridge boots. The release condition was a hardware
+   test and the first one failed. When it passes, rebuild the tagged commit at
+   the seed that closed, publish by hand as the other cores were (workflow
+   disabled, signed tag, `gh release create --verify-tag`), and re-enable.
+
+**Also stale in the README on `main`:** "five projects share one version
+number". Every project sits at `0.9999` and they are not in step.
+
+# Handoff, 2026-08-30
+
 State of the fork as of 2026-08-30. Written so the work can be picked up cold.
-Read this first, then `PLAN.md` for the design and `BASELINE.md` for the fit
+Read this after the section above, then `PLAN.md` for the design and `BASELINE.md` for the fit
 history.
 
 ## Resolved: the fit problem below is solved
@@ -323,7 +384,7 @@ and `rumble-support`.
 | Branch | Tip | Holds |
 |---|---|---|
 | `master` | (tip) | **the integration branch**, and the only one on the remote. P1 + P3, closes timing. Releases are built from here and CI refuses a tag that is not on it. |
-| `p5-cartridge` | (tip) | **the cartridge branch.** Wokann's controller and `rom_source_mux` vendored and instantiated, ROM reads through the mux with the cart side idle. Closes on one seed in three. Not mergeable: no APF declaration, so the slot is never powered. |
+| `p5-cartridge` | `cfd4264` | **the cartridge branch.** Slot declared and powered, header probe, ROM out of the cart. First hardware run froze; fix committed, not yet fit. See the top of this file. |
 | `p3-binary` | `d7a2138`^ | P3 assembled: format, converter, binloader. Merged. |
 | `p3-format` / `p3-converter` / `p3-binloader` | | the three P3 strands, merged into `p3-binary`. |
 | `p2-cheat-loader` | `c7aebd5` | P1+P2 with the ASCII parser. The design that failed timing. |
