@@ -2168,9 +2168,13 @@ wire [15:0] cp_fold_and = cart_rd_data[31:16] & cart_rd_data[15:0]
 localparam [5:0] CP_LAST = 6'd46;   // last request index, 48 DWORDs in pairs
 
 always @(posedge clk_sys) begin
-    if (~pll_core_locked || ~cart_hw_enable_s || core_reset_s) begin
+    if (~pll_core_locked || ~cart_hw_enable_s || core_reset_s || ~reset_n_s) begin
         // Re-probe on every core restart, so a cart inserted after a failed
-        // probe is picked up by toggling the menu or resetting.
+        // probe is picked up by toggling the menu or resetting. reset_n_s is
+        // in the list because the controller resets on it: the Pocket sends
+        // "data slot access all complete" before "Reset Exit", so a probe
+        // that starts on allcomplete alone asks a controller still in reset,
+        // times out, and reports B0 (first hardware run, docs/CARTRIDGE.md).
         cprobe_state    <= CP_IDLE;
         cprobe_req      <= 1'b0;
         cprobe_done     <= 1'b0;
