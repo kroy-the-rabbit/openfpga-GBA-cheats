@@ -193,9 +193,12 @@ withdrawn.
 | + cartridge front end, seed 2 | 17,787 (96 %) | 282 | **-0.125** | +0.094 | fail |
 | + cartridge front end, seed 3 | 17,868 (97 %) | 282 | **+0.087** | +0.108 | pass |
 
-**It closes, but only on one placement in three.** `release.yml` retries a
-timing miss at seeds 2 and 3 before giving up, so this would ship - on the
-third try, with 87 ps of margin and nothing behind it.
+**It closes, but only on one placement in three.** At the time, `release.yml`
+retried a timing miss at seeds 2 and 3 before giving up, so this would have
+shipped on the third try, with 87 ps of margin and nothing behind it. Releases
+are no longer built there: the builder runs the seed it is given, `SEED=3`,
+and the timing report ships beside the zip. The 25.1 table below is the same
+branch on the current toolchain.
 
 **The multicycle constraint did its job and is not what is failing.** The
 1.191 ns recovered earlier was three configuration inputs: `phi_sel`,
@@ -271,6 +274,31 @@ still does not change the result.
   header is the thing to read. The identification of *which* paths were worst
   was right; the count was not.
 
+
+## Quartus 25.1std, the same branch, 2026-09-05
+
+The toolchain moved, and it was measured rather than assumed. Every fit here
+is `p5-cartridge` at `60990db`, `STANDARD FIT`, on the private
+`localhost/pocket-quartus:25.1std` image (Version 25.1std.0 Build 1129), one
+seed per run, on sisko or kira through the orchestrator's `runner-build`.
+Nothing in the RTL or the constraints changed between the 21.1 table above
+and this one.
+
+| Seed | ALMs | Setup | Hold | | Runner, elapsed |
+|---|---|---|---|---|---|
+| 8, the qsf default | 17,779 (96 %) | **-0.448** | | fail | sisko |
+| 2 | 17,821 (96 %) | **-0.562** | | fail | sisko |
+| 3 | 17,828 (96 %) | **+0.092** | +0.111 | pass | kira, 2010 s |
+| 1 | 17,910 (97 %) | **+0.075** | +0.037 | pass | sisko, 1376 s |
+
+**Same shape as 21.1: some placements close and some do not, and which ones
+is the seed's business.** 21.1 closed on seed 3 alone; 25.1 closes on seeds 1
+and 3 and misses on 8 and 2, by more than 21.1's misses (-0.448 and -0.562
+against -0.410 and -0.125). That is the same congestion at 96-97 % occupancy
+landing differently, not a new path. The `Do not bump Quartus` rule in the
+README was right to demand a measurement before a move; the measurement is
+this table, and the move is made on it. The 25.1 seed 3 bitstream is what went
+to the card for hardware testing.
 
 ## The fit problem, and how to measure it
 

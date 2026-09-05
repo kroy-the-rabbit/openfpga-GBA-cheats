@@ -193,8 +193,9 @@ already met 100 MHz unaided.
 **It closes on one placement seed in three.** What fails on the other two is
 `sys_pll_i|...|PLL_OUTPUT_COUNTER|divclk`, which is `main`'s own worst path at
 +0.059 before any of this is added. Nothing inside `gba_cart_controller`
-appears, and the multicycle constraints hold. `release.yml` retries seeds 2 and
-3 on a timing miss, so this would ship, on the third try, with 87 ps behind it.
+appears, and the multicycle constraints hold. Releases are built on a controlled
+builder at the seed that closes, `SEED=3`, with 87 ps behind it on 21.1 and
+92 ps on 25.1; see `docs/BASELINE.md`.
 
 **Do not size the rest of this work by area.** Identical RTL spans 81 ALMs
 across those seeds, the same order as the apparent cost of the whole front end,

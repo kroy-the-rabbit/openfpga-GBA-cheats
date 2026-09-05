@@ -18,7 +18,7 @@ BDIR="$REPO/build/gba"
 WORK="$BDIR/work"
 
 PODMAN=${PODMAN:-podman}
-IMAGE=${IMAGE:-docker.io/raetro/quartus:21.1}
+IMAGE=${IMAGE:-localhost/pocket-quartus:25.1std}
 
 # The two runtimes need different flags to leave the output owned by whoever
 # ran this, and that is not cosmetic: everything after the compile - rsync, the
@@ -126,7 +126,7 @@ cp "$BDIR/$RBF_NAME" "$BDIR/sd/Cores/$CORE_NAME/$RBF_NAME"
 # pkg/ keeps the plain upstream-style version.
 STAMP="${RELEASE_NAME:-}"
 STAMP="${STAMP#v}"
-[[ -n "$STAMP" ]] || STAMP="${VERSION}-cheats.${GIT_SHA}${GIT_DIRTY:+.dirty}"
+[[ -n "$STAMP" ]] || STAMP="${VERSION}.${GIT_SHA}${GIT_DIRTY:+.dirty}"
 "$PY" - "$BDIR/sd/Cores/$CORE_NAME/core.json" "$STAMP" "$(date -u +%Y-%m-%d)" <<'PY'
 import json, sys
 path, version, date = sys.argv[1:]

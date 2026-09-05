@@ -218,23 +218,28 @@ hundred database files by hand is tedious.
 
 ## Building from source
 
-Quartus Prime Lite 21.1 runs in a container and nothing is installed on the
-host:
+Quartus Prime Lite runs in a container and nothing is installed on the host.
+The container is one you build yourself from Intel's installers, see the
+licence section below; the harness expects it as `localhost/pocket-quartus:25.1std`
+and `IMAGE=` points it anywhere else:
 
 ```sh
 make gba      # -> build/gba/{bitstream.rbf_r, sd/, kroy.GBA_<version>.zip, report.txt}
 make test     # the simulation suite
 ```
 
-**Do not bump Quartus.** Upstream tuned the constraints, the fitter seed and the
-custom STA reports against 21.1, and this design closes setup by 0.090 ns, which
-is not a margin to spend on a toolchain change.
+**Measure before moving the toolchain.** Upstream tuned the constraints, the
+fitter seed and the custom STA reports against 21.1, and this design closes
+setup by about 0.09 ns on one placement seed in three. That held across the
+move to 25.1std: seed 3 closes at +0.092 ns where 21.1 gave +0.087, and the
+other seeds miss on both. `docs/BASELINE.md` has every number; a version
+change without a row in that table is a guess.
 
 The build fails if the design misses timing. Quartus exits 0 on negative slack,
 so `tools/podman/report.sh` checks worst-case slack itself and stops the build,
 because a bitstream with negative slack may work on one bench and fail on
-somebody's handheld. It is the same script CI runs, and a CI build and a local
-one land on the same numbers.
+somebody's handheld. Releases are built with the same script on a controlled
+builder, `SEED=3`, and the timing report ships beside the zip.
 
 ## Where to report a problem
 
@@ -278,6 +283,14 @@ bitstream and does not link with any of the above: it is separate programs that
 run on a desktop and write files.
 
 Neither this repository nor upstream carries a LICENSE file, so the per-file
-notices and that `info.txt` are the licence. Binary releases here are built by CI
-from a tagged commit of this repository, which is the corresponding source for
-them.
+notices and that `info.txt` are the licence. Binary releases here are built from
+the exact tagged commit of this repository on a controlled builder, and the tag
+is the corresponding source for them; the release carries the zip, its SHA-256
+and the timing report.
+
+The builder runs Quartus Prime Lite from an image assembled from Intel's own
+installers. Quartus Lite needs no licence file, but that grants no right to
+redistribute its installed files, so that image is private: it is never
+published to a registry, never attached to a CI run, and this repository's
+workflows do not pull anyone else's copy either. Anyone building this core
+themselves installs Quartus from Intel and points `IMAGE` at their own.

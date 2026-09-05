@@ -21,9 +21,33 @@ core at all rather than start it without the slot.
 | Powering the slot | declared, **unconfirmed on hardware** |
 | Detecting a cartridge, reading its header | **unconfirmed on hardware** |
 | Refusing to act on an empty or half-inserted slot | **unconfirmed on hardware** |
-| ROM out of the cartridge | wired, **unconfirmed on hardware** |
+| ROM out of the cartridge | wired, and **the first hardware run froze at the GBA logo**, see below |
 | Cartridge saves, EEPROM, RTC | **not routed**, deliberately |
 | Writing to a cartridge | **nothing does**, deliberately |
+
+## First hardware run, 2026-09-05
+
+Build `0.9999-cheats.60990db`, `p5-cartridge` at `60990db`, Quartus 25.1std,
+`STANDARD FIT`, seed 3, timing met at +0.092 ns setup and +0.111 ns hold;
+installed on the card and hash-verified. Kroy booted The Legend of Zelda: The
+Minish Cap from the cartridge in the slot and **it froze at the GBA logo**.
+
+Kroy read the menu afterwards: `CG:` was 0 and `CS:` was `0x000000B0`.
+Decoded: the menu was not Off, the probe finished, and it timed out. The header
+fingerprint is `0000`, byte `0xB2` read as `00`, and no ROM read ever completed.
+The controller never answered.
+
+Why it never answered is in the wiring, not the slot. The probe starts on
+`dataslot_allcomplete`, but the controller's reset is APF `reset_n`, and the
+probe does not wait for it. The controller's ROM read path is counters only and
+answers in about 64 cycles against a 4000-cycle timeout, so the one way to get
+`B0` is the controller still held in reset when the probe ran, which says the
+Pocket sends "data slot access all complete" before "Reset Exit". The probe
+times out, `cart_detect` stays low, and `Boot` then starts the core against
+SDRAM with no ROM in it, which is the GBA logo and nothing after it.
+
+The fix is to hold the probe in reset until `reset_n` is high, so it runs only
+once the controller does. Not yet built or run.
 
 ## Quick start
 

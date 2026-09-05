@@ -94,14 +94,21 @@ Write that file with `pct push`, or base64 it. Do not try to `printf` it
 through `ssh -> pct exec -> bash -lc`: the quoting is eaten by three shells and
 you get a TOML parse error on line 1.
 
-## 4. Pull Quartus and prove it runs
+## 4. Build the Quartus image and prove it runs
 
-    pct exec <VMID> -- bash -lc 'podman pull docker.io/raetro/quartus:21.1
-      podman run --rm docker.io/raetro/quartus:21.1 quartus_sh --version'
+Not pulled. Quartus Lite needs no licence file, but that grants no right to
+redistribute its installed files, so the image a runner uses is assembled on
+the runner from Intel's own installers and stays there: never pushed to a
+registry, never attached to a CI artifact. The recipe, the two vendor inputs
+and their published hashes, and the explicit licence-acceptance step live in
+the private orchestrator under `tools/quartus-image/`; the image it produces
+is `localhost/pocket-quartus:<version>`.
 
-Expect `Version 21.1.1 Build 850 06/23/2022 SJ Lite Edition`. Match whatever
-version the repo's own harness pins; do not bump it to be helpful, because
-constraints and seeds are tuned against a specific one.
+    pct exec <VMID> -- bash -lc 'podman run --rm localhost/pocket-quartus:25.1std quartus_sh --version'
+
+Match whatever version the repo's own harness pins, and read `docs/BASELINE.md`
+before changing it: constraints and seeds are tuned against a specific one,
+and a toolchain move is measured, not assumed.
 
 ## 5. Make the build script survive running as root
 
