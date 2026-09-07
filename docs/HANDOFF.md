@@ -5,7 +5,15 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
-## 2026-09-06: cache-line fix built and installed; Boot retest needed
+## 2026-09-06: cache-line fix boots Minish Cap to title and save selection
+
+**Hardware result:** Kroy reports that `0.9999.4728cc6` boots Minish Cap
+past the GBA startup logo to the title and save-slot screen. The slots were
+empty. This is expected with the current integration: cartridge `save_req`
+and `eeprom_req` are tied low, and cartridge mode reports zero save-file
+size to APF. The core does not load the physical cartridge's existing save
+or write to it. This result validates startup after the cache-line fix;
+sustained gameplay and other cartridges remain unqualified.
 
 **`4728cc6` is installed as `0.9999.4728cc6`.** Its cartridge ROM mux
 preserves the aligned cache-line contract described below. The build passed
@@ -33,10 +41,9 @@ at `build/card-backups/20260907T020719Z/`. Writes were flushed.
 do not automatically unmount it after future writes.** Deployment manifest:
 `build/gba/deployment-4728cc6.json`.
 
-**Next:** test Minish Cap with Cartridge `Boot` and check whether it passes
-the GBA startup logo into the game. This build has passed simulation and FPGA
-timing, but has not yet been tested on the Pocket. Cartridge saves remain
-unsupported.
+**Next:** qualify gameplay and repeated cold boots, then implement cartridge
+save access as a separate feature. Existing physical saves are inaccessible
+in this build, and new in-core progress is not persistent in cartridge mode.
 
 ## 2026-09-06: conservative sequential timing hardware result and cache diagnosis
 

@@ -1,8 +1,9 @@
 # Cartridges on the Pocket GBA core
 
 The core can power the Pocket's cartridge slot, detect a GBA cartridge and read
-its header. Bring-up only: Minish Cap detection has passed on hardware,
-but cartridge Boot still freezes. See `docs/HANDOFF.md` for the latest results.
+its header. Minish Cap now boots to the title and save-slot screen on
+`4728cc6`. Saves remain unsupported; sustained gameplay is not yet qualified.
+See `docs/HANDOFF.md` for the latest results.
 
 > **A cartridge game cannot save.** Saves, EEPROM and the GPIO block that
 > carries RTC are not routed to the cartridge, and the core reports no save file
@@ -10,6 +11,10 @@ but cartridge Boot still freezes. See `docs/HANDOFF.md` for the latest results.
 > cartridge, by design, so your cartridge's existing save is not at risk. But a
 > game booted from a cart has nowhere to put a new one, and anything it thinks
 > it saved is gone when you close the core.
+
+Existing saves on the physical cartridge are not loaded either, so empty
+in-game save slots are expected. They do not indicate that the cartridge's
+stored saves were erased.
 
 **This core requires Pocket firmware 1.2 or newer.** Declaring the cartridge
 adapter raises `version_required`, and an older firmware will refuse to load the
@@ -22,7 +27,7 @@ core at all rather than start it without the slot.
 | Powering the slot | working for the successful Minish Cap header read |
 | Detecting a cartridge, reading its header | **Minish Cap passed** on `85bb71a`: `CG=425A4D45`, `CS=FFFF96E1` |
 | Refusing to act on an empty or half-inserted slot | **unconfirmed on hardware** |
-| ROM out of the cartridge | **Boot still freezes** on `85bb71a`; an odd-address cache-fill fix awaits hardware retest |
+| ROM out of the cartridge | **Minish Cap boots to title/save selection** on `4728cc6`; sustained gameplay not yet qualified |
 | Cartridge saves, EEPROM, RTC | **not routed**, deliberately |
 | Writing to a cartridge | **nothing does**, deliberately |
 
