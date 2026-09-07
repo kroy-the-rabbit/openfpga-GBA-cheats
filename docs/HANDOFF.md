@@ -1,9 +1,46 @@
 # Handoff
 
-State of the fork as of 2026-09-05, on top of the 2026-08-30 handoff that
-follows. Read this section first; the sections below it predate the release
-and still say `master` and "nothing is pushed". `main` is the branch, `v0.9999`
-is released from it, and CI is verify-only. `p5-cartridge` is not on the remote.
+State of the fork as of 2026-09-06. Read the sections in order, newest first;
+the ones below the 2026-08-30 heading predate the release and still say
+`master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
+from it, and CI is verify-only. `p5-cartridge` is not on the remote.
+
+## 2026-09-06: nothing was fit, the branch is where it was
+
+No build ran. `p5-cartridge` is at `97e1e0b`, 17 commits past `main` `9002617`,
+tree clean, unpushed. There is still **no bitstream for the fix**. Both runners
+are idle. The 2026-09-05 list below is unchanged and is still the list.
+
+The one thing between here and a hardware answer is a passing fit of `cfd4264`.
+The fix is six lines, no testbench covers the probe, so a build and the slot are
+the only proof available.
+
+Seeds tried on the fix, Quartus 25.1std, STANDARD FIT:
+
+| Commit | seed 8 | seed 1 | seed 2 | seed 3 |
+|---|---|---|---|---|
+| `60990db` | -0.448 | **+0.075** | -0.562 | **+0.092** |
+| `cfd4264` | untried | untried | untried | -0.098 |
+
+Seed 3 closed on `60990db` and misses on `cfd4264`, so it is not the one to
+retry. Seed 1 closed on the commit before and is untried here. Start there:
+
+```sh
+SEED=1 ../tools/runner-build start sisko pocket-gba gba p5cart-s1 cfd4264
+```
+
+then `job` to poll and `fetch`. If seed 1 misses, 8 and 2 are untried on this
+commit and kira is free to take one in parallel. Do not compare a kira ALM count
+against a sisko one; across runners only pass or fail carries over.
+
+**Do not trust any area figure from `exp-cart-probe`.** Measured at Quartus
+21.1: the probe build has about 1,000 fewer registers inside `gba_top` than
+`main` does, and about 1,150 fewer ALMs overall. Adding a 905-line controller
+cannot shrink the core, so the probe wiring left part of `gba_top` unreachable
+and the fitter deleted it. The integrated build restores them. The probe's
+"859 ALMs", "1,004 ALMs" and "1,151 ALMs" controller costs are therefore
+measurements of a partially deleted design and none of them is a cost. Not
+rechecked at 25.1, but the cause is structural rather than version specific.
 
 ## 2026-09-05: the cartridge branch, one hardware run, one fix, no bitstream
 
@@ -384,7 +421,7 @@ and `rumble-support`.
 | Branch | Tip | Holds |
 |---|---|---|
 | `master` | (tip) | **the integration branch**, and the only one on the remote. P1 + P3, closes timing. Releases are built from here and CI refuses a tag that is not on it. |
-| `p5-cartridge` | `cfd4264` | **the cartridge branch.** Slot declared and powered, header probe, ROM out of the cart. First hardware run froze; fix committed, not yet fit. See the top of this file. |
+| `p5-cartridge` | `97e1e0b` | **the cartridge branch.** Slot declared and powered, header probe, ROM out of the cart. First hardware run froze at the GBA logo; the fix is `cfd4264` and has never been fit. See the top of this file. |
 | `p3-binary` | `d7a2138`^ | P3 assembled: format, converter, binloader. Merged. |
 | `p3-format` / `p3-converter` / `p3-binloader` | | the three P3 strands, merged into `p3-binary`. |
 | `p2-cheat-loader` | `c7aebd5` | P1+P2 with the ASCII parser. The design that failed timing. |
