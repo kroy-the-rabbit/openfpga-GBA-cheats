@@ -313,7 +313,29 @@ Seed 3 closed on `60990db` and misses on `cfd4264`; seed 1 closes on both with
 the same +0.075. Read nothing into that beyond the usual: which seed closes is
 placement luck at this occupancy, and the passing seed has to be recorded with
 the commit because the package name does not carry it. The seed 1 bitstream of
-`cfd4264` is the next candidate for the card.
+`cfd4264` was the next candidate for the card; the timing change below was
+built and installed before that hardware check.
+
+### Conservative sequential timing, 2026-09-06
+
+`85bb71a` changes the sequential ROM window from 12/4 to 20/6 clocks
+(total / RD# high). Quartus 25.1std, STANDARD FIT, 16 processors, built on
+sisko through `runner-build`, job `p5cart-seq20-s1`:
+
+| Seed | ALMs | Registers | RAM blocks | Setup | Hold | Result, elapsed |
+|---|---|---|---|---|---|---|
+| 1 | 17,778 (96%) | 25,214 | 282 | **+0.086 ns** | **+0.086 ns** | pass, 1449 s |
+
+Recovery is +4.196 ns, removal +0.380 ns, and minimum pulse width +0.827 ns;
+all timing checks pass. `make test` passed its local tests, including the
+sequential edge-count assertions; the optional corpus checks were skipped.
+
+Package `kroy.GBA_0.9999.85bb71a.zip` was merged onto the Pocket card,
+all installed files hash-verified, and the card unmounted. The bitstream's
+SHA-256 is `b876ec7a2ae9f30e9c2fd4ae40bbdcc89696c3fa1a7de26e521fcc4cf82a65ad`.
+**Hardware testing is still pending.** These fit and installation results do
+not establish cartridge detection, boot, gameplay or electrical read margin.
+`docs/HANDOFF.md` has the package hash, backup location and next checks.
 
 ## The fit problem, and how to measure it
 

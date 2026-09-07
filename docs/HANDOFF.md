@@ -5,7 +5,50 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
-## 2026-09-06: conservative sequential timing, not yet fit
+## 2026-09-06: conservative sequential timing built and installed
+
+The 20/6 sequential timing change is committed as **`85bb71a`** on
+`p5-cartridge`. It closed at **seed 1 on sisko**, Quartus 25.1std,
+STANDARD FIT, 16 processors, in **1449 s**:
+
+| | |
+|---|---|
+| Setup | **+0.086 ns** |
+| Hold | **+0.086 ns** |
+| Recovery / removal / minimum pulse width | +4.196 / +0.380 / +0.827 ns |
+| ALMs | 17,778 / 18,480, 96% |
+| Registers / RAM blocks | 25,214 / 282 |
+| Package | `build/gba/kroy.GBA_0.9999.85bb71a.zip` |
+| Package SHA-256 | `d742a9363137af427d9d777b40c52d67a136fda56d0bcec90a3a9c439d4a10aa` |
+| Bitstream SHA-256 | `b876ec7a2ae9f30e9c2fd4ae40bbdcc89696c3fa1a7de26e521fcc4cf82a65ad` |
+
+Job: `runner-build job sisko pocket-gba gba p5cart-seq20-s1 85bb71a`.
+`fetch` worked for this job. The report and build log are in `build/gba/`;
+the previous passing `cfd4264` seed 1 report, log and bitstream are preserved
+under `build/gba/artifacts/cfd4264-seed1/`.
+
+**Installed on the Pocket card**, UUID `7AFF-9FB9`, firmware 2.5. The package's
+`Assets`, `Cores` and `Platforms` were merged into the card. All 13 installed
+files were hash-verified, including the bitstream, and the card was flushed
+and unmounted. The menu version is **`0.9999.85bb71a`**. The existing GBA
+saves, settings and 16 KiB BIOS were verified unchanged. The previous core,
+platform files, settings and saves are backed up under
+`build/card-backups/20260907T012500Z/`; the deployment manifest is
+`build/gba/deployment-85bb71a.json`.
+
+`make test` passed: 27 converter tests, 19 binloader cases, 10 fixtures,
+9 end-to-end cases and both cartridge benches. The optional cheat corpus
+checks were skipped because no `CHT_DB` was configured.
+
+**Next is hardware.** With Minish Cap inserted, set Cartridge to `Detect`
+and restart. Expect `CS:` low byte `E1`, bits 15:8 `96`, and
+`CG:` = `1113214277` (`BZME`). If detection passes, select `Boot` and check
+gameplay. Also check an SD ROM with Cartridge `Off` and a cold load with
+`Detect` persisted. This build includes both the probe reset fix and the
+slower sequential reads, but neither is qualified on hardware yet. Cartridge
+saves remain unsupported. No GBA tag until a cartridge boots.
+
+## Earlier 2026-09-06 snapshot: conservative sequential timing, not yet fit
 
 The working tree now sets `ROM_SEQ_WAIT=20` and `ROM_SEQ_RD_HIGH=6` in
 `gba_cart_controller.sv`. This replaces 12/4 and matches CartTools' actual
