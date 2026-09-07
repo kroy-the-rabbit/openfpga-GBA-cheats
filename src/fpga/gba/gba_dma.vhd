@@ -41,6 +41,8 @@ entity gba_dma is
       dma_cycles_adrup    : out    std_logic_vector(3 downto 0) := (others => '0'); 
       
       dma_eepromcount     : out    unsigned(16 downto 0);
+      dma3_active         : out    std_logic := '0';
+      dma3_bus_ena        : out    std_logic := '0';
       
       dma_bus_Adr         : out    std_logic_vector(27 downto 0);
       dma_bus_rnw         : buffer std_logic;
@@ -377,6 +379,10 @@ begin
    );
    
    lastread_dma <= last_dma_value;
+   -- Keep serial EEPROM ownership tied to the selected channel, independently
+   -- of stale DMA3 transfer counts and pending higher-priority DMA channels.
+   dma3_active  <= single_dma_on(3);
+   dma3_bus_ena <= Array_ena(3) when dma_switch = 3 else '0';
    
    dma_bus_dout <= Array_Dout(0) when dma_switch = 0 else Array_Dout(1) when dma_switch = 1 else Array_Dout(2) when dma_switch = 2 else Array_Dout(3);
    dma_bus_Adr  <= Array_Adr(0)  when dma_switch = 0 else Array_Adr(1)  when dma_switch = 1 else Array_Adr(2)  when dma_switch = 2 else Array_Adr(3) ;

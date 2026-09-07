@@ -3,6 +3,6 @@
 # Separate from the Quartus image so simulation stays fast to rebuild.
 FROM docker.io/library/ubuntu:22.04
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        iverilog python3 ca-certificates make \
+        iverilog ghdl python3 ca-certificates make \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /work

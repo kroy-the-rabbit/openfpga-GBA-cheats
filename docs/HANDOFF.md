@@ -5,6 +5,81 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-06 overnight: physical saves implemented; FPGA build to check tomorrow
+
+Kroy asked to fan out and implement save support, then finish for the night
+and queue a build on **sisko**. Work is integrated and tested. **Do not install
+anything tonight.** The card remains on the hardware-booted **`0.9999.4728cc6`**,
+which cannot read/write physical saves. Preserve Kroy's instruction:
+**do not automatically unmount the card after writing it.**
+
+### What changed
+
+- `gba_memorymux.vhd` bypasses save emulation in cart mode and forwards raw
+  SRAM/Flash bytes and serial EEPROM bits. `gba_top.vhd`/`gba_dma.vhd` expose
+  actual DMA3 ownership, complete transfer count and last-bit boundaries;
+  stale count or generic DMA ownership cannot authorize EEPROM commands.
+- `cart_eeprom_bridge.sv` defaults to read-only. It buffers both prefix bits
+  before permitting only `11` read-address commands of 9/17 bits. Denied
+  program commands produce no physical strobes. Writes Enabled permits
+  program traffic, with permission fixed for the whole command.
+- `cart_bus_arbiter.sv` queues pulsed ROM/save/EEPROM requests while the slot
+  is busy and routes each completion only to its owner. Held probe requests
+  become single transactions. The ROM cache-line fix is retained.
+- `gba_cart_controller.sv` now latches EEPROM data/direction, provides actual
+  first-bit address setup and final-bit address hold, and samples D0 while
+  RD is still low. The old sample-after-RD-rise failed the stricter model.
+- Menu **Cartridge Saves** at `0x94`, default **Read Only**, nonpersistent;
+  **Writes Enabled** must be selected explicitly. SRAM/Flash byte writes
+  are blocked when disabled. Cart save data never goes to an SD `.sav`.
+- APF savestates, restore triggers and state payload writes are disabled
+  in Boot mode. GPIO/RTC remains disconnected.
+
+### Validation completed tonight
+
+`make test` passed: converter 27 passed/1 corpus skip, binloader19,
+fixtures10, end-to-end9, EEPROM/controller/ROM/mux benches and the GHDL
+memorymux regression. The subsequently added arbiter test brings the final
+cartridge suite to **6/6 passing**. Both 512-byte and 8-KiB EEPROM models
+cover existing-save reads, program/readback, neighboring data preservation,
+zero-strobe write rejection, malformed prefixes, permission changes,
+consecutive same-direction commands, and CPU ready polling. DMA tests cover
+9/17/73/81-bit commands and 68-bit reads, actual ownership and final-bit
+boundaries, and SD-save isolation.
+
+GHDL also analyzed/elaborated the GBA VHDL hierarchy using an interface stub
+for unrelated vendor byte-enable RAM; no new interface errors. Quartus remains
+the authority for mixed-language FPGA elaboration and timing. The sim image
+now includes GHDL (`make sim-image` rebuilt locally).
+
+### Tomorrow
+
+The exact queued commit and runner command are recorded immediately below
+once launch succeeds. Check the job's return code and **all-corner timing**
+before fetching/installing; do not infer success from a `.zip` existing.
+The prior build's report/bitstream is archived under
+`build/gba/artifacts/4728cc6-seed8/`.
+
+If timing passes, back up the card's current files, install the new package,
+verify hashes and preserve saves/settings/BIOS. Flush writes and **leave the
+card mounted**. First test Minish Cap Boot with **Read Only**: the existing
+save slots should appear. Only then test write persistence using an expendable
+slot/verified backup and the explicit Writes Enabled setting.
+
+Minish Cap `BZME` is a locally hardware-qualified 8-KiB EEPROM cartridge;
+`../pocket-cartridge/docs/CARTRIDGE-CORPUS.md` records an existing verified
+8192-byte backup SHA256
+`2fb51f21588769f0183d8ead956758d3812397d8f6370458dd639b617c83fad0`.
+Find and verify that actual backup before any physical program experiment;
+this is distinct from our SD-card backup.
+
+Limitations: physical save reads/writes are **not hardware-qualified yet**;
+Flash ID/bank commands are blocked in Read Only and may require Writes Enabled.
+32-MiB EEPROM cart address decoding is not qualified; do not claim coverage
+from Minish Cap. Reset/power interruption during a physical program command
+has not been qualified. Sustained gameplay, RTC/GPIO and cart savestates remain
+outstanding. No release/tag/publication tonight.
+
 ## 2026-09-06: cache-line fix boots Minish Cap to title and save selection
 
 **Hardware result:** Kroy reports that `0.9999.4728cc6` boots Minish Cap

@@ -247,6 +247,13 @@ reg        cart_detect = 1'b0;  // header probe passed, driven at the bottom
 reg        cprobe_done = 1'b0;  // header probe has finished, pass or fail
 reg [31:0] cart_hdr_id = 32'd0; // header 0xAC..0xAF, the game code
 wire       cart_rom_mode = cart_rom_select_s & cart_detect;
+wire       cart_writes_s;
+wire       cart_save_req, cart_save_rnw, cart_save_done;
+wire [16:0] cart_save_addr;
+wire [7:0] cart_save_din, cart_save_dout;
+wire       cart_eeprom_req, cart_eeprom_rnw, cart_eeprom_din;
+wire       cart_eeprom_dma, cart_eeprom_last, cart_eeprom_dout, cart_eeprom_done;
+wire [16:0] cart_eeprom_count;
 
 // Menu readouts, in clk_74a for the bridge read mux. Driven at the bottom.
 wire [31:0] cart_readout_id_s;
@@ -1183,7 +1190,8 @@ wire    [31:0]  rtc_date_bcd;
 wire    [31:0]  rtc_time_bcd;
 wire            rtc_valid;
 
-wire            savestate_supported = 1;
+// Physical save-chip state is not part of an APF snapshot.
+wire            savestate_supported = cart_menu != 2'd2;
 wire    [31:0]  savestate_addr = 32'h40000000;
 wire    [31:0]  savestate_size = 32'h60D18;       // 0x18346 addr-units × 4 bytes
 wire    [31:0]  savestate_maxloadsize = 32'h60D18;
@@ -1545,8 +1553,8 @@ wire        rtc_active = gpio_quirk_s | force_rtc;
 // card is named after whatever ROM was used to launch the core. Writing that
 // game's save file with this game's data would destroy it. Report zero and the
 // Pocket neither loads nor writes back, so the SD save is not touched at all.
-// The cartridge's own save is not written either: nothing in this core writes
-// to a cartridge yet. Taken from Wokann/openfpga-GBA, commit 243fb6a.
+// Physical save access is independent of APF files; writes require the
+// Cartridge Saves setting. Taken from Wokann/openfpga-GBA, commit 243fb6a.
 wire        cart_rom_mode_74a;
 synch_3 cart_rom_mode_74a_sync(cart_rom_mode, cart_rom_mode_74a, clk_74a);
 wire [31:0] save_size_bytes = cart_rom_mode_74a ? 32'd0 :
@@ -1587,6 +1595,9 @@ reg ff_video_stable = 1'b1; // 0 = Classic FF, 1 = wait for complete rendered li
 //                       the header probe has passed
 reg [1:0] cart_menu = 2'd0;
 reg       cart_menu_seen = 1'b0;   // first write is the boot-time persist
+// Read-only at every launch. EEPROM read-address commands still need WR#;
+// cart_eeprom_bridge validates their opcode before any pin activity.
+reg       cart_writes = 1'b0;
 
 // Controller tuning, written at 0x98. Quasi-static: phi_sel and the GPIO
 // timing mode are settings, not per-access data, which is what the multicycle
@@ -1625,6 +1636,7 @@ always @(posedge clk_74a) begin
             else
                 cart_menu_seen <= 1'b1;
         end
+        32'h94: cart_writes <= bridge_wr_data[0];
         32'h98: cart_cfg <= bridge_wr_data;           // controller tuning
         endcase
     end
@@ -1651,6 +1663,7 @@ wire [1:0] cart_menu_s;
 synch_3 #(.WIDTH(2)) cart_menu_sync(cart_menu, cart_menu_s, clk_sys);
 assign cart_hw_enable_s  = cart_menu_s != 2'd0;
 assign cart_rom_select_s = cart_menu_s == 2'd2;
+synch_3 cart_writes_sync(cart_writes, cart_writes_s, clk_sys);
 
 // Only the bits with a consumer are carried across. gpio_recover_set is left
 // at the controller's own hardware-proven constant because nothing drives the
@@ -1803,19 +1816,19 @@ save_state_controller ss_ctrl (
     .clk_74a              ( clk_74a ),
     .clk_sys              ( clk_sys ),
     // APF bridge
-    .bridge_wr            ( bridge_wr ),
+    .bridge_wr            ( bridge_wr && savestate_supported ),
     .bridge_rd            ( bridge_rd ),
     .bridge_endian_little ( bridge_endian_little ),
     .bridge_addr          ( bridge_addr ),
     .bridge_wr_data       ( bridge_wr_data ),
     .save_state_bridge_read_data ( ss_bridge_rd_data ),
     // APF save state signals
-    .savestate_load       ( savestate_load ),
+    .savestate_load       ( savestate_load && savestate_supported ),
     .savestate_load_ack_s ( savestate_load_ack ),
     .savestate_load_busy_s( savestate_load_busy ),
     .savestate_load_ok_s  ( savestate_load_ok ),
     .savestate_load_err_s ( savestate_load_err ),
-    .savestate_start      ( savestate_start ),
+    .savestate_start      ( savestate_start && savestate_supported ),
     .savestate_start_ack_s( savestate_start_ack ),
     .savestate_start_busy_s( savestate_start_busy ),
     .savestate_start_ok_s ( savestate_start_ok ),
@@ -1858,6 +1871,21 @@ gba_top #(
     .clk100              ( clk_sys ),
     // Settings
     .GBA_on              ( ~reset_gba ),
+    .cart_save_mode      ( cart_rom_mode ),
+    .cart_save_req       ( cart_save_req ),
+    .cart_save_addr      ( cart_save_addr ),
+    .cart_save_rnw       ( cart_save_rnw ),
+    .cart_save_din       ( cart_save_din ),
+    .cart_save_dout      ( cart_save_dout ),
+    .cart_save_done      ( cart_save_done ),
+    .cart_eeprom_req     ( cart_eeprom_req ),
+    .cart_eeprom_rnw     ( cart_eeprom_rnw ),
+    .cart_eeprom_din     ( cart_eeprom_din ),
+    .cart_eeprom_dma     ( cart_eeprom_dma ),
+    .cart_eeprom_count   ( cart_eeprom_count ),
+    .cart_eeprom_last    ( cart_eeprom_last ),
+    .cart_eeprom_dout    ( cart_eeprom_dout ),
+    .cart_eeprom_done    ( cart_eeprom_done ),
     .GBA_lockspeed       ( ~fast_forward ),
     .GBA_stable_ff_video ( ff_video_stable_s ),
     .GBA_cputurbo        ( 1'b0 ),
@@ -1874,8 +1902,8 @@ gba_top #(
     .SramFlashEnable     ( ~quirk_sram ),
     .memory_remap        ( quirk_memory_remap ),
     .increaseSSHeaderCount(1'b0),
-    .save_state          ( ss_save ),
-    .load_state          ( ss_load ),
+    .save_state          ( ss_save & ~cart_rom_select_s ),
+    .load_state          ( ss_load & ~cart_rom_select_s ),
     .maxpixels           ( quirk_sprite ),
     .specialmodule       ( quirk_gpio | force_rtc_s ),
     // solar/tilt/rumble removed to save ALMs
@@ -1981,17 +2009,11 @@ gba_top #(
 // ============================================================
 // Section 6: Physical cartridge
 // ============================================================
-// Bus controller from Wokann/openfpga-GBA (src/fpga/han/gba_cart_controller.sv,
-// vendored unchanged); ROM source mux likewise. What is here is the bring-up
-// path around them: who owns the slot pins, when the cart is powered enough to
-// talk to, and what the header says.
-//
-// The previous version of this block was a measurement harness. Its inputs
-// came from a bridge register and its outputs were XORed into one readable
-// word so the fitter could not optimise the controller away. That is gone: the
-// save, EEPROM and GPIO request lines are now tied off rather than driven from
-// a bridge write, because a stray write to a debug register with a real
-// cartridge in the slot would have issued a real write to somebody's save.
+// Based on Wokann/openfpga-GBA, with qualified ROM cache-line ordering and
+// conservative bus timing. Physical save traffic is queued alongside ROM
+// reads. EEPROM read commands pass a prefix filter in read-only mode;
+// destructive save commands require the Cartridge Saves menu setting.
+// GPIO/RTC remains disconnected.
 
 // Held in reset whenever the Cartridge menu is Off. That is what restores the
 // slot to the idle posture the pre-cartridge core used, and it is a property
@@ -2013,15 +2035,60 @@ wire       ctl_bank0_dir;
 wire       ctl_pin30, ctl_pin30_dir;
 
 wire [31:0] cart_rd_data, cart_rd_data_second;
-wire        cart_rd_ready;
+wire        cart_rd_ready, cart_rom_ready, cart_ctl_rd_ready;
 wire        cart_present_w, cart_pwroff_reset_w;
 
 // Header probe request, muxed ahead of the ROM mux's own request. The probe
 // only runs before the game starts, so the two never contend.
 reg         cprobe_req  = 1'b0;
 reg  [5:0]  cprobe_idx  = 6'd0;
-wire        cart_rd_req_ctl  = cprobe_req ? 1'b1 : romsrc_cart_rd_req;
-wire [24:0] cart_rd_addr_ctl = cprobe_req ? {19'd0, cprobe_idx} : romsrc_cart_rd_addr;
+wire        cart_rd_req_ctl;
+wire [24:0] cart_rd_addr_ctl;
+wire        ctl_save_req, ctl_save_rnw, ctl_save_done;
+wire [16:0] ctl_save_addr;
+wire [7:0]  ctl_save_din;
+wire        ctl_ee_req, ctl_ee_rnw, ctl_ee_din, ctl_ee_dma;
+wire        ctl_ee_done, ctl_ee_dout;
+wire        ee_bridge_req, ee_bridge_rnw, ee_bridge_din, ee_bridge_dma, ee_bridge_done;
+wire        arb_save_done;
+reg         save_denied_done = 1'b0;
+
+// SRAM/Flash commands are byte writes too: read-only mode suppresses all
+// of them. The game may require Writes Enabled for Flash ID/bank commands.
+// Latch the deny response at request time, rather than changing an in-flight
+// request when the menu setting changes.
+always @(posedge clk_sys) begin
+    save_denied_done <= cart_ctl_reset_n && cart_rom_mode && cart_save_req &&
+                        !cart_save_rnw && !cart_writes_s;
+end
+assign cart_save_done = arb_save_done | save_denied_done;
+
+cart_eeprom_bridge ee_bridge (
+    .clk(clk_sys), .reset_n(cart_ctl_reset_n && !core_reset_s),
+    .write_enable(cart_writes_s),
+    .host_req(cart_eeprom_req && cart_rom_mode), .host_rnw(cart_eeprom_rnw),
+    .host_din(cart_eeprom_din), .host_dma(cart_eeprom_dma),
+    .host_count(cart_eeprom_count), .host_last(cart_eeprom_last),
+    .host_dout(cart_eeprom_dout), .host_done(cart_eeprom_done),
+    .ctl_req(ee_bridge_req), .ctl_rnw(ee_bridge_rnw), .ctl_din(ee_bridge_din),
+    .ctl_dma(ee_bridge_dma), .ctl_dout(ctl_ee_dout), .ctl_done(ee_bridge_done)
+);
+
+cart_bus_arbiter cart_arb (
+    .clk(clk_sys), .reset_n(cart_ctl_reset_n),
+    .probe_req(cprobe_req), .probe_addr({19'd0, cprobe_idx}), .probe_done(cart_rd_ready),
+    .rom_req(romsrc_cart_rd_req), .rom_addr(romsrc_cart_rd_addr), .rom_done(cart_rom_ready),
+    .save_req(cart_save_req && cart_rom_mode && (cart_save_rnw || cart_writes_s)),
+    .save_addr(cart_save_addr), .save_rnw(cart_save_rnw), .save_din(cart_save_din),
+    .save_done(arb_save_done),
+    .ee_req(ee_bridge_req), .ee_rnw(ee_bridge_rnw), .ee_din(ee_bridge_din),
+    .ee_dma(ee_bridge_dma), .ee_done(ee_bridge_done),
+    .ctl_rom_req(cart_rd_req_ctl), .ctl_rom_addr(cart_rd_addr_ctl), .ctl_rom_done(cart_ctl_rd_ready),
+    .ctl_save_req(ctl_save_req), .ctl_save_addr(ctl_save_addr),
+    .ctl_save_rnw(ctl_save_rnw), .ctl_save_din(ctl_save_din), .ctl_save_done(ctl_save_done),
+    .ctl_ee_req(ctl_ee_req), .ctl_ee_rnw(ctl_ee_rnw), .ctl_ee_din(ctl_ee_din),
+    .ctl_ee_dma(ctl_ee_dma), .ctl_ee_done(ctl_ee_done), .busy()
+);
 
 gba_cart_controller cart_ctl (
     .clk                    ( clk_sys ),
@@ -2046,25 +2113,21 @@ gba_cart_controller cart_ctl (
     .rd_addr                ( cart_rd_addr_ctl ),
     .rd_data                ( cart_rd_data ),
     .rd_data_second         ( cart_rd_data_second ),
-    .rd_ready               ( cart_rd_ready ),
+    .rd_ready               ( cart_ctl_rd_ready ),
 
-    // Saves, EEPROM and GPIO stay on the core's own paths. Nothing this core
-    // does writes to a cartridge, which is the rule in PLAN.md section 5: a
-    // cart write touches somebody's real save and stays behind an explicit
-    // toggle until it has been proven on a cart nobody minds losing.
-    .save_req               ( 1'b0 ),
-    .save_addr              ( 17'd0 ),
-    .save_rnw               ( 1'b1 ),
-    .save_din               ( 8'd0 ),
-    .save_dout              (),
-    .save_done              (),
-
-    .eeprom_req             ( 1'b0 ),
-    .eeprom_rnw             ( 1'b1 ),
-    .eeprom_din             ( 1'b0 ),
-    .eeprom_dma             ( 1'b0 ),
-    .eeprom_dout            (),
-    .eeprom_done            (),
+    // Raw save traffic reaches the chip only through the policy and arbiter.
+    .save_req               ( ctl_save_req ),
+    .save_addr              ( ctl_save_addr ),
+    .save_rnw               ( ctl_save_rnw ),
+    .save_din               ( ctl_save_din ),
+    .save_dout              ( cart_save_dout ),
+    .save_done              ( ctl_save_done ),
+    .eeprom_req             ( ctl_ee_req ),
+    .eeprom_rnw             ( ctl_ee_rnw ),
+    .eeprom_din             ( ctl_ee_din ),
+    .eeprom_dma             ( ctl_ee_dma ),
+    .eeprom_dout            ( ctl_ee_dout ),
+    .eeprom_done            ( ctl_ee_done ),
 
     .gpio_req               ( 1'b0 ),
     .gpio_rnw               ( 1'b1 ),
@@ -2103,8 +2166,7 @@ assign cart_tran_bank0_dir = cart_hw_enable_s ? ctl_bank0_dir : 1'b1;
 // the direction pin goes back to floating, which is the APF template's "let
 // the hardware control it by itself", and the output value to 0. In cart mode
 // the controller drives it: low through its power-on reset window, then RES#
-// released, and low again only while a save access is selected, which cannot
-// happen here because save_req is tied off.
+// released, and low again only while a byte save access is selected.
 assign cart_tran_pin30     = cart_hw_enable_s ? ctl_pin30     : 1'b0;
 assign cart_tran_pin30_dir = cart_hw_enable_s ? ctl_pin30_dir : 1'bz;
 
@@ -2132,13 +2194,10 @@ assign cart_pin30_pwroff_reset = cart_hw_enable_s ? cart_pwroff_reset_w : 1'b0;
 // ORed and ANDed into them. The blank tests are exactly as strong that way
 // (all-FF and all-zero fold to themselves) and it halves the registers.
 //
-// One request returns two DWORDs, so a pass is 24 requests. The request line
-// is dropped and a settling gap counted out between them rather than held
-// high across the pass: the controller samples rd_req level in its idle state,
-// which it enters on the same cycle it raises rd_ready, so a held request
-// starts one more read before the next address can reach it. The gap absorbs
-// that read, whose data is discarded, and keeps every accumulated word matched
-// to the address that was presented for it. It costs about 450 us at boot.
+// One request returns two DWORDs, so a pass is 24 requests. The arbiter
+// converts the probe's held request into a single queued transaction and
+// identifies its completion separately from CPU ROM and save traffic. Keep
+// the existing settling gap between header requests for conservative bring-up.
 localparam CP_IDLE = 2'd0, CP_REQ = 2'd1, CP_WAIT = 2'd2, CP_GAP = 2'd3;
 localparam [15:0] CP_TIMEOUT = 16'd4000;   // ~40 us, a read that never answers
 localparam [15:0] CP_SETTLE  = 16'd768;    // longer than one 8-byte cart read
@@ -2321,7 +2380,7 @@ rom_source_mux romsrc (
 
     .cart_rd_req          ( romsrc_cart_rd_req ),
     .cart_rd_addr         ( romsrc_cart_rd_addr ),
-    .cart_rd_ready        ( cart_rd_ready ),
+    .cart_rd_ready        ( cart_rom_ready ),
     .cart_rd_data         ( cart_rd_data ),
     .cart_rd_data_second  ( cart_rd_data_second )
 );

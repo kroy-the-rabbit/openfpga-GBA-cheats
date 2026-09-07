@@ -282,6 +282,8 @@ module gba_cart_controller #(
     // each access is its own /CS low-high cycle so the cart chip updates its
     // busy/ready status on the /CS rising edge).
     reg        eeprom_dma_r;
+    reg        eeprom_rnw_r, eeprom_din_r;
+    reg        eeprom_continue;
     // Direction of the last EEPROM bit of the current session. The game
     // writes the read/write command as a burst of write bits (rnw=0) and then
     // reads data as a burst of read bits (rnw=1). The rnw transition means
@@ -349,6 +351,9 @@ module gba_cart_controller #(
             eeprom_sess_cnt <= 10'd0;
             eeprom_rnw_prev <= 1'b1;
             eeprom_dma_r    <= 1'b1;
+            eeprom_rnw_r    <= 1'b1;
+            eeprom_din_r    <= 1'b0;
+            eeprom_continue <= 1'b0;
             out_bank1       <= 8'h00;
             out_bank2       <= 8'h00;
             out_bank3       <= 8'h00;
@@ -423,6 +428,9 @@ module gba_cart_controller #(
                         eeprom_sess     <= 1'b1;   // (re)open EEPROM session
                         eeprom_sess_cnt <= 10'd0;
                         eeprom_dma_r    <= eeprom_dma;
+                        eeprom_rnw_r    <= eeprom_rnw;
+                        eeprom_din_r    <= eeprom_din;
+                        eeprom_continue <= eeprom_sess && (eeprom_rnw == eeprom_rnw_prev);
                         if (eeprom_sess && (eeprom_rnw != eeprom_rnw_prev)) begin
                             // Session in progress and the bit direction
                             // flipped (write burst -> read burst): the
@@ -648,13 +656,13 @@ module gba_cart_controller #(
                     out_bank1_dir <= 1'b1;
                     out_bank2_dir <= 1'b0;
                     cs2_n         <= 1'b1;   // pin30 stays RES# high
-                    if (eeprom_rnw) begin
+                    if (eeprom_rnw_r) begin
                         out_bank3_dir <= 1'b0;
                         wr_n          <= 1'b1;
                     end else begin
                         // Write bit: D0 driven from the very first cycle so it
                         // is stable long before WR# falls.
-                        out_bank3     <= {7'b0, eeprom_din};
+                        out_bank3     <= {7'b0, eeprom_din_r};
                         out_bank3_dir <= 1'b1;
                         rd_n          <= 1'b1;
                     end
@@ -666,9 +674,10 @@ module gba_cart_controller #(
                         // CS# MUST stay low - GBATEK requires /CS=LOW and
                         // A23=HIGH throughout the whole transfer; raising CS#
                         // between bits resets the serial EEPROM chip.
-                        // eeprom_sess here is the OLD value: 0 on the first
-                        // request, 1 on later requests of the same session.
-                        cs_n  <= ~eeprom_sess;
+                        // Session state is already set by S_IDLE. Use the
+                        // latched pre-request continuation flag so a new
+                        // selection gets real A23/data setup before CS falls.
+                        cs_n  <= ~eeprom_continue;
                         rd_n  <= 1'b1;
                         wr_n  <= 1'b1;
                         acc_cnt <= acc_cnt + 1'b1;
@@ -684,21 +693,19 @@ module gba_cart_controller #(
                         rd_n  <= 1'b1;
                         wr_n  <= 1'b1;
                         acc_cnt <= acc_cnt + 1'b1;
-                    end else if (eeprom_rnw) begin
-                        // Read bit: RD# low pulse, then sample D0 immediately
-                        // after the RD# rising edge. insideGadgets' logic
-                        // analyser capture reads AD0 right after RD goes high
-                        // (the chip holds the bit briefly past the edge);
-                        // waiting hundreds of ns reads the tri-stated bus.
+                    end else if (eeprom_rnw_r) begin
+                        // Sample while RD# is still low, on the clock that
+                        // raises it. This matches the hardware-qualified
+                        // pocket-cartridge bus and needs no post-edge hold
+                        // from the EEPROM or the level translators.
                         if (acc_cnt < EEPROM_ADDR_SETUP + EEPROM_HALF_CYCLE - 1) begin
                             rd_n <= 1'b0;
                             acc_cnt <= acc_cnt + 1'b1;
                         end else if (acc_cnt == EEPROM_ADDR_SETUP + EEPROM_HALF_CYCLE - 1) begin
+                            eeprom_dout <= cart_tran_bank3[0];
                             rd_n <= 1'b1;   // rising edge
                             acc_cnt <= acc_cnt + 1'b1;
                         end else begin
-                            // Sample one cycle after the edge.
-                            eeprom_dout <= cart_tran_bank3[0];
                             acc_cnt <= 8'd0;
                             state   <= S_DONE;
                         end
@@ -917,7 +924,9 @@ module gba_cart_controller #(
                             // release /CS. For write-complete polling this is
                             // what lets the cart chip update its ready bit.
                             cs_n          <= 1'b1;
-                            out_bank1_dir <= 1'b0;
+                            // Keep A23 driven through the CS# rising edge
+                            // and following hold phase of a final EEPROM bit.
+                            out_bank1_dir <= eeprom_sess;
                             eeprom_sess   <= 1'b0;
                         end
                         cs2_n         <= 1'b1;   // release CS2# one cycle later
@@ -932,6 +941,7 @@ module gba_cart_controller #(
                         // Phase 4: release the data bus and complete.
                         out_bank2_dir <= 1'b0;
                         out_bank3_dir <= 1'b0;
+                        if (!eeprom_sess) out_bank1_dir <= 1'b0;
                         save_done     <= 1'b1;
                         eeprom_done   <= 1'b1;
                         gpio_done     <= 1'b1;

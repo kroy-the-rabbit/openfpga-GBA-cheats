@@ -69,6 +69,25 @@ entity gba_memorymux is
       lastread_dma         : in     std_logic_vector(31 downto 0);
       last_access_dma      : in     std_logic;
                                     
+      -- Physical cartridge save bus. Requests pulse once; payload stays stable
+      -- until done. The outer router enforces the cartridge write setting.
+      cart_save_mode       : in     std_logic := '0';
+      cart_save_req        : out    std_logic := '0';
+      cart_save_addr       : out    std_logic_vector(16 downto 0) := (others => '0');
+      cart_save_rnw        : out    std_logic := '1';
+      cart_save_din        : out    std_logic_vector(7 downto 0) := (others => '0');
+      cart_save_dout       : in     std_logic_vector(7 downto 0) := (others => '1');
+      cart_save_done       : in     std_logic := '0';
+      cart_eeprom_req      : out    std_logic := '0';
+      cart_eeprom_rnw      : out    std_logic := '1';
+      cart_eeprom_din      : out    std_logic := '0';
+      cart_eeprom_dma      : out    std_logic := '0';
+      cart_eeprom_last     : out    std_logic := '1';
+      cart_eeprom_count    : out    std_logic_vector(16 downto 0) := (others => '0');
+      cart_eeprom_dout     : in     std_logic := '1';
+      cart_eeprom_done     : in     std_logic := '0';
+      mem_bus_dma3          : in     std_logic := '0';
+      dma3_active           : in     std_logic := '0';
       dma_eepromcount      : in     unsigned(16 downto 0);
       flash_1m             : in     std_logic;
       MaxPakAddr           : in     std_logic_vector(24 downto 0);
@@ -163,7 +182,10 @@ architecture arch of gba_memorymux is
       SRAMWRITE,
       FLASHWRITE,
       FLASH_WRITEBLOCK,
-      FLASH_BLOCKWAIT
+      FLASH_BLOCKWAIT,
+      CART_SAVE_WAIT,
+      CART_EEPROM_START,
+      CART_EEPROM_WAIT
    );
    signal state : tState := IDLE;
    
@@ -187,6 +209,8 @@ architecture arch of gba_memorymux is
                              
    signal read_operation     : std_logic := '0';
    signal rnw_save           : std_logic := '0';
+   signal dma_save           : std_logic := '0';
+   signal cart_eeprom_index  : unsigned(16 downto 0) := (others => '0');
    signal upper_nonzero      : std_logic := '0';
 
    signal rotate_writedata   : std_logic_vector(31 downto 0) := (others => '0');
@@ -421,6 +445,11 @@ begin
          tilt_y <= to_unsigned(16#3A0# + to_integer(AnalogTiltY), 12);
 
          -- default pulse regs
+         cart_save_req    <= '0';
+         cart_eeprom_req  <= '0';
+         if (reset = '1' or dma3_active = '0') then
+            cart_eeprom_index <= (others => '0');
+         end if;
          bus_out_ena      <= '0';
          gb_bus_out.ena   <= '0';
          
@@ -459,6 +488,7 @@ begin
                   acc_save  <= mem_bus_acc;
                   Dout_save <= mem_bus_dout;
                   rnw_save  <= mem_bus_rnw;
+                  dma_save  <= mem_bus_dma3;
                   if (mem_bus_Adr(31 downto 28) /= x"0") then
                      upper_nonzero <= '1';
                   else
@@ -561,7 +591,7 @@ begin
                            state            <= EEPROMREAD;
 
                         when x"E" | x"F" =>
-                           if (SramFlashEnable = '1') then
+                           if (SramFlashEnable = '1' or cart_save_mode = '1') then
                               state                <= FLASHREAD;
                               adr_save(1 downto 0) <= adr_save(1 downto 0) or bus_lowbits;
                               if (acc_save = ACCESS_16BIT and (adr_save(0) or bus_lowbits(0)) = '1') then
@@ -1106,7 +1136,57 @@ begin
                   OAMRAM_PROC_we <= (others => '1');
                end if;
                
+            when CART_SAVE_WAIT =>
+               if (cart_save_done = '1') then
+                  if (rnw_save = '1') then
+                     -- GBA save memory is an eight-bit bus: wider reads
+                     -- replicate the same byte, including unaligned reads.
+                     rotate_data <= cart_save_dout & cart_save_dout & cart_save_dout & cart_save_dout;
+                     state <= ROTATE;
+                  else
+                     mem_bus_done <= '1';
+                     state <= IDLE;
+                  end if;
+               end if;
+
+            when CART_EEPROM_START =>
+               cart_eeprom_req   <= '1';
+               cart_eeprom_rnw   <= rnw_save;
+               cart_eeprom_din   <= Dout_save(0);
+               cart_eeprom_dma   <= dma_save;
+               cart_eeprom_count <= (others => '0');
+               cart_eeprom_last  <= '1';
+               if (dma_save = '1' and dma_eepromcount /= 0) then
+                  cart_eeprom_count <= std_logic_vector(dma_eepromcount);
+                  if (cart_eeprom_index = dma_eepromcount - 1) then
+                     cart_eeprom_index <= (others => '0');
+                  else
+                     cart_eeprom_index <= cart_eeprom_index + 1;
+                     cart_eeprom_last <= '0';
+                  end if;
+               end if;
+               state <= CART_EEPROM_WAIT;
+
+            when CART_EEPROM_WAIT =>
+               if (cart_eeprom_done = '1') then
+                  if (rnw_save = '1') then
+                     rotate_data <= (others => '0');
+                     if (adr_save(1) = '1') then
+                        rotate_data(16) <= cart_eeprom_dout;
+                     else
+                        rotate_data(0) <= cart_eeprom_dout;
+                     end if;
+                     state <= ROTATE;
+                  else
+                     mem_bus_done <= '1';
+                     state <= IDLE;
+                  end if;
+               end if;
+
             when EEPROMREAD =>
+               if (cart_save_mode = '1') then
+                  state <= CART_EEPROM_START;
+               else
                case (eepromMode) is
                   when EEPROM_IDLE | EEPROM_READADDRESS | EEPROM_WRITEDATA =>
                      rotate_data <= x"00000001";
@@ -1141,7 +1221,8 @@ begin
                      rotate_data <= (others => '0');
                      state       <= rotate;
                 end case;
-                
+               end if;
+
             when EEPROM_WAITREAD =>
                if (bus_out_done = '1') then
                   rotate_data    <= (others => '0');
@@ -1155,8 +1236,10 @@ begin
                   end if;
                end if;
             
-            when EEPROMWRITE => 
-               if (dma_eepromcount = 0) then
+            when EEPROMWRITE =>
+               if (cart_save_mode = '1') then
+                  state <= CART_EEPROM_START;
+               elsif (dma_eepromcount = 0) then
                   state        <= IDLE;
                   mem_bus_done <= '1';
                else
@@ -1243,7 +1326,12 @@ begin
                state       <= rotate;
                rotate_data <= (others => '0');
                
-               if (tilt = '1') then
+               if (cart_save_mode = '1') then
+                  cart_save_req  <= '1';
+                  cart_save_addr <= '0' & adr_save(15 downto 0);
+                  cart_save_rnw  <= '1';
+                  state          <= CART_SAVE_WAIT;
+               elsif (tilt = '1') then
                
                   if (adr_save = x"E008200") then rotate_data(7 downto 0) <= std_logic_vector(tilt_x( 7 downto 0)); end if;
                   if (adr_save = x"E008300") then rotate_data(3 downto 0) <= std_logic_vector(tilt_x(11 downto 8)); rotate_data(7) <= '1'; end if; -- bit 7 for sampling done
@@ -1290,12 +1378,22 @@ begin
                end if;
             
             when FLASHSRAMWRITEDECIDE1 =>
+               if (cart_save_mode = '1') then
+                  -- Forward command bytes unchanged; the physical Flash chip
+                  -- owns its ID mode, erase/program state and bank selection.
+                  cart_save_req  <= '1';
+                  cart_save_addr <= '0' & adr_save(15 downto 0);
+                  cart_save_rnw  <= '0';
+                  cart_save_din  <= Dout_save(7 downto 0);
+                  state          <= CART_SAVE_WAIT;
+               else
                state           <= FLASHSRAMWRITEDECIDE2;
                flashSRamdecide <= '1';
                if (flashSRamdecide = '0' and adr_save = x"e005555") then
                    flashNotSRam <= '1';
                end if;
-               
+               end if;
+
             when FLASHSRAMWRITEDECIDE2 =>
                if (flashNotSRam = '1') then
                   state <= FLASHWRITE;

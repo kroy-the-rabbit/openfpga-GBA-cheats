@@ -148,6 +148,26 @@
         ]
       },
       {
+        "name": "Cartridge Saves",
+        "id": 53,
+        "type": "list",
+        "enabled": true,
+        "address": "0x94",
+        "persist": false,
+        "writeonly": true,
+        "defaultval": 0,
+        "options": [
+          {
+            "name": "Read Only",
+            "value": 0
+          },
+          {
+            "name": "Writes Enabled",
+            "value": 1
+          }
+        ]
+      },
+      {
         "name": "CG:",
         "id": 51,
         "type": "number_u32",

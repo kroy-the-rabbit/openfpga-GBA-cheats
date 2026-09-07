@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Cartridge ROM read path: src/fpga/han/gba_cart_controller.sv.
 
-Three passes.
+Six passes.
 
 1. sim/han/tb_gba_cart_controller.sv, Wokann's whole-controller bench,
    vendored verbatim. It covers SRAM, GPIO and EEPROM as well as ROM, so it
@@ -19,6 +19,17 @@ Three passes.
 
 3. sim/han/tb_rom_source_mux.sv checks the CPU cache's paired-DWORD
    contract through the mux and real controller, including odd addresses.
+
+4. sim/han/tb_gba_cart_save.sv uses complete 512B/8KiB EEPROM commands
+   to read existing saves and program/read back a block without changing
+   its neighbor, plus SRAM byte write/readback and preservation.
+
+5. sim/han/tb_cart_eeprom_bridge.sv checks write protection and command
+   replay through the real controller into the EEPROM model, including
+   permission changes mid-command and consecutive DMA transaction boundaries.
+
+6. sim/han/tb_cart_bus_arbiter.sv verifies queued pulse capture, typed
+   completion, payload stability and the held header-probe handshake.
 
 ROM_BURST is a module parameter with no port, and iverilog's -P only reaches
 root modules, so pass 1 gets a copy of the controller with the parameter
@@ -43,6 +54,9 @@ TB_WOKANN = os.path.join(ROOT, "sim", "han", "tb_gba_cart_controller.sv")
 TB_BURST = os.path.join(ROOT, "sim", "han", "tb_gba_cart_rom_burst.sv")
 TB_MUX = os.path.join(ROOT, "sim", "han", "tb_rom_source_mux.sv")
 MUX = os.path.join(ROOT, "src", "fpga", "han", "rom_source_mux.sv")
+TB_SAVE = os.path.join(ROOT, "sim", "han", "tb_gba_cart_save.sv")
+TB_EEPROM_BRIDGE = os.path.join(ROOT, "sim", "han", "tb_cart_eeprom_bridge.sv")
+EEPROM_BRIDGE = os.path.join(ROOT, "src", "fpga", "han", "cart_eeprom_bridge.sv")
 
 BURST_PARAM = re.compile(r"^(\s*parameter integer ROM_BURST\s*=\s*)\d+(\s*,)$",
                          re.M)
@@ -89,8 +103,20 @@ def main() -> int:
     passes += run("ROM mux cache-line ordering and SDRAM forwarding",
                   os.path.join(BUILD, "tb_rom_source_mux"),
                   [TB_MUX, TB_BURST, CTRL, MUX], top="tb_rom_source_mux")
-    print(f"\n{passes}/3 benches pass")
-    return 0 if passes == 3 else 1
+    passes += run("EEPROM commands, existing saves, program/readback and SRAM preservation",
+                  os.path.join(BUILD, "tb_cart_save"),
+                  [TB_SAVE, CTRL], top="tb_gba_cart_save")
+    passes += run("EEPROM bridge write protection and physical save roundtrip",
+                  os.path.join(BUILD, "tb_cart_eeprom_bridge"),
+                  [TB_EEPROM_BRIDGE, TB_SAVE, EEPROM_BRIDGE, CTRL],
+                  top="tb_cart_eeprom_bridge")
+    passes += run("Cartridge arbitration, pulse capture and typed completion",
+                  os.path.join(BUILD, "tb_cart_bus_arbiter"),
+                  [os.path.join(ROOT, "sim", "han", "tb_cart_bus_arbiter.sv"),
+                   os.path.join(ROOT, "src", "fpga", "han", "cart_bus_arbiter.sv")],
+                  top="tb_cart_bus_arbiter")
+    print(f"\n{passes}/6 benches pass")
+    return 0 if passes == 6 else 1
 
 
 if __name__ == "__main__":

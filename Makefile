@@ -60,6 +60,7 @@ test:
 	$(SIMRUN) python3 tools/sim/run_fixtures.py
 	$(SIMRUN) python3 tools/sim/run_e2e.py
 	$(SIMRUN) python3 tools/sim/run_cart_rom.py
+	$(SIMRUN) python3 tools/sim/run_cart_memorymux.py
 	$(SIMRUN) python3 tools/sim/run.py $(ARGS)
 
 sim-shell: PODMAN_TTY = -it

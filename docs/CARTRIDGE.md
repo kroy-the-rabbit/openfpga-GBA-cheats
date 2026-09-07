@@ -1,20 +1,22 @@
 # Cartridges on the Pocket GBA core
 
-The core can power the Pocket's cartridge slot, detect a GBA cartridge and read
-its header. Minish Cap now boots to the title and save-slot screen on
-`4728cc6`. Saves remain unsupported; sustained gameplay is not yet qualified.
-See `docs/HANDOFF.md` for the latest results.
+The installed ROM-only build `4728cc6` boots Minish Cap to its title and
+save selection. Physical save support is now implemented and simulation-tested
+in source; its FPGA build and hardware results are tracked in `docs/HANDOFF.md`.
 
-> **A cartridge game cannot save.** Saves, EEPROM and the GPIO block that
-> carries RTC are not routed to the cartridge, and the core reports no save file
-> to the Pocket while booting from a cart. Nothing in this core writes to a
-> cartridge, by design, so your cartridge's existing save is not at risk. But a
-> game booted from a cart has nowhere to put a new one, and anything it thinks
-> it saved is gone when you close the core.
+**Cartridge Saves** defaults to **Read Only** at each launch. In Boot mode,
+SRAM/Flash reads and EEPROM read commands reach the physical save chip.
+Selecting **Writes Enabled** permits physical SRAM/Flash writes and EEPROM
+program commands. EEPROM permission is latched for a whole command. Progress
+made with writes disabled will not persist. Flash identification and bank
+selection require byte writes too, so some Flash games need Writes Enabled
+before they can recognize their save chip.
 
-Existing saves on the physical cartridge are not loaded either, so empty
-in-game save slots are expected. They do not indicate that the cartridge's
-stored saves were erased.
+No SD save file is loaded or written back for cartridge games. Physical writes
+are not hardware-qualified yet. GPIO/RTC remains disconnected, and APF
+savestates are disabled in Boot mode because they cannot snapshot physical
+save-chip state. The first hardware check should read Minish Cap's existing
+slots with Cartridge Saves left at Read Only.
 
 **This core requires Pocket firmware 1.2 or newer.** Declaring the cartridge
 adapter raises `version_required`, and an older firmware will refuse to load the
@@ -28,8 +30,9 @@ core at all rather than start it without the slot.
 | Detecting a cartridge, reading its header | **Minish Cap passed** on `85bb71a`: `CG=425A4D45`, `CS=FFFF96E1` |
 | Refusing to act on an empty or half-inserted slot | **unconfirmed on hardware** |
 | ROM out of the cartridge | **Minish Cap boots to title/save selection** on `4728cc6`; sustained gameplay not yet qualified |
-| Cartridge saves, EEPROM, RTC | **not routed**, deliberately |
-| Writing to a cartridge | **nothing does**, deliberately |
+| Cartridge saves / EEPROM | implemented and simulation-tested; hardware qualification pending |
+| Cartridge RTC/GPIO | not routed |
+| Writing to a cartridge | disabled by default; enabled explicitly via Cartridge Saves |
 
 ## First hardware run, 2026-09-05
 
@@ -63,6 +66,7 @@ once the controller does. It is `cfd4264`, built and timing-met at seed 1 on
 3. Read `CG:` and `CS:` in the menu. `CG:` is the game code, `CS:` says whether
    the read is trustworthy. Both are below.
 4. If `CS:` looks right, set **Cartridge** to `Boot`.
+5. Leave **Cartridge Saves → Read Only** for the first existing-save check. Enable writes explicitly only when testing persistence.
 
 ## The three settings
 

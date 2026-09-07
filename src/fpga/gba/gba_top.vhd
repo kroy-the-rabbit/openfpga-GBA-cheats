@@ -82,6 +82,23 @@ entity gba_top is
       bios_wraddr           : in     std_logic_vector(11 downto 0) := (others => '0');
       bios_wrdata           : in     std_logic_vector(31 downto 0) := (others => '0');
       bios_wr               : in     std_logic := '0';
+      -- Physical cartridge save bus. Requests pulse once; payload stays stable
+      -- until done. The outer router enforces the cartridge write setting.
+      cart_save_mode       : in     std_logic := '0';
+      cart_save_req        : out    std_logic := '0';
+      cart_save_addr       : out    std_logic_vector(16 downto 0) := (others => '0');
+      cart_save_rnw        : out    std_logic := '1';
+      cart_save_din        : out    std_logic_vector(7 downto 0) := (others => '0');
+      cart_save_dout       : in     std_logic_vector(7 downto 0) := (others => '1');
+      cart_save_done       : in     std_logic := '0';
+      cart_eeprom_req      : out    std_logic := '0';
+      cart_eeprom_rnw      : out    std_logic := '1';
+      cart_eeprom_din      : out    std_logic := '0';
+      cart_eeprom_dma      : out    std_logic := '0';
+      cart_eeprom_last     : out    std_logic := '1';
+      cart_eeprom_count    : out    std_logic_vector(16 downto 0) := (others => '0');
+      cart_eeprom_dout     : in     std_logic := '1';
+      cart_eeprom_done     : in     std_logic := '0';
       -- save memory used
       save_eeprom           : out    std_logic;
       save_sram             : out    std_logic;
@@ -292,6 +309,9 @@ architecture arch of gba_top is
    signal sound_dma_req  : std_logic_vector(1 downto 0);
    
    signal dma_eepromcount : unsigned(16 downto 0);
+   signal dma3_active : std_logic;
+   signal dma3_bus_ena : std_logic;
+   signal mem_bus_dma3 : std_logic;
    
    signal MaxPakAddr_modified  : std_logic_vector(24 downto 0);
    
@@ -390,6 +410,7 @@ begin
    mem_bus_rnw  <=  debug_bus_rnw         when debug_bus_active = '1' else cpu_bus_rnw  when cpu_bus_ena = '1' else dma_bus_rnw;
    mem_bus_ena  <=  debug_bus_ena         when debug_bus_active = '1' else cpu_bus_ena  when cpu_bus_ena = '1' else dma_bus_ena; 
    mem_bus_acc  <=  debug_bus_acc         when debug_bus_active = '1' else cpu_bus_acc  when cpu_bus_ena = '1' else dma_bus_acc;
+   mem_bus_dma3 <= dma3_bus_ena and not cpu_bus_ena and not debug_bus_active;
    mem_bus_dout <=  debug_bus_dout        when debug_bus_active = '1' else cpu_bus_dout when cpu_bus_ena = '1' else dma_bus_dout;
        
    process (clk100)
@@ -635,6 +656,23 @@ begin
       lastread_dma         => lastread_dma,
       last_access_dma      => last_access_dma,
       
+      cart_save_mode        => cart_save_mode,
+      cart_save_req         => cart_save_req,
+      cart_save_addr        => cart_save_addr,
+      cart_save_rnw         => cart_save_rnw,
+      cart_save_din         => cart_save_din,
+      cart_save_dout        => cart_save_dout,
+      cart_save_done        => cart_save_done,
+      cart_eeprom_req       => cart_eeprom_req,
+      cart_eeprom_rnw       => cart_eeprom_rnw,
+      cart_eeprom_din       => cart_eeprom_din,
+      cart_eeprom_dma       => cart_eeprom_dma,
+      cart_eeprom_last      => cart_eeprom_last,
+      cart_eeprom_count     => cart_eeprom_count,
+      cart_eeprom_dout      => cart_eeprom_dout,
+      cart_eeprom_done      => cart_eeprom_done,
+      mem_bus_dma3         => mem_bus_dma3,
+      dma3_active          => dma3_active,
       dma_eepromcount      => dma_eepromcount,
       flash_1m             => GBA_flash_1m,
       MaxPakAddr           => MaxPakAddr_modified,
@@ -721,6 +759,8 @@ begin
       dma_cycles_adrup    => dma_cycles_adrup,
       
       dma_eepromcount     => dma_eepromcount,
+      dma3_active         => dma3_active,
+      dma3_bus_ena        => dma3_bus_ena,
       
       dma_bus_Adr         => dma_bus_Adr, 
       dma_bus_rnw         => dma_bus_rnw, 
