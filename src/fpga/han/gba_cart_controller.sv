@@ -21,15 +21,14 @@
 //
 // Timing is modeled on the measured cartridge protocol from
 //   https://github.com/jojolebarjos/gba-cartridge
-// and on GBATEK (WAITCNT defaults). All wait-state constants remain
-// conservative placeholders and MUST be tuned on real carts.
+// and on GBATEK (WAITCNT settings). The sequential ROM window matches the
+// hardware-qualified CartTools controller's RTL edge counts. This controller
+// still needs its own hardware qualification; other timings are placeholders.
 //
 // kroy: ROM reads burst. A read request is four consecutive halfwords, so
 // only the first drives an address; words 2..4 keep CS# low and pulse RD#
 // only, letting the cart's internal counter supply the address. See
-// ROM_SEQ_WAIT and S_ROM_SEQ below. The added constants are derived from
-// GBATEK the same way the ones above are, and are placeholders under the
-// same warning.
+// ROM_SEQ_WAIT and S_ROM_SEQ below for the conservative sequential baseline.
 //
 // PHI generation: clk_sys ~100.66 MHz / PHI_DIV = 16.78 MHz.
 
@@ -38,24 +37,24 @@
 module gba_cart_controller #(
     parameter integer PHI_DIV_16M = 6,  // clk_sys / PHI for 16.78MHz PHI output
     // Wait-state placeholders, in clk_sys (100 MHz) cycles.
-    // GBATEK default WAITCNT=4317h: ROM N/S = 3/1 waits (access = 1+waits
+    // GBATEK common fast WAITCNT=4317h: ROM N/S = 3/1 waits (access = 1+waits
     // GBA cycles); SRAM = 8 waits; EEPROM WS2 = 8/8 waits. One GBA cycle
     // ~= 6 clk_sys cycles, so ROM non-sequential ~= 4*6=24 clk_sys cycles
     // and SRAM ~= 9*6=54 clk_sys cycles. Tune on real carts.
     parameter integer ROM_WAIT   = 24,  // clk_sys cycles per 16-bit ROM read
-    // kroy: sequential (burst) ROM read timing. GBATEK default WAITCNT=4317h
-    // gives ROM S = 1 wait against N = 3, so a sequential access is 1+1 = 2
-    // GBA cycles where a non-sequential one is 1+3 = 4. At ~6 clk_sys cycles
-    // per GBA cycle that is 2*6 = 12 clk_sys cycles, against the 4*6 = 24 of
-    // ROM_WAIT. The 12 splits into RD# high (the cart's counter increments on
-    // the RD# rising edge, plus bus turnaround) then RD# low, sampled on the
-    // last low cycle: 4 high (~40 ns) and 8 low (~80 ns) at 100.66 MHz, i.e.
-    // the ~119 ns a real GBA sequential access takes at 16.78 MHz.
-    // Derived from GBATEK, NOT measured on a cart. Conservative placeholders
-    // like every other wait-state constant here, and they MUST be tuned on
-    // real carts.
-    parameter integer ROM_SEQ_WAIT    = 12, // clk_sys cycles per burst halfword
-    parameter integer ROM_SEQ_RD_HIGH = 4,  // of which RD# is held high
+    // Sequential baseline: CartTools' READ_TURNAROUND_CYCLES=4 includes two
+    // extra FSM clocks, so its actual RD# waveform is 6 high + 14 low, not
+    // 4 + 14. At 100.663296 MHz this is ~60 ns high, ~139 ns low, ~199 ns
+    // per halfword. These parameters directly set those edge intervals.
+    // The old 12/4 setting gave ~40 ns high + ~79 ns low. Its total matched
+    // fast WS0 (WAITCNT=4317h, 1+1 GBA clocks), but that does not establish
+    // the same electrical read margin through the Pocket. Power-on WAITCNT
+    // is 0000h: WS0 sequential access takes 1+2 clocks, about 179 ns.
+    // Neither matching a total period nor simulation qualifies this core
+    // on real carts. Keep 20/6 until ROM hashes and gameplay qualify faster
+    // timings. Non-sequential timing and the per-word fallback are unchanged.
+    parameter integer ROM_SEQ_WAIT    = 20, // clk_sys cycles per burst halfword
+    parameter integer ROM_SEQ_RD_HIGH = 6,  // of which RD# is held high
     // 0 = re-drive the full address for every halfword (the original per-word
     // path, kept as the fallback for a cart that does not honour its own
     // sequential counter). 1 = burst.

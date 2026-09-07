@@ -5,7 +5,28 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
-## 2026-09-06: the fix has a bitstream, seed 1, not yet on the slot
+## 2026-09-06: conservative sequential timing, not yet fit
+
+The working tree now sets `ROM_SEQ_WAIT=20` and `ROM_SEQ_RD_HIGH=6` in
+`gba_cart_controller.sv`. This replaces 12/4 and matches CartTools' actual
+six-clock high, fourteen-clock low sequential RD# waveform. The old 18-clock
+CartTools comparison omitted two FSM clocks. `4317h` is a common fast WAITCNT
+setting, not the power-on default `0000h`; `docs/CARTRIDGE.md` has the corrected
+comparison and its limits. Non-sequential reads and `ROM_BURST=0` are unchanged.
+
+Both containerized ROM benches passed, including the new edge-count
+assertions. A full four-halfword request now takes 93 clocks instead of 69
+(per-word fallback: 129). These are simulation results, not cartridge
+qualification. Repeated ROM hashes and gameplay, including the previously
+troublesome carts, are still required. This change does not establish the
+cause of the earlier boot failure.
+
+No fit or deployment has been performed for this timing change. Commit the
+intended tree before requesting a build through `../tools/runner-build`.
+The seed 1 `cfd4264` artifact below does not include this change. Its fit
+results remain valid for that older source, not for the current working tree.
+
+## Earlier 2026-09-06 snapshot: the probe fix has a bitstream
 
 `p5-cartridge` is 18 commits past `main` `9002617` plus this docs commit,
 unpushed. **`cfd4264` closed at seed 1 on sisko**, Quartus 25.1std, STANDARD
@@ -46,10 +67,10 @@ Nothing on the runner was deleted.
 2. Set Cartridge to `Detect`, restart with Minish Cap in the slot, read `CS:`.
    Expected low byte `E1`, bits 15:8 `96`, `CG:` = `BZME` as hex, which the
    menu prints as `1113214277`. Anything else: `docs/CARTRIDGE.md` decodes it.
-3. If `E1`, set `Boot`. If the header reads clean and the game still
-   misbehaves, the first knob is the burst window, `ROM_SEQ_WAIT=18`, which
-   matches the bus CartTools has proven on a Minish Cap; `ROM_BURST=0` removes
-   the question. The comparison is in `docs/CARTRIDGE.md`.
+3. If `E1`, set `Boot`. This older artifact uses the 12/4 sequential window.
+   The current working tree changes it to 20/6, matching CartTools' sequential
+   edge counts, but needs a new fit. `ROM_BURST=0` is a separate diagnostic
+   fallback. Neither change has been qualified in this core on hardware.
 4. Still unchecked on the same visit: a card ROM with the setting `Off`, and a
    cold core load with `Detect` persisted.
 5. No GBA tag until a cartridge boots.

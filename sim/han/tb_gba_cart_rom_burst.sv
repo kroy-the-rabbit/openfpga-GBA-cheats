@@ -35,8 +35,9 @@
 //   - the host never re-drives AD while CS# is low, never strobes RD# with
 //     CS# high, and never strobes RD# while it is still driving AD.
 //
-// Cycle counts for both paths are reported so the speed-up is measured, not
-// asserted.
+// Default sequential pulse widths are checked separately: 6 clocks high and
+// 14 clocks low. The immediate data model does not prove electrical margin.
+// Whole-request cycle counts for both paths are also reported.
 
 `timescale 1ns / 1ps
 
@@ -230,6 +231,29 @@ module tb_gba_cart_rom_burst;
     integer tot_ref = 0, tot_bst = 0, nreq = 0;
     integer whole_ref = 0, whole_bst = 0, nwhole = 0;
 
+    // Check actual edges, not parameter arithmetic. A new CS# assertion
+    // starts a non-sequential access, including a 128 KiB boundary fallback.
+    time seq_rise = 0, seq_fall = 0;
+    reg have_seq_rise = 0, low_is_seq = 0;
+    integer seq_pulses = 0;
+    always @(negedge b_b0[0]) have_seq_rise = 0;
+    always @(negedge b_b0[1]) begin
+        low_is_seq = reset_n && have_seq_rise;
+        seq_fall = $time;
+        if (low_is_seq && ($time - seq_rise != 60))
+            fail("default sequential RD high is not 6 clocks");
+    end
+    always @(posedge b_b0[1]) begin
+        if (reset_n && low_is_seq) begin
+            if ($time - seq_fall != 140)
+                fail("default sequential RD low is not 14 clocks");
+            seq_pulses = seq_pulses + 1;
+        end
+        low_is_seq = 0;
+        seq_rise = $time;
+        have_seq_rise = reset_n && (b_b0[0] === 1'b0);
+    end
+
     task do_read(input [24:0] a);
         begin
             @(posedge clk); #1;
@@ -394,6 +418,9 @@ module tb_gba_cart_rom_burst;
         // must still match the per-word path.
         check_read(25'h0017fff, 2);
         check_read(25'h000ffff, 2);   // base = 01FFFEh, the GBATEK example
+
+        if (seq_pulses != nwhole * 3 + (nreq - nwhole) * 2)
+            fail("missing sequential pulse width checks");
 
         $display("");
         $display("CYCLES per 4-halfword request, whole-request burst (%0d requests): per-word %0d, burst %0d",

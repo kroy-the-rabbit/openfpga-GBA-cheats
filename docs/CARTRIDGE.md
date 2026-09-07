@@ -153,31 +153,46 @@ on later launches.
 
 ## What is not settled
 
-**The bus timing is derived, not measured.** Every wait-state constant in
-`src/fpga/han/gba_cart_controller.sv` is a conservative placeholder computed
-from GBATEK's default `WAITCNT`, and its author says plainly that they must be
-tuned on real cartridges. Nothing here has been.
+**The bus timing still needs hardware qualification in this core.** The
+sequential defaults are now `ROM_SEQ_WAIT=20`, `ROM_SEQ_RD_HIGH=6`, matching
+the actual RTL edge intervals in `pocket-cartridge`'s `gba_cart_bus.sv`.
+CartTools has dumped cartridges, including Minish Cap, byte-exact against
+No-Intro. That is evidence for its complete implementation, not proof that
+matching one window makes this controller work on hardware.
 
-The one measured reference in the tree is `pocket-cartridge`'s
-`gba_cart_bus.sv`, which has dumped GBA cartridges byte-exact against No-Intro
-at these `clk_sys` counts, a Minish Cap among them. Its own docs call the read
-window capacitance dependent and "worth watching if the timings are ever
-tightened", and the burst path here is tighter:
+The following counts were checked by simulating both controllers, not by
+measuring connector pins. At `clk_sys=100.663296 MHz`:
 
-| Access | This controller | CartTools, proven |
-|---|---|---|
-| Non-sequential halfword | 4 address + 24 = 28 | 2 + 4 + 4 + 14 = 24 |
-| Sequential halfword | 12, of which RD# low 8 | 18, of which RD# low 14 |
+| Sequential halfword | RD# high | RD# low | Total |
+|---|---|---|---|
+| Previous pocket-gba defaults, 12/4 | 4 clocks, 40 ns | 8 clocks, 79 ns | 12 clocks, 119 ns |
+| Current pocket-gba defaults, 20/6 | 6 clocks, 60 ns | 14 clocks, 139 ns | 20 clocks, 199 ns |
+| CartTools | 6 clocks, 60 ns | 14 clocks, 139 ns | 20 clocks, 199 ns |
 
-The 12 is a real GBA's own sequential access at the default wait states, so a
-cartridge must tolerate it, but nothing here has shown that it does. If a
-cartridge reads its header (`CS:` low byte `E1`) and the game still misbehaves,
-`ROM_SEQ_WAIT=18` matches the proven window, and `ROM_BURST=0` removes the
-question.
+CartTools' turnaround parameter is 4, but its countdown and state transitions
+add two clocks to the high pulse. The earlier 18-clock comparison omitted
+them. Setting this controller to 18/4 matches only CartTools' low pulse.
+The earlier non-sequential comparison also added parameter values rather
+than measuring edges and has been removed; that path is unchanged here.
+
+The real GBA powers on with `WAITCNT=0000h`: WS0 sequential access takes one
+clock plus two waitstates, about 179 ns. The commonly used fast setting
+`4317h` gives one clock plus one waitstate, about 119 ns. Neither total specifies
+the safe RD# high/low split through the Pocket's electrical path.
+See [GBATEK's WAITCNT description](https://problemkaputt.de/gbatek-gba-system-control.htm).
+
+The burst bench now asserts the default six-clock high and fourteen-clock low
+pulses, including around 128 KiB boundary fallback. Its ROM data model still
+responds immediately: it proves protocol and edge counts, not physical read
+margin. Repeat full ROM hash checks and gameplay on real cartridges before
+calling this timing qualified or restoring the faster setting. Measure the
+performance cost too. `ROM_BURST=0` remains a diagnostic fallback, not a
+guarantee that every other electrical assumption is correct.
 
 **ROM reads burst, and that is new.** Words after the first in a read hold `CS#`
 low and pulse `RD#` only, relying on the cartridge's own address counter, which
-takes a 4-halfword read from 129 clock cycles to 69. The counter is 16 bits of
+takes a 4-halfword read from 129 clock cycles to 93 with the current defaults
+(the previous 12/4 setting took 69). The counter is 16 bits of
 halfword address and wraps every 128K, so a read crossing that boundary falls
 back to re-driving the address. If a cartridge turns out not to honour its own
 counter, `ROM_BURST=0` in the controller restores the original path exactly.
