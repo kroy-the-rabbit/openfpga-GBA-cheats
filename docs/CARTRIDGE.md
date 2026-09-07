@@ -47,7 +47,8 @@ times out, `cart_detect` stays low, and `Boot` then starts the core against
 SDRAM with no ROM in it, which is the GBA logo and nothing after it.
 
 The fix is to hold the probe in reset until `reset_n` is high, so it runs only
-once the controller does. Not yet built or run.
+once the controller does. It is `cfd4264`, built and timing-met at seed 1 on
+2026-09-06, not yet run on the slot.
 
 ## Quick start
 
@@ -156,6 +157,23 @@ on later launches.
 `src/fpga/han/gba_cart_controller.sv` is a conservative placeholder computed
 from GBATEK's default `WAITCNT`, and its author says plainly that they must be
 tuned on real cartridges. Nothing here has been.
+
+The one measured reference in the tree is `pocket-cartridge`'s
+`gba_cart_bus.sv`, which has dumped GBA cartridges byte-exact against No-Intro
+at these `clk_sys` counts, a Minish Cap among them. Its own docs call the read
+window capacitance dependent and "worth watching if the timings are ever
+tightened", and the burst path here is tighter:
+
+| Access | This controller | CartTools, proven |
+|---|---|---|
+| Non-sequential halfword | 4 address + 24 = 28 | 2 + 4 + 4 + 14 = 24 |
+| Sequential halfword | 12, of which RD# low 8 | 18, of which RD# low 14 |
+
+The 12 is a real GBA's own sequential access at the default wait states, so a
+cartridge must tolerate it, but nothing here has shown that it does. If a
+cartridge reads its header (`CS:` low byte `E1`) and the game still misbehaves,
+`ROM_SEQ_WAIT=18` matches the proven window, and `ROM_BURST=0` removes the
+question.
 
 **ROM reads burst, and that is new.** Words after the first in a read hold `CS#`
 low and pulse `RD#` only, relying on the cartridge's own address counter, which

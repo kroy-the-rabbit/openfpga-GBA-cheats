@@ -58,10 +58,14 @@ steps have been walked and which have not.
 
 ## Versions
 
-The five projects in this set share one version number. The set is at
-**0.9999**. The next release is 0.99991, then 0.99992, and so on: each one adds
-to the tail rather than climbing toward a round number. Nothing here reaches
-1.0, because 1.0 is a claim to be finished and none of this is.
+Every project in this set sits at **0.9999** and none of them moves off it.
+1.0 is a claim to be finished, none of this is finished, and a version that
+never climbs cannot drift into making that claim by accident.
+
+The projects are not kept in step with each other. A release adds the short
+SHA of the commit it was cut from, so a tag reads `v0.9999.<sha>`, and two
+tags that share the prefix are unrelated releases. This core's `v0.9999`
+predates the suffix. Read the tail, not the number.
 
 Provenance is stated in words, above and in the credits, rather than implied by
 a number.

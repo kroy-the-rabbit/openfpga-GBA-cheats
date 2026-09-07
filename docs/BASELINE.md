@@ -298,7 +298,22 @@ against -0.410 and -0.125). That is the same congestion at 96-97 % occupancy
 landing differently, not a new path. The `Do not bump Quartus` rule in the
 README was right to demand a measurement before a move; the measurement is
 this table, and the move is made on it. The 25.1 seed 3 bitstream is what went
-to the card for hardware testing.
+to the card for hardware testing, and froze at the GBA logo; see
+`docs/CARTRIDGE.md`.
+
+The fix for that freeze, `cfd4264`, is six lines in `core_top.sv` and shifts
+the placement enough to move the seeds:
+
+| Seed | ALMs | Setup | Hold | | Runner, elapsed |
+|---|---|---|---|---|---|
+| 3 | 17,744 (96 %) | **-0.098** | +0.024 | fail | sisko, 1430 s |
+| 1 | 17,860 (97 %) | **+0.075** | +0.109 | pass | sisko, 1402 s, 2026-09-06 |
+
+Seed 3 closed on `60990db` and misses on `cfd4264`; seed 1 closes on both with
+the same +0.075. Read nothing into that beyond the usual: which seed closes is
+placement luck at this occupancy, and the passing seed has to be recorded with
+the commit because the package name does not carry it. The seed 1 bitstream of
+`cfd4264` is the next candidate for the card.
 
 ## The fit problem, and how to measure it
 

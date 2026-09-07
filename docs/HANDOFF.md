@@ -1,37 +1,65 @@
 # Handoff
 
-State of the fork as of 2026-09-06. Read the sections in order, newest first;
+State of the fork as of 2026-09-06, evening. Read the sections in order, newest first;
 the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
-## 2026-09-06: nothing was fit, the branch is where it was
+## 2026-09-06: the fix has a bitstream, seed 1, not yet on the slot
 
-No build ran. `p5-cartridge` is at `97e1e0b`, 17 commits past `main` `9002617`,
-tree clean, unpushed. There is still **no bitstream for the fix**. Both runners
-are idle. The 2026-09-05 list below is unchanged and is still the list.
+`p5-cartridge` is 18 commits past `main` `9002617` plus this docs commit,
+unpushed. **`cfd4264` closed at seed 1 on sisko**, Quartus 25.1std, STANDARD
+FIT, 1402 s:
 
-The one thing between here and a hardware answer is a passing fit of `cfd4264`.
-The fix is six lines, no testbench covers the probe, so a build and the slot are
-the only proof available.
+| | |
+|---|---|
+| Setup | **+0.075 ns**, the PLL output path as always |
+| Hold | +0.109 ns |
+| ALMs | 17,860 / 18,480, 97% |
+| Registers | 25,238 |
+| RAM blocks | 282 / 308 |
+| Package | `build/gba/kroy.GBA_0.9999.cfd4264.zip`, SHA-256 `3526ed6586eefd4ae08d98c0ee07d75ca8d686bc950d61c60b08ee1c894dbda5` |
+| Bitstream | `bitstream.rbf_r`, SHA-256 `ab612812d007e8c35bf330def30af98eff5af481a4b7407233e8da39ac1fa37a`, identical inside and outside the zip |
 
-Seeds tried on the fix, Quartus 25.1std, STANDARD FIT:
+The seed 3 package of the same commit missed timing and is still beside it as
+`seed3-FAILED`. The two zips carry the same name apart from that suffix, so the
+seed is tracked by the filename and by this table, nowhere else.
+
+Seeds on the fix, Quartus 25.1std, STANDARD FIT, sisko unless noted:
 
 | Commit | seed 8 | seed 1 | seed 2 | seed 3 |
 |---|---|---|---|---|
-| `60990db` | -0.448 | **+0.075** | -0.562 | **+0.092** |
-| `cfd4264` | untried | untried | untried | -0.098 |
+| `60990db` | -0.448 | **+0.075** | -0.562 | **+0.092** (kira) |
+| `cfd4264` | untried | **+0.075** | untried | -0.098 |
 
-Seed 3 closed on `60990db` and misses on `cfd4264`, so it is not the one to
-retry. Seed 1 closed on the commit before and is untried here. Start there:
+**The runner's `fetch` refused this job**: "expected one checkout, found 2".
+It resolves a checkout by commit, and sisko holds both the seed 3 and the seed
+1 checkouts of `cfd4264`. The files were copied by hand from the job's own
+directory, `checkouts/pocket-gba-gba-p5cart-s1-cfd42641332a/build/gba`, the same
+set `fetch` copies. Reported to the orchestrator; the tool is its to change.
+Nothing on the runner was deleted.
 
-```sh
-SEED=1 ../tools/runner-build start sisko pocket-gba gba p5cart-s1 cfd4264
-```
+**Next, in order.**
 
-then `job` to poll and `fetch`. If seed 1 misses, 8 and 2 are untried on this
-commit and kira is free to take one in parallel. Do not compare a kira ALM count
-against a sisko one; across runners only pass or fail carries over.
+1. Install the seed 1 package on the card, merge not replace, hash-verify
+   `bitstream.rbf_r` against the value above, unmount.
+2. Set Cartridge to `Detect`, restart with Minish Cap in the slot, read `CS:`.
+   Expected low byte `E1`, bits 15:8 `96`, `CG:` = `BZME` as hex, which the
+   menu prints as `1113214277`. Anything else: `docs/CARTRIDGE.md` decodes it.
+3. If `E1`, set `Boot`. If the header reads clean and the game still
+   misbehaves, the first knob is the burst window, `ROM_SEQ_WAIT=18`, which
+   matches the bus CartTools has proven on a Minish Cap; `ROM_BURST=0` removes
+   the question. The comparison is in `docs/CARTRIDGE.md`.
+4. Still unchecked on the same visit: a card ROM with the setting `Off`, and a
+   cold core load with `Detect` persisted.
+5. No GBA tag until a cartridge boots.
+
+**Alignment with the other cores, checked today.** `release.yml` is
+verify-only and gated on `main`, as in the other repos. `core.json` declares
+`version_required` 1.2 and the cartridge adapter exactly as CartTools does.
+The README's version paragraph now says what PCE's and CartTools' say: every
+project sits at 0.9999, the number is not shared, a tag adds the short SHA.
+The two stale pre-move worktree paths in this file are gone.
 
 **Do not trust any area figure from `exp-cart-probe`.** Measured at Quartus
 21.1: the probe build has about 1,000 fewer registers inside `gba_top` than
@@ -499,21 +527,18 @@ Two git-ignored things went with the worktrees, both regenerable:
 
 ## Re-running the in-flight builds
 
-If the session ended before these finished, the containers died with it. The
-results are only on disk if `build/gba/report.txt` is newer than the build
-started and no `TIMING_FAILED` ambiguity remains. To re-run, from the worktree:
+Historical. The G and H runs were local worktrees beside the repo,
+`pocket-gba-g` and `pocket-gba-h`, which no longer exist; their results are in
+the tables above. A fit of any commit now goes through the orchestrator's
+restricted interface, from this directory:
 
 ```sh
-# G: the decisive run
-cd ~/Desktop/repos/pocket-gba-g && make gba FITTER_EFFORT="STANDARD FIT" NPROC=3
-
-# H: same design, area-biased physical synthesis
-cd ~/Desktop/repos/pocket-gba-h && make gba FITTER_EFFORT="STANDARD FIT" NPROC=3
+SEED=<n> ../tools/runner-build start sisko pocket-gba gba <job> <commit>
 ```
 
 `make report` re-renders `build/gba/report.txt` from existing outputs without
 recompiling. `make gba SKIP_COMPILE=1` repackages the SD tree and zip from an
-existing `.rbf`. Three concurrent builds is the practical ceiling on 14 cores.
+existing `.rbf`.
 
 ## Harness gotchas that cost time already
 
