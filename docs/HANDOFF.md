@@ -5,12 +5,48 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
-## 2026-09-06: conservative sequential timing built and installed
+## 2026-09-06: cache-line fix built and installed; Boot retest needed
+
+**`4728cc6` is installed as `0.9999.4728cc6`.** Its cartridge ROM mux
+preserves the aligned cache-line contract described below. The build passed
+on sisko, Quartus 25.1std, STANDARD FIT, 16 processors, in **1401 s**:
+
+| | |
+|---|---|
+| Seed | **8**, confirmed in `ap_core.fit.rpt` |
+| Setup / hold | **+0.077 / +0.092 ns** |
+| Recovery / removal / minimum pulse width | +4.242 / +0.398 / +0.827 ns |
+| ALMs / registers / RAM blocks | 17,762 (96%) / 24,867 / 282 |
+| Package | `build/gba/kroy.GBA_0.9999.4728cc6.zip` |
+| Package SHA-256 | `3e2bb7c61a5889a7c1a96b70a32418a729e4740d33648a56f81e9d9376e73ebc` |
+| Bitstream SHA-256 | `23cb3bca36648168f6a43d84863c7c34152f601a3779a1a038178dbf6372cc50` |
+
+Runner job: `runner-build job sisko pocket-gba gba p5cart-cache-s1 4728cc6`.
+The job label says `s1`, but the launch omitted `SEED=1` and used the QSF's
+default seed **8**. It passed its own timing gate. Reports and bitstream are
+preserved in `build/gba/artifacts/4728cc6-seed8/`.
+
+All 13 installed package files were hash-verified. Eight existing BIOS,
+save/settings/firmware files were verified unchanged against the fresh backup
+at `build/card-backups/20260907T020719Z/`. Writes were flushed.
+**The card remains mounted at `/run/media/kroy/pocket`, as Kroy requested;
+do not automatically unmount it after future writes.** Deployment manifest:
+`build/gba/deployment-4728cc6.json`.
+
+**Next:** test Minish Cap with Cartridge `Boot` and check whether it passes
+the GBA startup logo into the game. This build has passed simulation and FPGA
+timing, but has not yet been tested on the Pocket. Cartridge saves remain
+unsupported.
+
+## 2026-09-06: conservative sequential timing hardware result and cache diagnosis
 
 **Latest Boot retest:** after the successful detection below, Kroy selected
-Boot and reported another freeze at the beginning. The referenced screenshots
-and the CG/CS readings from that Boot session have not yet arrived, so the
-exact freeze point and whether that restart's probe passed are unconfirmed.
+Boot and reported another freeze at the beginning. The subsequent photo,
+explicitly identified as the frozen Boot session, shows `CG=425A4D45` and
+`CS=FFFF96E1`: the probe passed on that restart too. Kroy then confirmed
+the frozen screen is the **GBA startup logo**, before the game begins. This
+failure occurred despite successful header detection; the earlier probe
+timeout does not explain this attempt.
 
 Investigation found a separate, reproducible cache-fill defect in
 `rom_source_mux.sv`: `cache.vhd` expects the companion DWORD from the same
@@ -26,7 +62,8 @@ and sequential cartridge model. Before the fix it failed at DWORD address 1
 (companion `D7CDB802`, expected `5EE9C0DE`); after the fix all 70 line reads,
 SDRAM forwarding, and the two existing cartridge benches pass. This is a
 confirmed cache corruption fix, not yet confirmation of the hardware freeze's
-cause. A new FPGA build and hardware boot retest are required.
+cause. The new FPGA build is installed as described above; hardware boot
+retesting remains required.
 
 The 20/6 sequential timing change is committed as **`85bb71a`** on
 `p5-cartridge`. It closed at **seed 1 on sisko**, Quartus 25.1std,
