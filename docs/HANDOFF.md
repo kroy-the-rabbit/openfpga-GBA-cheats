@@ -7,6 +7,27 @@ from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
 ## 2026-09-06: conservative sequential timing built and installed
 
+**Latest Boot retest:** after the successful detection below, Kroy selected
+Boot and reported another freeze at the beginning. The referenced screenshots
+and the CG/CS readings from that Boot session have not yet arrived, so the
+exact freeze point and whether that restart's probe passed are unconfirmed.
+
+Investigation found a separate, reproducible cache-fill defect in
+`rom_source_mux.sv`: `cache.vhd` expects the companion DWORD from the same
+aligned 8-byte line, as SDRAM's burst returns, but the cart controller reads
+four consecutive halfwords. Odd DWORD requests therefore supplied the next
+line's lower DWORD in place of the current line's lower DWORD. The header
+probe uses even DWORD addresses and cannot expose this bug. The mux now
+aligns cart requests and swaps the two returned DWORDs for an odd original
+address, latched with the request. The direct header-probe path is unchanged.
+
+The new `tb_rom_source_mux.sv` exercises the mux with the actual controller
+and sequential cartridge model. Before the fix it failed at DWORD address 1
+(companion `D7CDB802`, expected `5EE9C0DE`); after the fix all 70 line reads,
+SDRAM forwarding, and the two existing cartridge benches pass. This is a
+confirmed cache corruption fix, not yet confirmation of the hardware freeze's
+cause. A new FPGA build and hardware boot retest are required.
+
 The 20/6 sequential timing change is committed as **`85bb71a`** on
 `p5-cartridge`. It closed at **seed 1 on sisko**, Quartus 25.1std,
 STANDARD FIT, 16 processors, in **1449 s**:
@@ -40,13 +61,31 @@ platform files, settings and saves are backed up under
 9 end-to-end cases and both cartridge benches. The optional cheat corpus
 checks were skipped because no `CHT_DB` was configured.
 
-**Next is hardware.** With Minish Cap inserted, set Cartridge to `Detect`
-and restart. Expect `CS:` low byte `E1`, bits 15:8 `96`, and
-`CG:` = `1113214277` (`BZME`). If detection passes, select `Boot` and check
-gameplay. Also check an SD ROM with Cartridge `Off` and a cold load with
-`Detect` persisted. This build includes both the probe reset fix and the
-slower sequential reads, but neither is qualified on hardware yet. Cartridge
-saves remain unsupported. No GBA tag until a cartridge boots.
+**Hardware result:** Kroy reported `CG: 0x54005400`, `CS: 0x007C58E1`
+after this installation. The probe now completes, but this is a false-positive
+detection, not a valid cartridge header. The fixed byte is `58`, not `96`,
+and the game code is wrong. These readings exactly match a model in which
+every halfword in each burst returns its initially driven address: request
+index 42 drives halfword address `0054`, index 44 drives `0058`, and ORing
+all 24 request addresses gives `007C`. Address readback is therefore the
+leading hypothesis; these readings alone do not distinguish retained bus
+values, a pin-direction/read-path problem, or an unresponsive cartridge.
+The two-pass OR/AND comparison accepts this repeatable bad data. Hardware
+qualification failed on that attempt; do not treat `E1` alone as a valid header.
+
+**Successful detection retest:** Kroy's subsequent menu photo shows
+`CG: 0x425A4D45` (`BZME`, Minish Cap) and `CS: 0xFFFF96E1`.
+The game code and fixed header byte now match, and both probe fingerprints
+agree without timeout. `FFFF` here is the OR fingerprint of the header;
+the all-FFFF flag is clear, so this does not indicate an empty slot.
+This followed a request to power off and reseat the cartridge, but the exact
+steps taken were not reported; the cause of the initial failure remains open.
+
+**Next:** select Cartridge `Boot`, restart, and check boot and gameplay.
+Also check an SD ROM with Cartridge `Off` and a cold load with `Detect`
+persisted. Detection has now passed on hardware; sustained cartridge reads
+and gameplay remain unqualified. Cartridge saves remain unsupported.
+No GBA tag until a cartridge boots.
 
 ## Earlier 2026-09-06 snapshot: conservative sequential timing, not yet fit
 

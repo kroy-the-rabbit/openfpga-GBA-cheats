@@ -41,12 +41,25 @@ module rom_source_mux (
     assign sdram_rd_req   = cart_mode ? 1'b0 : gba_rd_req;
     assign sdram_rd_addr  = gba_rd_addr;
     assign cart_rd_req    = cart_mode ? gba_rd_req : 1'b0;
-    assign cart_rd_addr   = gba_rd_addr;
+
+    // cache.vhd fills one aligned 8-byte line per request. SDRAM's burst
+    // wraps within that line: an odd DWORD address returns the upper DWORD
+    // first, then the lower. The cart controller instead reads forward.
+    // Fetch an aligned pair and reorder it to preserve the cache contract.
+    assign cart_rd_addr   = {gba_rd_addr[24:1], 1'b0};
+    reg cart_upper_first = 1'b0;
+    always @(posedge clk) begin
+        if (cart_rd_req)
+            cart_upper_first <= gba_rd_addr[0];
+    end
+
+    wire [31:0] cart_first = cart_upper_first ? cart_rd_data_second : cart_rd_data;
+    wire [31:0] cart_second = cart_upper_first ? cart_rd_data : cart_rd_data_second;
 
     // Return the selected source's response to gba_top
     assign gba_rd_ready        = cart_mode ? cart_rd_ready        : sdram_rd_ready;
-    assign gba_rd_data         = cart_mode ? cart_rd_data         : sdram_rd_data;
-    assign gba_rd_data_second  = cart_mode ? cart_rd_data_second  : sdram_rd_data_second;
+    assign gba_rd_data         = cart_mode ? cart_first           : sdram_rd_data;
+    assign gba_rd_data_second  = cart_mode ? cart_second          : sdram_rd_data_second;
 
 endmodule
 

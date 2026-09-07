@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Cartridge ROM read path: src/fpga/han/gba_cart_controller.sv.
 
-Two passes.
+Three passes.
 
 1. sim/han/tb_gba_cart_controller.sv, Wokann's whole-controller bench,
    vendored verbatim. It covers SRAM, GPIO and EEPROM as well as ROM, so it
@@ -16,6 +16,9 @@ Two passes.
    as built. It runs a ROM_BURST=0 and a ROM_BURST=1 controller side by side
    against a cart model that does advance its counter on the RD# rising edge,
    and checks the data, the pin waveform and the cycle count.
+
+3. sim/han/tb_rom_source_mux.sv checks the CPU cache's paired-DWORD
+   contract through the mux and real controller, including odd addresses.
 
 ROM_BURST is a module parameter with no port, and iverilog's -P only reaches
 root modules, so pass 1 gets a copy of the controller with the parameter
@@ -38,6 +41,8 @@ BUILD = os.path.join(ROOT, "build", "sim")
 CTRL = os.path.join(ROOT, "src", "fpga", "han", "gba_cart_controller.sv")
 TB_WOKANN = os.path.join(ROOT, "sim", "han", "tb_gba_cart_controller.sv")
 TB_BURST = os.path.join(ROOT, "sim", "han", "tb_gba_cart_rom_burst.sv")
+TB_MUX = os.path.join(ROOT, "sim", "han", "tb_rom_source_mux.sv")
+MUX = os.path.join(ROOT, "src", "fpga", "han", "rom_source_mux.sv")
 
 BURST_PARAM = re.compile(r"^(\s*parameter integer ROM_BURST\s*=\s*)\d+(\s*,)$",
                          re.M)
@@ -56,10 +61,12 @@ def no_burst_copy() -> str:
     return path
 
 
-def run(name: str, exe: str, sources: list) -> bool:
-    subprocess.run(["iverilog", "-g2012", "-o", exe] + sources, check=True)
-    out = subprocess.run([exe], capture_output=True, text=True).stdout
-    ok = "PASS" in out and "FAIL" not in out
+def run(name: str, exe: str, sources: list, top: str | None = None) -> bool:
+    select = ["-s", top] if top else []
+    subprocess.run(["iverilog", "-g2012", "-o", exe] + select + sources, check=True)
+    result = subprocess.run([exe], capture_output=True, text=True)
+    out = result.stdout + result.stderr
+    ok = result.returncode == 0 and "PASS" in out and "FAIL" not in out
     print(f"{'ok  ' if ok else 'FAIL'} {name}")
     for line in out.strip().splitlines():
         if line.startswith(("FAIL", "CYCLES", "PASS")):
@@ -79,8 +86,11 @@ def main() -> int:
     passes += run("ROM read burst vs per-word, waveform and cycle count",
                   os.path.join(BUILD, "tb_cart_rom_burst"),
                   [TB_BURST, CTRL])
-    print(f"\n{passes}/2 benches pass")
-    return 0 if passes == 2 else 1
+    passes += run("ROM mux cache-line ordering and SDRAM forwarding",
+                  os.path.join(BUILD, "tb_rom_source_mux"),
+                  [TB_MUX, TB_BURST, CTRL, MUX], top="tb_rom_source_mux")
+    print(f"\n{passes}/3 benches pass")
+    return 0 if passes == 3 else 1
 
 
 if __name__ == "__main__":
