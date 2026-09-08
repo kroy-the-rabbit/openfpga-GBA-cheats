@@ -37,6 +37,15 @@ core at all rather than start it without the slot.
 | Cartridge RTC/GPIO | not routed |
 | Writing to a cartridge | disabled by default; enabled explicitly via Cartridge Saves |
 
+## Interrupted EEPROM transfers (new source)
+
+**Save Fault** is normally 0. If a physical EEPROM transfer is interrupted,
+the bridge blocks further physical EEPROM traffic and reports 1. Power the
+Pocket fully off and relaunch the core before continuing. Reset Core does
+not clear the fault; a CS pulse is not assumed to reset the chip's serial
+command parser. This prevents a later transfer inheriting write permission
+from an aborted DMA. It cannot undo a physical write interrupted in progress.
+
 ## First hardware run, 2026-09-05
 
 Build `0.9999-cheats.60990db`, `p5-cartridge` at `60990db`, Quartus 25.1std,

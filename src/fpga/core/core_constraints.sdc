@@ -188,21 +188,12 @@ set_multicycle_path -hold 1 \
 # so those paths genuinely have one cycle and constraining them would be a
 # lie that closes timing in the report and fails on a bench.
 #
-# The Cartridge menu switch gets the same treatment. It is written once at
-# boot from the persisted menu value and any later change resets the core, so
-# it is as static as phi_sel is; what makes it worth constraining is its
-# fanout, since it gates the controller's synchronous reset and therefore
-# reaches every register in the module. The pin muxes it also drives are I/O
-# paths, not register to register, so this does not touch them.
+# APF cartridge launch/reset controls use normal single-cycle timing. The
+# former cart_menu_sync register no longer exists; do not transfer its timing
+# exception to the new launch signals.
 set_multicycle_path -setup 4 \
   -from [get_registers {*cart_cfg_sync|o[*]}] \
   -to   [get_registers {*gba_cart_controller*}]
 set_multicycle_path -hold 3 \
   -from [get_registers {*cart_cfg_sync|o[*]}] \
-  -to   [get_registers {*gba_cart_controller*}]
-set_multicycle_path -setup 4 \
-  -from [get_registers {*cart_menu_sync|o[*]}] \
-  -to   [get_registers {*gba_cart_controller*}]
-set_multicycle_path -hold 3 \
-  -from [get_registers {*cart_menu_sync|o[*]}] \
   -to   [get_registers {*gba_cart_controller*}]

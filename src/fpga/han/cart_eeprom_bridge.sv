@@ -16,6 +16,8 @@ module cart_eeprom_bridge (
     input  wire        host_rnw,
     input  wire        host_din,
     input  wire        host_dma,
+    // Channel lifetime, including gaps/preemption between individual bits.
+    input  wire        host_dma_active,
     input  wire [16:0] host_count,
     input  wire        host_last,
     output reg         host_dout,
@@ -26,7 +28,10 @@ module cart_eeprom_bridge (
     output reg         ctl_din,
     output reg         ctl_dma,
     input  wire        ctl_dout,
-    input  wire        ctl_done
+    input  wire        ctl_done,
+    // An interrupted physical serial transfer cannot safely be restarted by
+    // pulsing CS#. Only FPGA configuration clears this fail-closed latch.
+    output reg         fault = 1'b0
 );
 
     localparam [1:0] IDLE = 2'd0, WAIT_BIT = 2'd1,
@@ -37,10 +42,43 @@ module cart_eeprom_bridge (
     reg command_allowed;
     reg prefix_pending;
     reg second_dma;
+    reg host_last_r;
+    reg transfer_open = 1'b0;
+    reg transfer_sent = 1'b0;
+
+    // ctl_req is the request accepted by the outer queue on this edge. Count
+    // it even if DMA/reset changes simultaneously: the accepted bit may drain.
+    wire abort_fault = transfer_open && (transfer_sent || ctl_req) &&
+                       (!host_dma_active || !reset_n) &&
+                       !(host_done && host_last_r);
 
     wire read_command_length = host_count == 17'd9 || host_count == 17'd17;
 
-    always @(posedge clk or negedge reset_n) begin
+    // This reset is synchronous so the first reset clock can record a live
+    // physical transfer before clearing policy/FSM state. The bus controller
+    // owns the electrical pulse; a bridge-only soft reset does not truncate
+    // it. APF reset or loss of cartridge power can also reset that controller
+    // and is not a promise of electrically safe write interruption.
+    always @(posedge clk) begin
+        if (abort_fault) fault <= 1'b1;
+
+        if (!reset_n || !host_dma_active || fault || abort_fault) begin
+            transfer_open <= 1'b0;
+            transfer_sent <= 1'b0;
+        end else begin
+            if (host_done && host_last_r) begin
+                // The last physical bit has completed, not merely queued.
+                transfer_open <= 1'b0;
+                transfer_sent <= 1'b0;
+            end
+            if (state == IDLE && host_req && host_dma &&
+                (!transfer_open || (host_done && host_last_r))) begin
+                transfer_open <= 1'b1;
+                transfer_sent <= 1'b0;
+            end
+            if (ctl_req) transfer_sent <= 1'b1;
+        end
+
         if (!reset_n) begin
             state           <= IDLE;
             command_active  <= 1'b0;
@@ -48,6 +86,7 @@ module cart_eeprom_bridge (
             command_allowed <= 1'b0;
             prefix_pending  <= 1'b0;
             second_dma      <= 1'b0;
+            host_last_r     <= 1'b1;
             host_dout       <= 1'b1;
             host_done       <= 1'b0;
             ctl_req         <= 1'b0;
@@ -57,9 +96,38 @@ module cart_eeprom_bridge (
         end else begin
             host_done <= 1'b0;
             ctl_req   <= 1'b0;
-            case (state)
+            if (!host_dma_active) begin
+                command_active  <= 1'b0;
+                command_raw     <= 1'b0;
+                command_allowed <= 1'b0;
+                prefix_pending  <= 1'b0;
+            end
+            if (fault || abort_fault) begin
+                command_active  <= 1'b0;
+                command_raw     <= 1'b0;
+                command_allowed <= 1'b0;
+                prefix_pending  <= 1'b0;
+                host_dout <= 1'b1;
+                case (state)
+                    WAIT_BIT, WAIT_PREFIX: if (ctl_done) begin
+                        host_done <= 1'b1;
+                        state <= IDLE;
+                    end
+                    ISSUE_SECOND: begin
+                        // Prefix bit one may finish; never launch bit two.
+                        host_done <= 1'b1;
+                        state <= IDLE;
+                    end
+                    default: if (host_req) host_done <= 1'b1;
+                endcase
+            end else case (state)
                 IDLE: if (host_req) begin
-                    if (host_rnw) begin
+                    host_last_r <= host_last;
+                    if (host_dma && !host_dma_active) begin
+                        // The memory bus may retire a bit after DMA aborts.
+                        host_dout <= 1'b1;
+                        host_done <= 1'b1;
+                    end else if (host_rnw) begin
                         // Reads include DMA data bursts and individual CPU
                         // ready polls. Each CPU access closes its selection.
                         command_active <= 1'b0;
@@ -69,7 +137,7 @@ module cart_eeprom_bridge (
                         ctl_din  <= 1'b0;
                         ctl_dma  <= host_dma && !host_last;
                         state    <= WAIT_BIT;
-                    end else if (!command_active) begin
+                    end else if (!command_active || !host_dma || !host_dma_active) begin
                         command_active  <= host_dma && !host_last;
                         command_raw     <= write_enable;
                         command_allowed <= host_dma && read_command_length &&

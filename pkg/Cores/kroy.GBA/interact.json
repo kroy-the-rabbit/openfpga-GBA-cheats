@@ -156,6 +156,13 @@
         "type": "number_u32",
         "enabled": true,
         "address": "0xF4000004"
+      },
+      {
+        "name": "Save Fault",
+        "id": 54,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF4000008"
       }
     ],
     "messages": []

@@ -5,6 +5,49 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-07: EEPROM persistence preparation and interrupted-DMA fix
+
+User asked to fan out and continue toward cartridge play/save support.
+
+- Physical Minish EEPROM backup found and SHA256-verified at
+  `../pocket-cartridge/build/card-verified-250d/GBAZELDA_MC.sav` (8192 bytes,
+  `2fb51f21588769f0183d8ead956758d3812397d8f6370458dd639b617c83fad0`).
+  Matching rollback copy and provenance are in
+  `build/hardware-results/99293a3/physical-save-backup/`.
+- Added EEPROM busy-to-ready polling and readback after FPGA reset to existing
+  pin-model benches; these pass. This models host reset after programming is
+  complete, not interrupted physical power or programming.
+- Reproduced a bridge permission leak after a DMA abort: a later transfer
+  could inherit an earlier Writes Enabled decision. The fix exposes live DMA3
+  activity and stops physical EEPROM traffic after an interrupted
+  physical command. Do not infer recovery from a CS pulse or pad a command.
+- A sticky **Save Fault** diagnostic at `0xF4000008` reports that condition;
+  normal traffic is 0. A value of 1 requires a full power cycle and relaunch,
+  not Reset Core. Writes remain a nonpersistent test opt-in.
+- Removed the obsolete `cart_menu_sync` timing exception; automatic launch
+  signals retain normal single-cycle timing. The previous seed-8 automatic
+  launch build failed setup (details below) and is not installable.
+
+Validation complete: `make test` passed all 8 cartridge benches (including
+seven abort/boundary cases and four physical EEPROM model variants), GHDL
+memorymux, APF command/top-level launch benches, and cheat suites. Optional
+external cheat-corpus checks were skipped. The updated VHDL hierarchy also
+analyzes/elaborates with the existing unrelated vendor RAM interface stub.
+The regression caught and fixed a false fault at simultaneous final-bit
+completion/DMA inactivity; valid save data now reads back at that boundary.
+
+Next: queue the combined revision on sisko with explicit seed 3. Seed 8 failed
+on the previous launch revision; no unproven timing exception was added.
+Independent final RTL/wiring review passed. The existing hardware-proven card
+build is still `99293a3`.
+
+Next physical persistence test, after installing a timing-passing candidate:
+disable cheats; confirm Adam/BRO and empty slot 2; enable Writes Enabled,
+create **TEST** in slot 2 and save through the game, wait for save completion,
+then fully power off. Relaunch in Read Only and verify TEST progress plus
+unchanged Adam/BRO. Do not change write permission during a save operation;
+Flash permission is currently per byte, not per complete Flash command.
+
 ## 2026-09-07: loaded cartridge save and gameplay with cheats confirmed
 
 Kroy confirms the same Minish Cap test successfully **loaded a working save
@@ -43,11 +86,13 @@ actual `core_top` control-path bench also passed: APF notification through
 source synchronizers, CPU/controller reset, save isolation and stale `0x90`
 immunity. This bench models probe results and omits unrelated engines; the
 real probe/VHDL/pins are covered separately, not by that launch bench.
-**Build started and verified running on sisko**, explicit seed 8:
+**Build finished but failed timing on sisko**, explicit seed 8:
 
 - Source: `6302c433339cbe79592a8e7ae54c7348b4ac860c`.
 - Job: `pocket-gba-gba-p5cart-auto-s8-6302c433339c`.
-- Launcher PID: `597423`. Latest check: Quartus elaborating the GBA hierarchy.
+- Launcher PID: `597423`; finished rc=2 after 1733 seconds.
+- Setup **-0.110 ns**, hold +0.072 ns, 18,093/18,480 ALMs (98%).
+  **Do not install.** Artifacts: `build/gba/artifacts/6302c43-seed8-FAILED/`.
 - Status: `../tools/runner-build job sisko pocket-gba gba p5cart-auto-s8 6302c43`.
 - Fetch when done: `../tools/runner-build fetch sisko pocket-gba gba p5cart-auto-s8 6302c43`.
 - Do not wait interactively for compilation. Check all timing types and fit
@@ -58,9 +103,13 @@ real probe/VHDL/pins are covered separately, not by that launch bench.
   launch remains independent. Keep saves Read Only for this check.
 
 No new package has been installed; the mounted card still runs hardware-tested `99293a3`.
-`findmnt` currently reports `/dev/sda1` at `/run/media/kroy/pocket` as **ro**
-(exFAT). No repair/remount was attempted. Check that mount before the next
-deployment; preserve the instruction to leave the card mounted after writing.
+The earlier read-only mount observation came from the sandbox and was not
+evidence of a card fault. The user ran `fsck.exfat -a /dev/sdb1` and reported
+**clean: 813 directories, 6917 files**. Do not repeat filesystem checks or
+repair based on sandbox restrictions. Use the normal approved access outside
+the sandbox for card installation, identify the card by UUID `7AFF-9FB9`, and
+leave it mounted after writing. For necessary privilege elevation the user
+prefers **pkexec**, not sudo. Never hard-code a stale device name.
 
 ## 2026-09-07: existing Minish Cap cartridge saves confirmed on hardware
 

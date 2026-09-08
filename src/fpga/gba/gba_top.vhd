@@ -95,6 +95,8 @@ entity gba_top is
       cart_eeprom_rnw      : out    std_logic := '1';
       cart_eeprom_din      : out    std_logic := '0';
       cart_eeprom_dma      : out    std_logic := '0';
+      -- Live transfer lifetime, including gaps and higher-priority DMA.
+      cart_eeprom_dma_active : out  std_logic := '0';
       cart_eeprom_last     : out    std_logic := '1';
       cart_eeprom_count    : out    std_logic_vector(16 downto 0) := (others => '0');
       cart_eeprom_dout     : in     std_logic := '1';
@@ -410,6 +412,7 @@ begin
    mem_bus_rnw  <=  debug_bus_rnw         when debug_bus_active = '1' else cpu_bus_rnw  when cpu_bus_ena = '1' else dma_bus_rnw;
    mem_bus_ena  <=  debug_bus_ena         when debug_bus_active = '1' else cpu_bus_ena  when cpu_bus_ena = '1' else dma_bus_ena; 
    mem_bus_acc  <=  debug_bus_acc         when debug_bus_active = '1' else cpu_bus_acc  when cpu_bus_ena = '1' else dma_bus_acc;
+   cart_eeprom_dma_active <= dma3_active;
    mem_bus_dma3 <= dma3_bus_ena and not cpu_bus_ena and not debug_bus_active;
    mem_bus_dout <=  debug_bus_dout        when debug_bus_active = '1' else cpu_bus_dout when cpu_bus_ena = '1' else dma_bus_dout;
        

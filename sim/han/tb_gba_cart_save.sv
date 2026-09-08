@@ -2,7 +2,7 @@
 // Pin-level EEPROM command model, including existing-save reads. Unlike a
 // toggling-bit fixture, only a complete serial command selects the saved block.
 `timescale 1ns/1ps
-module cart_eeprom_model #(parameter ADDR_BITS = 14)(
+module cart_eeprom_model #(parameter ADDR_BITS = 14, parameter BUSY_POLLS = 0)(
     input wire cs_n, rd_n, wr_n, a23,
     inout wire d0
 );
@@ -13,6 +13,8 @@ module cart_eeprom_model #(parameter ADDR_BITS = 14)(
     integer read_index = 0;
     integer selected_block = 0;
     integer writes = 0;
+    // Model protocol-level busy responses, not chip-specific program time.
+    integer busy_polls = 0;
     reg selected = 0;
     reg read_pending = 0;
     reg output_enable = 0;
@@ -43,6 +45,7 @@ module cart_eeprom_model #(parameter ADDR_BITS = 14)(
     end
     always @(posedge cs_n) begin
         if (selected && command_bits != 0) begin
+            if (busy_polls != 0) $fatal(1, "FAIL: EEPROM command issued before programming ready");
             if (command_bits == ADDR_BITS + 3 &&
                 (command >> (ADDR_BITS + 1)) == 2'b11 && command[0] == 0) begin
                 selected_block = (command >> 1) & (BLOCKS-1);
@@ -52,6 +55,7 @@ module cart_eeprom_model #(parameter ADDR_BITS = 14)(
                 selected_block = (command >> 65) & (BLOCKS-1);
                 mem[selected_block] = command >> 1;
                 writes = writes + 1;
+                busy_polls = BUSY_POLLS;
                 read_pending = 0;
             end else begin
                 $fatal(1, "FAIL: invalid EEPROM command (%0d address bits): length=%0d value=%h",
@@ -64,7 +68,10 @@ module cart_eeprom_model #(parameter ADDR_BITS = 14)(
     always @(negedge rd_n) begin
         if (selected && !cs_n) begin
             output_enable = 1;
-            if (read_pending) begin
+            if (busy_polls != 0) begin
+                output_bit = 0;
+                busy_polls = busy_polls - 1;
+            end else if (read_pending) begin
                 output_bit = (read_index < 4) ? 0 : mem[selected_block][67-read_index];
                 read_index = read_index + 1;
                 if (read_index == 68) read_pending = 0;

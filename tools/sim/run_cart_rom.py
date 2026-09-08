@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Cartridge ROM read path: src/fpga/han/gba_cart_controller.sv.
 
-Seven passes.
+Eight passes.
 
 1. sim/han/tb_gba_cart_controller.sv, Wokann's whole-controller bench,
    vendored verbatim. It covers SRAM, GPIO and EEPROM as well as ROM, so it
@@ -33,6 +33,9 @@ Seven passes.
 
 7. The mux bench also runs through cart_bus_arbiter and the real controller,
    including two held-request header probe passes and the CPU handoff.
+
+8. sim/han/tb_cart_eeprom_abort.sv checks aborted DMA commands cannot retain
+   write permission and authorize traffic after writes are disabled.
 
 ROM_BURST is a module parameter with no port, and iverilog's -P only reaches
 root modules, so pass 1 gets a copy of the controller with the parameter
@@ -123,8 +126,12 @@ def main() -> int:
                   [TB_MUX, TB_BURST, CTRL, MUX,
                    os.path.join(ROOT, "src", "fpga", "han", "cart_bus_arbiter.sv")],
                   top="tb_rom_source_mux_arbiter")
-    print(f"\n{passes}/7 benches pass")
-    return 0 if passes == 7 else 1
+    passes += run("EEPROM aborted DMA clears command write permission",
+                  os.path.join(BUILD, "tb_cart_eeprom_abort"),
+                  [os.path.join(ROOT, "sim", "han", "tb_cart_eeprom_abort.sv"), EEPROM_BRIDGE],
+                  top="tb_cart_eeprom_abort")
+    print(f"\n{passes}/8 benches pass")
+    return 0 if passes == 8 else 1
 
 
 if __name__ == "__main__":

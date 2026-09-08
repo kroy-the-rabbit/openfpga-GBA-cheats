@@ -256,6 +256,8 @@ wire [7:0] cart_save_din, cart_save_dout;
 wire       cart_eeprom_req, cart_eeprom_rnw, cart_eeprom_din;
 wire       cart_eeprom_dma, cart_eeprom_last, cart_eeprom_dout, cart_eeprom_done;
 wire [16:0] cart_eeprom_count;
+wire       cart_eeprom_dma_active;
+wire       cart_eeprom_fault, cart_eeprom_fault_s;
 
 // Menu readouts, in clk_74a for the bridge read mux. Driven at the bottom.
 wire [31:0] cart_readout_id_s;
@@ -1502,6 +1504,9 @@ always @(*) begin
     32'hF4000004: begin
         bridge_rd_data <= cart_readout_st_s;
     end
+    32'hF4000008: begin
+        bridge_rd_data <= {31'd0, cart_eeprom_fault_s};
+    end
     32'hF3000004: begin
         bridge_rd_data <= {24'd0, cheat_overrun_s, cheats_master,
                            cheat_rejected_s};
@@ -1631,6 +1636,7 @@ wire cart_hw_requested_74a = osnotify_cart_play & osnotify_cart_power;
 synch_3 cart_hw_sync(cart_hw_requested_74a, cart_hw_enable_s, clk_sys);
 synch_3 cart_play_sync(osnotify_cart_play, cart_rom_select_s, clk_sys);
 synch_3 cart_writes_sync(cart_writes, cart_writes_s, clk_sys);
+synch_3 cart_eeprom_fault_sync(cart_eeprom_fault, cart_eeprom_fault_s, clk_74a);
 
 // Only the bits with a consumer are carried across. gpio_recover_set is left
 // at the controller's own hardware-proven constant because nothing drives the
@@ -1849,6 +1855,7 @@ gba_top #(
     .cart_eeprom_rnw     ( cart_eeprom_rnw ),
     .cart_eeprom_din     ( cart_eeprom_din ),
     .cart_eeprom_dma     ( cart_eeprom_dma ),
+    .cart_eeprom_dma_active ( cart_eeprom_dma_active ),
     .cart_eeprom_count   ( cart_eeprom_count ),
     .cart_eeprom_last    ( cart_eeprom_last ),
     .cart_eeprom_dout    ( cart_eeprom_dout ),
@@ -2035,6 +2042,7 @@ cart_eeprom_bridge ee_bridge (
     .write_enable(cart_writes_s),
     .host_req(cart_eeprom_req && cart_rom_mode), .host_rnw(cart_eeprom_rnw),
     .host_din(cart_eeprom_din), .host_dma(cart_eeprom_dma),
+    .host_dma_active(cart_eeprom_dma_active), .fault(cart_eeprom_fault),
     .host_count(cart_eeprom_count), .host_last(cart_eeprom_last),
     .host_dout(cart_eeprom_dout), .host_done(cart_eeprom_done),
     .ctl_req(ee_bridge_req), .ctl_rnw(ee_bridge_rnw), .ctl_din(ee_bridge_din),
