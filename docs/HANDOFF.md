@@ -5,6 +5,43 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-08: compact diagnostics failed; exact passing control rebuilding
+
+`3f7ae09` seed 3 failed setup **−2.790 ns** (1463 s), despite reducing area
+to 17,751/18,480 ALMs (96%), 25,334 registers. Other worst slacks: hold
++0.074 ns, recovery +3.825 ns, removal +0.327 ns, minimum pulse +0.827 ns.
+Actual worst path: CPU `block_pc_next[24]` → `block_writevalue[24]`, with
+12.401 ns data delay against a 9.931 ns clock relationship. Other reported
+failures involve CPU operand selection. The compact experiment did not close
+timing. Watcher saved its result/reports and delivered the failure notification.
+Artifacts: `build/watch/pocket-gba-gba-p5cart-compact-s3-3f7ae094b13f/`.
+
+Before further RTL edits, an **exact control rebuild of the previously passing
+`417a55f1c21bd1a6fa27c27e158987ddfd1c5011`, seed 3**, is running on sisko:
+job `pocket-gba-gba-p5cart-control-s3-417a55f1c21b`, launcher PID `649432`.
+Actual generated QSF and generate.tcl were byte-compared against the previous
+`p5cart-abort-s3` passing job and match. This is a clean detached checkout of
+the old revision, not current RTL with features toggled. Prior passing result:
+setup +0.092 ns, hold +0.114 ns, 17,819 ALMs, 25,136 registers.
+
+This control checks reproducibility of the baseline under the current build
+runner. A pass directs attention back to diagnostic-induced synthesis/placement
+changes; a failure requires investigating build variability/settings before
+further RTL changes. Do not conclude that lower area guarantees better timing.
+
+Persistent watcher: `pocket-gba-watch-control-417a55f.service`, PID `2258245`
+at startup. First SSH poll and desktop notification verified. Its result is
+`build/watch/pocket-gba-gba-p5cart-control-s3-417a55f1c21b/result.json`.
+New explicit `--baseline` mode validates timing/fit/package but does not require
+diagnostic registers absent in old RTL, and reports **baseline-passed**, never
+ready-to-write. Default diagnostic mode still requires snapshot routing.
+Validated against the authentic old passing package; failed timing and missing
+snapshot reports in normal mode were rejected as intended.
+
+**No card write or unmount.** The control is not a new diagnostic/game fix;
+installed `417a55f` remains unchanged, and Zero Mission is still unresolved.
+No further diagnostic build is queued until the control result is examined.
+
 ## 2026-09-08: compact diagnostics building from the passing engine baseline
 
 User approved the smaller diagnostic experiment. Source

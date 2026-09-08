@@ -30,7 +30,7 @@ def source(commit, path):
     return subprocess.check_output(['git', 'show', f'{commit}:{path}'], cwd=ROOT)
 
 
-def validate(folder, commit):
+def validate(folder, commit, *, baseline=False):
     report = (folder / 'report.txt').read_text()
     if not re.search(r'^commit:\s+' + re.escape(commit[:7]) + r'\s*$', report, re.M):
         raise ValueError('Timing report commit does not match the requested source')
@@ -47,7 +47,7 @@ def validate(folder, commit):
     if not fit or int(fit[1].replace(',', '')) > int(fit[2].replace(',', '')):
         raise ValueError('Missing or over-capacity ALM fit')
     snapshot = {}
-    for corner in CORNERS:
+    for corner in (() if baseline else CORNERS):
         text = (folder / 'timing-paths' / f'snapshot-{corner}.txt').read_text()
         match = re.search(r'Report Path: Found 1 paths\. Longest delay is (\d+\.\d+)', text)
         if not match:
@@ -108,6 +108,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('job')
     parser.add_argument('commit')
+    parser.add_argument('--baseline', action='store_true',
+                        help='Verify a control build without snapshot RTL; report baseline-passed, never ready-to-write')
     args = parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,39}', args.job):
         parser.error('Invalid job name')
@@ -120,7 +122,8 @@ def main():
     folder.mkdir(parents=True, exist_ok=True)
     result_path = folder / 'result.json'
     state = dict(state='watching', job=key, commit=args.commit, pid=os.getpid(),
-                 started=datetime.now(timezone.utc).isoformat(), card_written=False)
+                 started=datetime.now(timezone.utc).isoformat(), card_written=False,
+                 baseline=args.baseline)
 
     def save():
         state['updated'] = datetime.now(timezone.utc).isoformat()
@@ -185,10 +188,18 @@ def main():
             core = json.loads(source(args.commit, 'pkg/Cores/kroy.GBA/core.json'))
             version = core['core']['metadata']['version'] + '.' + args.commit[:7]
             bitname = core['core']['cores'][0]['filename']
-            for name in (bitname, f'kroy.GBA_{version}.zip', 'path-analysis.log'):
+            artifacts = [bitname, f'kroy.GBA_{version}.zip']
+            if not args.baseline:
+                artifacts.append('path-analysis.log')
+            for name in artifacts:
                 run(SCP + [f'{HOST}:{remote}/{name}', str(folder / name)], timeout=120)
-            state.update(validate(folder, args.commit), state='ready-to-write')
+            state.update(validate(folder, args.commit, baseline=args.baseline),
+                         state='baseline-passed' if args.baseline else 'ready-to-write')
             save()
+            if args.baseline:
+                notify('Pocket GBA control build passed',
+                       f'{args.commit[:7]} passed timing and package checks. This is the existing baseline, not a new diagnostic build. Card untouched. Result: {result_path}')
+                return
             notify('Pocket GBA ready for card',
                    f'{args.commit[:7]} passed timing, snapshot routing and package checks. {state["staged_files"]} files staged. Card untouched. Result: {result_path}')
             return
