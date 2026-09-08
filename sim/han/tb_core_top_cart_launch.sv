@@ -74,6 +74,18 @@ module tb_core_top_cart_launch;
             end
         end
     endtask
+    reg [63:0] captured_pattern=0, stable_pattern=0;
+    reg [63:0] expected_pattern=64'hD1A65EED4B3C2907;
+    integer pattern_samples=0;
+    always @(posedge clk) begin
+        if (dut.cart_debug_pattern !== expected_pattern)
+            $fatal(1,"FAIL diagnostic pattern sequence");
+        expected_pattern = {expected_pattern[62:0],expected_pattern[63]};
+        if (dut.boot_debug.request_sync[1] != dut.boot_debug.ack_toggle) begin
+            captured_pattern = dut.cart_debug_pattern;
+            pattern_samples = pattern_samples + 1;
+        end
+    end
     initial begin
         repeat(10) @(negedge clk);
         command(16'h0011,0);
@@ -96,39 +108,22 @@ module tb_core_top_cart_launch;
         expect_mode(1,1,0,1,0); // failed probe must not run stale SDRAM game
         command(16'h00b1,32'h00010000);expect_mode(0,0,0,0,1);
         command(16'h00b1,0);expect_mode(0,0,0,0,1);
-        // Supply the otherwise omitted VHDL/FPGA diagnostic sources. The
-        // real top must pack, snapshot and decode both retained host readouts.
-        // Holding GBA reset demonstrates that diagnostics do not need the
-        // emulated CPU to run or leave reset before opening the menu.
-        force dut.gba_debug_pc=32'h08012344;
-        force dut.gba_debug_cpu=32'h00000abc;
-        force dut.gba_debug_mem=32'h00000025;
-        force dut.gba_debug_irq=32'h0001beef;
-        force dut.cart_eeprom_fault=1;
-        force dut.cart_writes_s=0;
-        force dut.cheats_enabled=1;
-        force dut.cart_save_rnw=1;
-        force dut.debug_save_wait=0;
-        force dut.debug_rom_wait=1;
-        force dut.debug_psram_wait=0;
+        // Actual free-running pattern and actual snapshot, with no forced
+        // diagnostic payload or CPU debug outputs. Capture during GBA reset.
         force dut.reset_gba=1;
-        force dut.cart_rom_mode=0;
-        force dut.cart_arb_busy=1;
-        force dut.cart_eeprom_dma_active=0;
         expect_debug(0,0);
         command(16'h00b0,1);
-        expect_debug(32'h08012344,32'hb5625abc);
-        force dut.gba_debug_pc=32'h08056788;
-        force dut.gba_debug_cpu=32'h00000135;
-        force dut.gba_debug_mem=32'h00000027;
-        force dut.gba_debug_irq=32'h00001234;
-        command(16'h00b0,1); // Already open: snapshot must remain unchanged.
-        expect_debug(32'h08012344,32'hb5625abc);
+        expect_debug(captured_pattern[31:0],captured_pattern[63:32]);
+        stable_pattern = captured_pattern;
+        command(16'h00b0,1); // Already open: retain the same snapshot.
+        expect_debug(stable_pattern[31:0],stable_pattern[63:32]);
+        if (captured_pattern !== stable_pattern) $fatal(1,"FAIL pattern recaptured while menu open");
         command(16'h00b0,0);
         command(16'h00b0,1);
-        expect_debug(32'h08056788,32'hb5227135);
+        expect_debug(captured_pattern[31:0],captured_pattern[63:32]);
+        if (pattern_samples != 2) $fatal(1,"FAIL pattern capture count %0d",pattern_samples);
         $display("PASS core_top cartridge launch: real APF notification, synchronization, reset/probe gating, SD-save isolation and stale-menu immunity");
-        $display("PASS core_top debug packing, two readouts, retired addresses zero and stable APF menu snapshots during GBA reset");
+        $display("PASS core_top debug packing, dynamic pattern, retired addresses zero and stable APF menu snapshots during GBA reset");
         $finish;
     end
     initial begin #100000; $fatal(1,"FAIL top cartridge launch watchdog"); end

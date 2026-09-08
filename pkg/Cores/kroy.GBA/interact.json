@@ -165,14 +165,14 @@
         "address": "0xF4000008"
       },
       {
-        "name": "CPU PC",
+        "name": "Pattern Lo",
         "id": 60,
         "type": "number_u32",
         "enabled": true,
         "address": "0xF4000010"
       },
       {
-        "name": "CPU State",
+        "name": "Pattern Hi",
         "id": 61,
         "type": "number_u32",
         "enabled": true,

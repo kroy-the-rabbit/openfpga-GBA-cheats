@@ -12,6 +12,13 @@ set published [get_registers {*boot_debug|host_debug[*]}]
 if {[get_collection_size $captured] == 0 || [get_collection_size $published] == 0} {
     error "Diagnostic snapshot registers were not found"
 }
+set pattern [get_registers {*|cart_debug_pattern[*]}]
+if {[get_collection_size $pattern] < 64 ||
+    [get_collection_size $captured] < 64 ||
+    [get_collection_size $published] < 64} {
+    error "Pattern experiment requires the full source and both 64-bit snapshot banks"
+}
+puts "PATTERN_REGISTERS source=[get_collection_size $pattern] captured=[get_collection_size $captured] published=[get_collection_size $published]"
 foreach corner [get_available_operating_conditions] {
     set_operating_conditions $corner
     update_timing_netlist

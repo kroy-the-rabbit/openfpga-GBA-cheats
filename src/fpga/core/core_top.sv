@@ -258,9 +258,7 @@ wire       cart_eeprom_dma, cart_eeprom_last, cart_eeprom_dout, cart_eeprom_done
 wire [16:0] cart_eeprom_count;
 wire       cart_eeprom_dma_active;
 wire       cart_eeprom_fault, cart_eeprom_fault_s;
-wire [31:0] gba_debug_pc, gba_debug_cpu, gba_debug_mem, gba_debug_irq;
 wire [63:0] cart_debug_host;
-wire cart_arb_busy;
 
 
 // Menu readouts, in clk_74a for the bridge read mux. Driven at the bottom.
@@ -1978,11 +1976,11 @@ gba_top #(
     .sound_out_left      ( sound_out_left ),
     .sound_out_right     ( sound_out_right ),
     // Debug outputs
-    .debug_cpu_pc        ( gba_debug_pc ),
-    .debug_cpu_mixed     ( gba_debug_cpu ),
-    .debug_irq           ( gba_debug_irq ),
+    .debug_cpu_pc        (),
+    .debug_cpu_mixed     (),
+    .debug_irq           (),
     .debug_dma           (),
-    .debug_mem           ( gba_debug_mem )
+    .debug_mem           ()
 );
 
 
@@ -2068,7 +2066,7 @@ cart_bus_arbiter cart_arb (
     .ctl_save_req(ctl_save_req), .ctl_save_addr(ctl_save_addr),
     .ctl_save_rnw(ctl_save_rnw), .ctl_save_din(ctl_save_din), .ctl_save_done(ctl_save_done),
     .ctl_ee_req(ctl_ee_req), .ctl_ee_rnw(ctl_ee_rnw), .ctl_ee_din(ctl_ee_din),
-    .ctl_ee_dma(ctl_ee_dma), .ctl_ee_done(ctl_ee_done), .busy(cart_arb_busy)
+    .ctl_ee_dma(ctl_ee_dma), .ctl_ee_done(ctl_ee_done), .busy()
 );
 
 gba_cart_controller cart_ctl (
@@ -2124,36 +2122,17 @@ gba_cart_controller cart_ctl (
     .err_count              ()
 );
 
-// ---- Boot diagnostics ----
-// Observe only: these registers do not gate requests, clocks, reset or writes.
-// Capture both words together on OS menu entry; the host sees a stable
-// snapshot rather than unrelated live words sampled at different times.
-reg debug_save_wait = 0, debug_rom_wait = 0, debug_psram_wait = 0;
-always @(posedge clk_sys) begin
-    if (!pll_core_locked || !reset_n_s || core_reset_s) begin
-        debug_save_wait <= 0;
-        debug_rom_wait <= 0;
-        debug_psram_wait <= 0;
-    end else begin
-        if (cart_save_req) debug_save_wait <= 1;
-        if (cart_save_done) begin
-            debug_save_wait <= 0;
-        end
-        if (sdram_read_req_gba) debug_rom_wait <= 1;
-        if (romsrc_gba_rd_ready) debug_rom_wait <= 0;
-        if (bus_out_ena) debug_psram_wait <= 1;
-        if (bus_out_done) debug_psram_wait <= 0;
-    end
-end
-wire [31:0] cart_debug_state = {
-    cart_eeprom_fault, cart_writes_s, cheats_enabled, cart_save_rnw,
-    debug_save_wait, debug_rom_wait, debug_psram_wait, reset_gba,
-    cart_rom_mode, gba_debug_irq[16], cart_arb_busy, cart_eeprom_dma_active,
-    gba_debug_mem[7:0], gba_debug_cpu[11:0]
-};
+// ---- Diagnostic pattern ----
+// Exercise the existing snapshot path without retaining CPU debug outputs
+// or loading cartridge/memory handshakes. The word has 64 distinct rotations
+// to keep the source dynamic; constants would optimize the capture away.
+// No reset dependency: the pattern remains observable while GBA is held reset.
+reg [63:0] cart_debug_pattern = 64'hD1A65EED4B3C2907;
+always @(posedge clk_sys)
+    cart_debug_pattern <= {cart_debug_pattern[62:0], cart_debug_pattern[63]};
 cart_debug_snapshot boot_debug (
     .clk_host(clk_74a), .clk_sys(clk_sys), .host_menu(osnotify_inmenu),
-    .sys_debug({cart_debug_state, gba_debug_pc}),
+    .sys_debug(cart_debug_pattern),
     .host_debug(cart_debug_host)
 );
 

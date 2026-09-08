@@ -178,19 +178,27 @@ def main():
             paths_exist = run(SSH + [f'if test -d {remote}/work/timing-paths; then echo yes; fi']).strip() == 'yes'
             if paths_exist:
                 run(SCP + ['-r', f'{HOST}:{remote}/work/timing-paths', str(folder)], timeout=120)
+            analysis_exists = run(SSH + [f'if test -f {remote}/path-analysis.log; then echo yes; fi']).strip() == 'yes'
+            if analysis_exists:
+                run(SCP + [f'{HOST}:{remote}/path-analysis.log', str(folder / 'path-analysis.log')])
             if state['build_rc'] != 0:
                 if report_exists:
                     text = (folder / 'report.txt').read_text()
                     failures = re.findall(r'^(Setup|Hold|Recovery|Removal|Minimum Pulse Width)\s+(-\d+\.\d+) ns', text, re.M)
                     if failures:
                         raise ValueError('Timing failed: ' + ', '.join(f'{k} {v} ns' for k, v in failures))
+                if analysis_exists:
+                    errors = [line.strip() for line in (folder / 'path-analysis.log').read_text().splitlines()
+                              if line.startswith('Error') or line.startswith('Pattern experiment requires')]
+                    if errors:
+                        raise RuntimeError('Post-fit analysis failed: ' + errors[0])
                 raise RuntimeError(f'Build exited {state["build_rc"]}; see {folder / "build.log"}')
             core = json.loads(source(args.commit, 'pkg/Cores/kroy.GBA/core.json'))
             version = core['core']['metadata']['version'] + '.' + args.commit[:7]
             bitname = core['core']['cores'][0]['filename']
             artifacts = [bitname, f'kroy.GBA_{version}.zip']
-            if not args.baseline:
-                artifacts.append('path-analysis.log')
+            if not args.baseline and not analysis_exists:
+                raise ValueError('Missing post-fit path analysis log')
             for name in artifacts:
                 run(SCP + [f'{HOST}:{remote}/{name}', str(folder / name)], timeout=120)
             state.update(validate(folder, args.commit, baseline=args.baseline),
