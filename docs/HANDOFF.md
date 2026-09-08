@@ -36,10 +36,20 @@ analyzes/elaborates with the existing unrelated vendor RAM interface stub.
 The regression caught and fixed a false fault at simultaneous final-bit
 completion/DMA inactivity; valid save data now reads back at that boundary.
 
-Next: queue the combined revision on sisko with explicit seed 3. Seed 8 failed
-on the previous launch revision; no unproven timing exception was added.
+**Combined revision is queued and verified running on sisko, seed 3.**
+
+- Source: `417a55f1c21bd1a6fa27c27e158987ddfd1c5011`.
+- Job: `pocket-gba-gba-p5cart-abort-s3-417a55f1c21b`, PID `602890`.
+- Quartus 25.1std, STANDARD FIT, NPROC 16; runner log confirms explicit seed 3.
+- Status: `../tools/runner-build job sisko pocket-gba gba p5cart-abort-s3 417a55f`.
+- Fetch: `../tools/runner-build fetch sisko pocket-gba gba p5cart-abort-s3 417a55f`.
+- Includes automatic Play Cartridge and the EEPROM abort fix. Check all timing
+  types and utilization before installation; do not install on negative slack.
+- Do not wait interactively for compilation. Seed 8 failed the earlier launch
+  revision; no unproven timing exception was added to get this one through.
+
 Independent final RTL/wiring review passed. The existing hardware-proven card
-build is still `99293a3`.
+build is still `99293a3`; no card files were changed this turn.
 
 Next physical persistence test, after installing a timing-passing candidate:
 disable cheats; confirm Adam/BRO and empty slot 2; enable Writes Enabled,
