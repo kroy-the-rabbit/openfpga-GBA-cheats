@@ -55,6 +55,25 @@ module tb_core_top_cart_launch;
                 $fatal(1,"FAIL top SD-save size %h",dut.save_size_bytes);
         end
     endtask
+    task expect_debug(input [31:0] pc,input [31:0] status,input [31:0] irqdma,input [31:0] savebus);
+        integer word_index;
+        reg [31:0] expected;
+        begin
+            for(word_index=0;word_index<4;word_index=word_index+1) begin
+                case(word_index)
+                    0: expected=pc;
+                    1: expected=status;
+                    2: expected=irqdma;
+                    3: expected=savebus;
+                endcase
+                @(negedge clk);bridge_addr=32'hf4000010+word_index*4;bridge_rd=1;
+                @(negedge clk);
+                if(bridge_rd_data!==expected)
+                    $fatal(1,"FAIL top debug word%0d got%h expected%h",word_index,bridge_rd_data,expected);
+                bridge_rd=0;
+            end
+        end
+    endtask
     initial begin
         repeat(10) @(negedge clk);
         command(16'h0011,0);
@@ -77,7 +96,47 @@ module tb_core_top_cart_launch;
         expect_mode(1,1,0,1,0); // failed probe must not run stale SDRAM game
         command(16'h00b1,32'h00010000);expect_mode(0,0,0,0,1);
         command(16'h00b1,0);expect_mode(0,0,0,0,1);
+        // Supply the otherwise omitted VHDL/FPGA diagnostic sources. The
+        // real top must pack, snapshot and decode all four host readouts.
+        // Holding GBA reset demonstrates that diagnostics do not need the
+        // emulated CPU to run or leave reset before opening the menu.
+        force dut.gba_debug_pc=32'h08012344;
+        force dut.gba_debug_cpu=32'h00000abc;
+        force dut.gba_debug_mem=32'h00000025;
+        force dut.gba_debug_irq=32'h0001beef;
+        force dut.gba_debug_dma=32'h00001234;
+        force dut.cart_eeprom_fault=1;
+        force dut.cart_writes_s=0;
+        force dut.cheats_enabled=1;
+        force dut.cart_save_rnw=1;
+        force dut.debug_save_wait=0;
+        force dut.debug_rom_wait=1;
+        force dut.debug_psram_wait=0;
+        force dut.reset_gba=1;
+        force dut.cart_rom_mode=0;
+        force dut.cart_arb_busy=1;
+        force dut.cart_eeprom_dma_active=0;
+        force dut.debug_save_completions=7'h55;
+        force dut.cart_save_dout=8'ha6;
+        force dut.cart_save_addr=17'h12345;
+        expect_debug(0,0,0,0);
+        command(16'h00b0,1);
+        expect_debug(32'h08012344,32'hb5625abc,32'h1234beef,32'hab4d2345);
+        force dut.gba_debug_pc=32'h08056788;
+        force dut.gba_debug_cpu=32'h00000135;
+        force dut.gba_debug_mem=32'h00000027;
+        force dut.gba_debug_irq=32'h00001234;
+        force dut.gba_debug_dma=32'h0000abcd;
+        force dut.debug_save_completions=7'h03;
+        force dut.cart_save_dout=8'h5a;
+        force dut.cart_save_addr=17'h1ffff;
+        command(16'h00b0,1); // Already open: snapshot must remain unchanged.
+        expect_debug(32'h08012344,32'hb5625abc,32'h1234beef,32'hab4d2345);
+        command(16'h00b0,0);
+        command(16'h00b0,1);
+        expect_debug(32'h08056788,32'hb5227135,32'habcd1234,32'h06b5ffff);
         $display("PASS core_top cartridge launch: real APF notification, synchronization, reset/probe gating, SD-save isolation and stale-menu immunity");
+        $display("PASS core_top debug packing, four bridge addresses and stable APF menu snapshots during GBA reset");
         $finish;
     end
     initial begin #100000; $fatal(1,"FAIL top cartridge launch watchdog"); end

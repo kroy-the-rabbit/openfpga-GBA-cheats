@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Cartridge ROM read path: src/fpga/han/gba_cart_controller.sv.
 
-Eight passes.
+Nine passes.
 
 1. sim/han/tb_gba_cart_controller.sv, Wokann's whole-controller bench,
    vendored verbatim. It covers SRAM, GPIO and EEPROM as well as ROM, so it
@@ -36,6 +36,10 @@ Eight passes.
 
 8. sim/han/tb_cart_eeprom_abort.sv checks aborted DMA commands cannot retain
    write permission and authorize traffic after writes are disabled.
+
+9. sim/han/tb_cart_sram_integration.sv runs the real top-level save-write
+   policy, arbiter and cartridge controller with concurrent ROM traffic and
+   thousands of SRAM reads, copy writes, verification reads and denied writes.
 
 ROM_BURST is a module parameter with no port, and iverilog's -P only reaches
 root modules, so pass 1 gets a copy of the controller with the parameter
@@ -81,9 +85,11 @@ def no_burst_copy() -> str:
     return path
 
 
-def run(name: str, exe: str, sources: list, top: str | None = None) -> bool:
+def run(name: str, exe: str, sources: list, top: str | None = None,
+        allow_missing: bool = False) -> bool:
     select = ["-s", top] if top else []
-    subprocess.run(["iverilog", "-g2012", "-o", exe] + select + sources, check=True)
+    omit_unrelated = ["-i"] if allow_missing else []
+    subprocess.run(["iverilog", "-g2012", "-o", exe] + select + omit_unrelated + sources, check=True)
     result = subprocess.run([exe], capture_output=True, text=True)
     out = result.stdout + result.stderr
     ok = result.returncode == 0 and "PASS" in out and "FAIL" not in out
@@ -130,8 +136,14 @@ def main() -> int:
                   os.path.join(BUILD, "tb_cart_eeprom_abort"),
                   [os.path.join(ROOT, "sim", "han", "tb_cart_eeprom_abort.sv"), EEPROM_BRIDGE],
                   top="tb_cart_eeprom_abort")
-    print(f"\n{passes}/8 benches pass")
-    return 0 if passes == 8 else 1
+    passes += run("Physical SRAM and ROM integration, copy verification and denied writes",
+                  os.path.join(BUILD, "tb_cart_sram_integration"),
+                  [os.path.join(ROOT, "sim", "han", "tb_cart_sram_integration.sv"),
+                   os.path.join(ROOT, "src", "fpga", "core", "core_top.sv"),
+                   os.path.join(ROOT, "src", "fpga", "han", "cart_bus_arbiter.sv"), CTRL],
+                  top="tb_cart_sram_integration", allow_missing=True)
+    print(f"\n{passes}/9 benches pass")
+    return 0 if passes == 9 else 1
 
 
 if __name__ == "__main__":

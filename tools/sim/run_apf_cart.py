@@ -26,11 +26,14 @@ def main():
     subprocess.run(['iverilog', '-g2012', '-i', '-s', 'tb_core_top_cart_launch',
                     '-o', str(exe),
                     str(ROOT / 'sim/han/tb_core_top_cart_launch.sv'),
+                    str(ROOT / 'src/fpga/han/cart_debug_snapshot.sv'),
                     *map(str, sources), str(ROOT / 'src/fpga/core/core_top.sv')], check=True)
     result = subprocess.run(['vvp', str(exe)], capture_output=True, text=True)
     output = result.stdout + result.stderr
     if result.returncode or 'PASS core_top cartridge launch' not in output or 'FAIL' in output:
         raise RuntimeError('Top-level cartridge launch regression failed:\n' + output)
+    if 'PASS core_top debug packing' not in output:
+        raise RuntimeError('Top-level debug snapshot regression did not finish:\n' + output)
     print(output.strip())
 
 

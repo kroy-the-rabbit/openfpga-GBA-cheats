@@ -163,6 +163,34 @@
         "type": "number_u32",
         "enabled": true,
         "address": "0xF4000008"
+      },
+      {
+        "name": "CPU PC",
+        "id": 60,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF4000010"
+      },
+      {
+        "name": "CPU State",
+        "id": 61,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF4000014"
+      },
+      {
+        "name": "IRQ / DMA",
+        "id": 62,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF4000018"
+      },
+      {
+        "name": "Save Bus",
+        "id": 63,
+        "type": "number_u32",
+        "enabled": true,
+        "address": "0xF400001C"
       }
     ],
     "messages": []

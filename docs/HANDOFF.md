@@ -5,6 +5,40 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-08: Zero Mission also whitescreens on 417a55f
+
+User reports the same white screen after BIOS on the new installed build.
+CG/CS remain `424D5845` / `FFFF96E1`; Save Fault is zero. This confirms header
+probing works, but the EEPROM-specific fault flag does not qualify SRAM.
+The underlying boot failure is still unresolved. No speculative cartridge
+bus timing or save-policy change is justified by the current evidence.
+
+Added capture of the existing CPU PC, CPU/memory state, IRQ/DMA status,
+and SRAM address/data when the user opens the OS menu. Four stable readouts
+are documented in `docs/BOOT-DEBUG.md`. No game reset dependency or execution
+gating was added. Standalone asynchronous-clock snapshot tests and actual
+core_top/APF packing/readout tests pass; independent review found no behavior
+change in the cartridge or CPU paths.
+
+The new combined test exercises actual core_top write policy → arbiter →
+controller → pin model: 12,294 SRAM reads, 4,096 copy writes, 4,098 denied
+writes and 16,390 concurrent ROM reads. It passes, including payload changes
+after request pulses, boundary addresses, neighbor preservation and no
+physical write pulses for denied requests. No hardware root cause reproduced.
+It is the ninth cartridge bench; unrelated CPU/VHDL engines are omitted from
+this mixed test, so it does not simulate Zero Mission startup itself.
+
+`make test` passed: 9 cartridge benches, GHDL memorymux, APF command/launch
+and actual-top debug readouts, asynchronous snapshot test, and cheat suites.
+Optional external cheat corpus was unavailable and skipped. Next is the
+diagnostic FPGA build on sisko with seed 3. After fit,
+check the snapshot's bundled data routing against the ~27 ns settling window.
+The diagnostic snapshot starts at zero before a menu entry completes; close
+and reopen the OS menu to recapture. Save completions count modulo 128 and
+include denied writes. SRAM address/data describe request/last response, not
+necessarily the same transaction while a request is pending.
+No further card write has occurred since the 417a55f installation.
+
 ## 2026-09-07: 417a55f installed and verified; card left mounted
 
 User remounted the card and explicitly said not to unmount. The guarded

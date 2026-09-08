@@ -258,6 +258,10 @@ wire       cart_eeprom_dma, cart_eeprom_last, cart_eeprom_dout, cart_eeprom_done
 wire [16:0] cart_eeprom_count;
 wire       cart_eeprom_dma_active;
 wire       cart_eeprom_fault, cart_eeprom_fault_s;
+wire [31:0] gba_debug_pc, gba_debug_cpu, gba_debug_mem, gba_debug_irq, gba_debug_dma;
+wire [127:0] cart_debug_host;
+wire cart_arb_busy;
+
 
 // Menu readouts, in clk_74a for the bridge read mux. Driven at the bottom.
 wire [31:0] cart_readout_id_s;
@@ -1507,6 +1511,10 @@ always @(*) begin
     32'hF4000008: begin
         bridge_rd_data <= {31'd0, cart_eeprom_fault_s};
     end
+    32'hF4000010: bridge_rd_data <= cart_debug_host[31:0];
+    32'hF4000014: bridge_rd_data <= cart_debug_host[63:32];
+    32'hF4000018: bridge_rd_data <= cart_debug_host[95:64];
+    32'hF400001C: bridge_rd_data <= cart_debug_host[127:96];
     32'hF3000004: begin
         bridge_rd_data <= {24'd0, cheat_overrun_s, cheats_master,
                            cheat_rejected_s};
@@ -1972,11 +1980,11 @@ gba_top #(
     .sound_out_left      ( sound_out_left ),
     .sound_out_right     ( sound_out_right ),
     // Debug outputs
-    .debug_cpu_pc        (),
-    .debug_cpu_mixed     (),
-    .debug_irq           (),
-    .debug_dma           (),
-    .debug_mem           ()
+    .debug_cpu_pc        ( gba_debug_pc ),
+    .debug_cpu_mixed     ( gba_debug_cpu ),
+    .debug_irq           ( gba_debug_irq ),
+    .debug_dma           ( gba_debug_dma ),
+    .debug_mem           ( gba_debug_mem )
 );
 
 
@@ -2062,7 +2070,7 @@ cart_bus_arbiter cart_arb (
     .ctl_save_req(ctl_save_req), .ctl_save_addr(ctl_save_addr),
     .ctl_save_rnw(ctl_save_rnw), .ctl_save_din(ctl_save_din), .ctl_save_done(ctl_save_done),
     .ctl_ee_req(ctl_ee_req), .ctl_ee_rnw(ctl_ee_rnw), .ctl_ee_din(ctl_ee_din),
-    .ctl_ee_dma(ctl_ee_dma), .ctl_ee_done(ctl_ee_done), .busy()
+    .ctl_ee_dma(ctl_ee_dma), .ctl_ee_done(ctl_ee_done), .busy(cart_arb_busy)
 );
 
 gba_cart_controller cart_ctl (
@@ -2116,6 +2124,44 @@ gba_cart_controller cart_ctl (
 
     .cart_present           ( cart_present_w ),
     .err_count              ()
+);
+
+// ---- Boot diagnostics ----
+// Observe only: these registers do not gate requests, clocks, reset or writes.
+// Capture all four words together on OS menu entry; the host sees a stable
+// snapshot rather than unrelated live words sampled at different times.
+reg debug_save_wait = 0, debug_rom_wait = 0, debug_psram_wait = 0;
+reg [6:0] debug_save_completions = 0;
+always @(posedge clk_sys) begin
+    if (!pll_core_locked || !reset_n_s || core_reset_s) begin
+        debug_save_wait <= 0;
+        debug_rom_wait <= 0;
+        debug_psram_wait <= 0;
+        debug_save_completions <= 0;
+    end else begin
+        if (cart_save_req) debug_save_wait <= 1;
+        if (cart_save_done) begin
+            debug_save_wait <= 0;
+            debug_save_completions <= debug_save_completions + 1'b1;
+        end
+        if (sdram_read_req_gba) debug_rom_wait <= 1;
+        if (romsrc_gba_rd_ready) debug_rom_wait <= 0;
+        if (bus_out_ena) debug_psram_wait <= 1;
+        if (bus_out_done) debug_psram_wait <= 0;
+    end
+end
+wire [31:0] cart_debug_state = {
+    cart_eeprom_fault, cart_writes_s, cheats_enabled, cart_save_rnw,
+    debug_save_wait, debug_rom_wait, debug_psram_wait, reset_gba,
+    cart_rom_mode, gba_debug_irq[16], cart_arb_busy, cart_eeprom_dma_active,
+    gba_debug_mem[7:0], gba_debug_cpu[11:0]
+};
+wire [31:0] cart_debug_irq_dma = {gba_debug_dma[15:0], gba_debug_irq[15:0]};
+wire [31:0] cart_debug_save = {debug_save_completions, cart_save_dout, cart_save_addr};
+cart_debug_snapshot boot_debug (
+    .clk_host(clk_74a), .clk_sys(clk_sys), .host_menu(osnotify_inmenu),
+    .sys_debug({cart_debug_save, cart_debug_irq_dma, cart_debug_state, gba_debug_pc}),
+    .host_debug(cart_debug_host)
 );
 
 // ---- Slot pins ----

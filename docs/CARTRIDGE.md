@@ -35,9 +35,11 @@ core at all rather than start it without the slot.
 | ROM out of the cartridge | **Minish Cap gameplay from an existing save confirmed** on `99293a3`; test duration not reported |
 | Cartridge saves / EEPROM | **Minish Cap existing save loaded and played on hardware**; physical write persistence pending |
 | Cheats during cartridge gameplay | **Confirmed by the user on Minish Cap** with `99293a3`; specific codes not reported |
-| Metroid Zero Mission (`BMXE`, SRAM) | Header passes; white screen after BIOS on `99293a3` in both save modes. Cause unresolved. |
+| Metroid Zero Mission (`BMXE`, SRAM) | Header passes; white screen after BIOS on `99293a3` in both save modes and on `417a55f` (Save Fault 0). Cause unresolved. |
 | Cartridge RTC/GPIO | not routed |
 | Writing to a cartridge | disabled by default; enabled explicitly via Cartridge Saves |
+
+For the current white-screen investigation, see [boot diagnostics](BOOT-DEBUG.md).
 
 ## Interrupted EEPROM transfers (new source)
 
