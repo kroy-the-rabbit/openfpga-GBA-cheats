@@ -5,6 +5,47 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-08: compact diagnostics building from the passing engine baseline
+
+User approved the smaller diagnostic experiment. Source
+**`3f7ae094b13fd9ed0f42e55f11dd7afc4bc7c376`**, seed 3, is verified running
+on sisko: job `pocket-gba-gba-p5cart-compact-s3-3f7ae094b13f`, launcher
+PID `643446`. No card write or unmount occurred; installed baseline is `417a55f`.
+
+Restored `gba_memorymux.vhd` byte-for-byte from `417a55f`, withdrawing the
+unsuccessful I/O read-buffer edit. All `src/fpga/gba/` engine files now match
+that timing-passing revision. The top-level differences observe state only.
+The diagnostic payload is 64 bits: **CPU PC** and **CPU State**, sampled
+together on OS-menu entry. This removes 128 payload registers, the seven-bit
+save completion counter, full IRQ/DMA readout and SRAM address/data readout.
+CPU State retains its previous encoding, including all three bus wait flags,
+IME, DMA3 active, cheats/write policy and reset. Retired readout addresses
+F4000018/F400001C return zero. See `docs/BOOT-DEBUG.md` for capture/decoding.
+This reduces observation overhead; it does not guarantee timing closure.
+
+**Full `make test` passed**: nine cartridge benches (including the combined
+SRAM/ROM test), GHDL memorymux including I/O coverage, APF launch and compact
+readout integration, coherent asynchronous snapshots and cheat suites.
+The optional external cheat corpus was unavailable and skipped.
+Log: `build/timing-analysis/compact-regression.log`. Whitespace checked with
+`core.whitespace=cr-at-eol` for the restored upstream CRLF file; no global
+Git setting changed.
+
+**Persistent watcher verified active**, PID `2239287` at startup:
+`pocket-gba-watch-3f7ae09.service`. Its first SSH poll succeeded and desktop
+startup notification was delivered. It uses the same all-corner timing,
+snapshot routing and exact package/source verification gates documented below.
+It will send a desktop notification for ready-to-write or not-ready and save
+its result at:
+`build/watch/pocket-gba-gba-p5cart-compact-s3-3f7ae094b13f/result.json`.
+
+The watcher does not install. After readiness, back up current card files,
+install the verified 13-file stage against the `417a55f` baseline, flush,
+verify protected saves/settings and leave mounted. Then reproduce Zero
+Mission and capture CPU PC/CPU State with CG/CS and Save Fault twice, closing
+and reopening the OS menu between samples. No save-write persistence or
+Zero Mission boot success is yet claimed.
+
 ## 2026-09-08: c115fbf failed timing; watcher reported failure
 
 The targeted I/O reply change **did not produce an installable build**.
