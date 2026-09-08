@@ -31,7 +31,21 @@ actual `core_top` control-path bench also passed: APF notification through
 source synchronizers, CPU/controller reset, save isolation and stale `0x90`
 immunity. This bench models probe results and omits unrelated engines; the
 real probe/VHDL/pins are covered separately, not by that launch bench.
-Next: queue seed 8 on sisko. No new package has been installed; the mounted card still runs hardware-tested `99293a3`.
+**Build started and verified running on sisko**, explicit seed 8:
+
+- Source: `6302c433339cbe79592a8e7ae54c7348b4ac860c`.
+- Job: `pocket-gba-gba-p5cart-auto-s8-6302c433339c`.
+- Launcher PID: `597423`. Latest check: Quartus elaborating the GBA hierarchy.
+- Status: `../tools/runner-build job sisko pocket-gba gba p5cart-auto-s8 6302c43`.
+- Fetch when done: `../tools/runner-build fetch sisko pocket-gba gba p5cart-auto-s8 6302c43`.
+- Do not wait interactively for compilation. Check all timing types and fit
+  before installing the matching bitstream/package. Preserve the existing
+  verified `99293a3` rollback archive and back up current card files.
+- Hardware check after installation: choose Play Cartridge directly, confirm
+  Minish Cap's Adam/BRO slots without touching a mode switch; then verify SD
+  launch remains independent. Keep saves Read Only for this check.
+
+No new package has been installed; the mounted card still runs hardware-tested `99293a3`.
 `findmnt` currently reports `/dev/sda1` at `/run/media/kroy/pocket` as **ro**
 (exFAT). No repair/remount was attempted. Check that mount before the next
 deployment; preserve the instruction to leave the card mounted after writing.
