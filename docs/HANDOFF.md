@@ -5,6 +5,27 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-08: control passed and reproduced the original bitstream exactly
+
+The clean `417a55f` seed-3 control completed successfully in 1443 s.
+All worst slacks exactly reproduce the original: setup **+0.092 ns**, hold
+**+0.114 ns**, recovery +2.717 ns, removal +0.387 ns, minimum pulse +0.827 ns.
+Utilization also matches: 17,819 ALMs, 25,136 registers, 282 RAM blocks.
+
+**Bitstream SHA256 matches the archived passing artifact exactly**:
+`62c6506b1915502fd65818c3d5f892aa1d8772329e5118b5de37f48a68a3ca25`.
+This control demonstrates reproducibility for the existing baseline on sisko;
+the diagnostic variants' failures cannot be attributed to a failure to
+reproduce this baseline. It does not identify which observer changes perturb
+synthesis/placement or demonstrate that the diagnostic datapath itself is critical.
+
+Watcher result is `baseline-passed`, package verified, notification delivered.
+Evidence: `build/watch/pocket-gba-gba-p5cart-control-s3-417a55f1c21b/`.
+No build is currently queued and no card write/unmount occurred. This is the
+same installed `417a55f`, not a new diagnostic package or a Zero Mission fix.
+Next investigation should isolate effects of CPU diagnostic output retention
+and snapshot routing against this proven baseline before another engine edit.
+
 ## 2026-09-08: compact diagnostics failed; exact passing control rebuilding
 
 `3f7ae09` seed 3 failed setup **−2.790 ns** (1463 s), despite reducing area
