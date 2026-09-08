@@ -5,6 +5,43 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-07: Zero Mission white screen; new GBA build passes timing
+
+User tested Metroid Zero Mission on installed `99293a3`: `CG=424D5845`
+(`BMXE`), `CS=FFFF96E1`. Header detection passes; screenshot
+`20260907_230950.png` is plain white after the BIOS logo. Both Read Only and
+Writes Enabled produced the same result. The user noted write permission
+reverts on relaunch; that is the intentional nonpersistent menu setting,
+not evidence about physical save persistence. Cheats-off confirmation is pending.
+
+The exact verified 8 MiB ROM uses `SRAM_V113`, with a verified 32768-byte
+physical save backup (SHA256
+`de92473cc3074a592caa43881240bc755bca2533da2c3be3b6635ab37098da21`).
+Backup/provenance and the white screenshot are in
+`build/hardware-results/metroid-zero-mission/`. Flash ID commands are not
+applicable to this cartridge. Public matching decomp startup blanks the
+screen before SRAM reads; its write/readback test has bounded retries. No
+confirmed infinite loop or RTL defect explains the freeze yet. Byte-return
+replication and DWORD-based MaxPakAddr look correct. If the failure persists
+on the new build with cheats off, CPU PC and outstanding ROM/SRAM requests
+would distinguish a cartridge access stall from later IRQ/VBlank waiting.
+
+**`417a55f`, seed 3, completed successfully on sisko:** 1447 s, setup
+**+0.092 ns**, hold **+0.114 ns**, recovery +2.717 ns, removal +0.387 ns,
+minimum pulse +0.827 ns. **17,819/18,480 ALMs (96%)**, 25,136 registers,
+282 RAM blocks. Reports/log/bitstream archived in
+`build/gba/artifacts/417a55f-seed3/`; the 13-file package is staged at
+`build/gba/deploy-417a55f/` and its bitstream/hash/menu match verified source.
+Manifest: `build/gba/deployment-417a55f.json`.
+
+Installation was attempted with approved access outside the sandbox but the
+UUID/mount precondition could not be verified; it stopped before backup or
+card writes. No filesystem check was run. The guarded installer
+`build/gba/install_417a55f.py` is ready once the card is available at the
+expected mount. It requires the existing `99293a3` bitstream, backs up current
+GBA core/settings/saves, verifies all candidate/protected bytes after flush,
+and leaves the card mounted. Do not treat this as an installed Metroid fix.
+
 ## 2026-09-07: new screenshot reports CartTools restore progress
 
 The user's latest screenshot `20260907_224214.png` is **CartTools Save
