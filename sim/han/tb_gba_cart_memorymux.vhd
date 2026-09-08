@@ -27,8 +27,13 @@ architecture test of tb_gba_cart_memorymux is
    signal bus_out_din : std_logic_vector(31 downto 0);
    signal save_eeprom, save_sram, save_flash : std_logic;
    signal save_requests, eeprom_requests, sd_requests : natural := 0;
+   signal io_done : std_logic := '1';
+   signal io_data : std_logic_vector(31 downto 0) := x"963CA571";
+   signal io_writes : natural := 0;
 begin
    clk <= not clk after 5 ns;
+   gb_bus.done <= io_done;
+   gb_bus.Dout <= io_data;
    dut : entity work.gba_memorymux
       generic map (is_simu => '1', Softmap_GBA_Gamerom_ADDR => 0,
          Softmap_GBA_WRam_ADDR => 8388608, Softmap_GBA_FLASH_ADDR => 16777216,
@@ -141,6 +146,7 @@ begin
          if cart_save_req = '1' then save_requests <= save_requests + 1; end if;
          if cart_eeprom_req = '1' then eeprom_requests <= eeprom_requests + 1; end if;
          if bus_out_ena = '1' then sd_requests <= sd_requests + 1; end if;
+         if gb_bus.ena = '1' and gb_bus.rnw = '0' then io_writes <= io_writes + 1; end if;
          if cart_save_mode = '1' then
             assert bus_out_ena = '0' report "Cartridge save escaped to SD backing memory" severity failure;
             assert save_eeprom = '0' and save_sram = '0' and save_flash = '0'
@@ -168,8 +174,41 @@ begin
       type count_list is array(natural range <>) of natural;
       constant command_counts : count_list := (9, 17, 73, 81);
       variable before_count : natural;
+      type access_list is array(natural range <>) of std_logic_vector(1 downto 0);
+      constant access_sizes : access_list := (ACCESS_8BIT, ACCESS_16BIT, ACCESS_32BIT);
+      variable expected : std_logic_vector(31 downto 0);
    begin
       wait for 100 ns;
+      -- An unreadable I/O reply must never leak its speculative data. Check
+      -- every lane/width, then immediately follow it with a readable reply.
+      for readable in 0 to 1 loop
+         if readable = 0 then io_done <= '0'; else io_done <= '1'; end if;
+         for size in access_sizes'range loop
+            for lane in 0 to 3 loop
+               access_bus(std_logic_vector(to_unsigned(16#04000300# + lane, 32)),
+                  '1', x"00000000", access_sizes(size));
+               expected := (others => '0');
+               if readable = 1 then
+                  case access_sizes(size) is
+                     when ACCESS_8BIT => expected(7 downto 0) := io_data(8*lane+7 downto 8*lane);
+                     when ACCESS_16BIT =>
+                        if lane < 2 then expected(15 downto 0) := io_data(15 downto 0);
+                        else expected(15 downto 0) := io_data(31 downto 16); end if;
+                        if lane mod 2 = 1 then expected := expected(7 downto 0) & x"0000" & expected(15 downto 8); end if;
+                     when others => expected := std_logic_vector(rotate_right(unsigned(io_data), 8*lane));
+                  end case;
+               end if;
+               assert mem_bus_din = expected report "I/O reply/rotation or unreadable fallback mismatch" severity failure;
+            end loop;
+         end loop;
+         before_count := io_writes;
+         access_bus(x"04000300", '0', x"12345678", ACCESS_32BIT);
+         assert io_writes = before_count + 1 report "I/O write repeated or lost" severity failure;
+      end loop;
+      -- This address takes the existing longer I/O wait path.
+      access_bus(x"04000090", '1', x"00000000", ACCESS_32BIT);
+      assert mem_bus_din = io_data report "Delayed I/O reply mismatch" severity failure;
+      report "PASS I/O reply sampling: readable/unreadable lanes, widths, writes and delayed reads";
       -- Raw Flash unlock, bank and ID command bytes must reach the chip,
       -- with no emulated ID substitution or bank-address translation.
       access_bus(x"0E005555", '0', x"000000AA");

@@ -103,6 +103,13 @@ if [[ -z "${SKIP_COMPILE:-}" ]]; then
   set -e
   echo "$(( $(date +%s) - start ))" > "$BDIR/elapsed"
   [[ $rc -eq 0 ]] || { echo "quartus failed (rc=$rc), see $BDIR/build.log" >&2; exit "$rc"; }
+  # Preserve real path endpoints at every corner, including the asynchronous
+  # diagnostic payload. The ordinary summary only names its failing clock.
+  $PODMAN run --rm \
+    "${RUNAS[@]}" \
+    -v "$WORK:/work" -w /work/src/fpga/build -e HOME=/tmp \
+    "$IMAGE" quartus_sta -t /work/scripts/inspect_timing.tcl \
+    > "$BDIR/path-analysis.log" 2>&1
   $PODMAN run --rm "$IMAGE" quartus_sh --version 2>/dev/null | sed -n 2p > "$BDIR/quartus.version" || true
 else
   echo "== SKIP_COMPILE set, packaging existing outputs"
