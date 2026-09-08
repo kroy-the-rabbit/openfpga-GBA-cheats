@@ -50,7 +50,7 @@ effect off and back on live.
 | A stray `.cht` loading zero rather than garbage | correct in simulation, **unconfirmed on hardware** |
 | Closing the lid with the engine running | **unconfirmed on hardware** |
 | Encrypted codes: GameShark v3, Action Replay v3, CodeBreaker after a `9` line | refused, and cannot be made to work |
-| Cartridges | **Bring-up.** Minish Cap boots and reads existing physical saves on hardware. Write persistence and the new automatic launch path still need hardware qualification. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) |
+| Cartridges | **Bring-up.** Minish Cap loads an existing physical save and plays with cheats on hardware. Write persistence and the new automatic launch path still need hardware qualification. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) |
 | 64 MB video carts | do not work |
 
 [docs/HARDWARE.md](docs/HARDWARE.md) is the checklist and says exactly which

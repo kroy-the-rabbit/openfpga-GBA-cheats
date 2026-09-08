@@ -1,7 +1,7 @@
 # Cartridges on the Pocket GBA core
 
-The installed build `99293a3` boots Minish Cap and displays its existing
-physical cartridge saves in Read Only mode. Physical write support passes
+The installed build `99293a3` boots Minish Cap, loads a working physical
+cartridge save in Read Only mode, and plays with cheats, confirmed by the user. Physical write support passes
 simulation but still needs a hardware persistence test. See `docs/HANDOFF.md`
 for the latest results. The source now uses **Play Cartridge** directly; this
 launch change still needs a new bitstream and hardware confirmation.
@@ -31,8 +31,9 @@ core at all rather than start it without the slot.
 | Powering the slot | working for the successful Minish Cap header read |
 | Detecting a cartridge, reading its header | **Minish Cap passed** on `85bb71a`: `CG=425A4D45`, `CS=FFFF96E1` |
 | Refusing to act on an empty or half-inserted slot | **unconfirmed on hardware** |
-| ROM out of the cartridge | **Minish Cap boots to title/save selection** on `99293a3`; sustained gameplay not yet qualified |
-| Cartridge saves / EEPROM | **Minish Cap existing-save reads pass on hardware**; physical write persistence pending |
+| ROM out of the cartridge | **Minish Cap gameplay from an existing save confirmed** on `99293a3`; test duration not reported |
+| Cartridge saves / EEPROM | **Minish Cap existing save loaded and played on hardware**; physical write persistence pending |
+| Cheats during cartridge gameplay | **Confirmed by the user on Minish Cap** with `99293a3`; specific codes not reported |
 | Cartridge RTC/GPIO | not routed |
 | Writing to a cartridge | disabled by default; enabled explicitly via Cartridge Saves |
 

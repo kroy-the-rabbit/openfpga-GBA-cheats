@@ -5,6 +5,18 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-07: loaded cartridge save and gameplay with cheats confirmed
+
+Kroy confirms the same Minish Cap test successfully **loaded a working save
+and played with cheats**, beyond displaying the populated file-selection
+screen. This is hardware evidence for existing physical save loading and
+cartridge gameplay with cheats on the installed **`0.9999.99293a3`**.
+Specific cheat codes and gameplay duration were not reported.
+
+This result does not yet test physical save-write persistence or the automatic
+Play Cartridge change in `6302c43`, which was queued separately on sisko.
+No card files or FPGA source changed for this confirmation.
+
 ## 2026-09-07: remove redundant Cartridge mode menu
 
 User request: choosing **Play Cartridge** should be sufficient to play the
