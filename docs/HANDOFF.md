@@ -30,8 +30,21 @@ this mixed test, so it does not simulate Zero Mission startup itself.
 
 `make test` passed: 9 cartridge benches, GHDL memorymux, APF command/launch
 and actual-top debug readouts, asynchronous snapshot test, and cheat suites.
-Optional external cheat corpus was unavailable and skipped. Next is the
-diagnostic FPGA build on sisko with seed 3. After fit,
+Optional external cheat corpus was unavailable and skipped.
+
+**Diagnostic build verified running on sisko**, explicit seed 3:
+
+- Source: `1a053b20bc00303b2c7cc29156e001a28d57fab6`.
+- Job: `pocket-gba-gba-p5cart-debug-s3-1a053b20bc00`, PID `614454`.
+- Status: `../tools/runner-build job sisko pocket-gba gba p5cart-debug-s3 1a053b2`.
+- Fetch: `../tools/runner-build fetch sisko pocket-gba gba p5cart-debug-s3 1a053b2`.
+- Do not wait interactively for compilation. Require passing timing and fit
+  before installing. Preserve installed `417a55f` as the rollback baseline.
+- After installation, reproduce Zero Mission white screen, open the OS/core
+  menu and capture CPU PC, CPU State, IRQ / DMA and Save Bus. Close/reopen and
+  capture a second set to establish whether the PC or completion count moves.
+
+After fit,
 check the snapshot's bundled data routing against the ~27 ns settling window.
 The diagnostic snapshot starts at zero before a menu entry completes; close
 and reopen the OS menu to recapture. Save completions count modulo 128 and
