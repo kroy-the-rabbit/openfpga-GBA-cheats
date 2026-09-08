@@ -5,6 +5,27 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-08: c115fbf failed timing; watcher reported failure
+
+The targeted I/O reply change **did not produce an installable build**.
+Seed 3 finished in 1425 s: setup **−1.573 ns**, hold +0.039 ns,
+recovery +3.711 ns, removal +0.297 ns, minimum pulse +0.827 ns.
+18,017/18,480 ALMs (97%), 25,387 registers, 282 RAM blocks.
+
+Actual worst path is CPU `execute_functions_detail.mulboth` →
+`calc_result[1]`; savestate `ss_dout[52]` → `bus_out_Adr[8]` follows
+at −1.397 ns. The earlier I/O path change is functionally tested, but this
+fit has worse overall setup timing and different critical paths. Do not
+claim timing closure or a hardware fix from it.
+
+The watcher finished with `not-ready`, saved reports and all-corner paths
+under `build/watch/pocket-gba-gba-p5cart-ioreply-s3-c115fbf6d3e4/`, and
+successfully delivered its failure desktop notification at 18:12:27 UTC.
+No replacement diagnostic build has been launched. No card write or unmount
+occurred; the installed baseline remains `417a55f`. Zero Mission remains
+unresolved. Next work should address overall timing/placement pressure;
+another isolated critical-path edit is not yet justified by these results.
+
 ## 2026-09-08: targeted I/O timing fix building; persistent watcher active
 
 Source **`c115fbf6d3e42e38160804c072c68eb73235a876`**, seed 3, is verified
