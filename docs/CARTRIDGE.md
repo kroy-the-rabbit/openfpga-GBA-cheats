@@ -1,10 +1,12 @@
 # Cartridges on the Pocket GBA core
 
-The installed ROM-only build `4728cc6` boots Minish Cap to its title and
-save selection. Physical save support is now implemented and simulation-tested
-in source; its FPGA build and hardware results are tracked in `docs/HANDOFF.md`.
+The installed build `99293a3` boots Minish Cap and displays its existing
+physical cartridge saves in Read Only mode. Physical write support passes
+simulation but still needs a hardware persistence test. See `docs/HANDOFF.md`
+for the latest results. The source now uses **Play Cartridge** directly; this
+launch change still needs a new bitstream and hardware confirmation.
 
-**Cartridge Saves** defaults to **Read Only** at each launch. In Boot mode,
+**Cartridge Saves** defaults to **Read Only** at each launch. With Play Cartridge,
 SRAM/Flash reads and EEPROM read commands reach the physical save chip.
 Selecting **Writes Enabled** permits physical SRAM/Flash writes and EEPROM
 program commands. EEPROM permission is latched for a whole command. Progress
@@ -14,9 +16,9 @@ before they can recognize their save chip.
 
 No SD save file is loaded or written back for cartridge games. Physical writes
 are not hardware-qualified yet. GPIO/RTC remains disconnected, and APF
-savestates are disabled in Boot mode because they cannot snapshot physical
-save-chip state. The first hardware check should read Minish Cap's existing
-slots with Cartridge Saves left at Read Only.
+savestates are disabled for cartridge launches because they cannot snapshot physical
+save-chip state. Minish Cap's existing slots have now been read successfully with Cartridge
+Saves left at Read Only.
 
 **This core requires Pocket firmware 1.2 or newer.** Declaring the cartridge
 adapter raises `version_required`, and an older firmware will refuse to load the
@@ -29,8 +31,8 @@ core at all rather than start it without the slot.
 | Powering the slot | working for the successful Minish Cap header read |
 | Detecting a cartridge, reading its header | **Minish Cap passed** on `85bb71a`: `CG=425A4D45`, `CS=FFFF96E1` |
 | Refusing to act on an empty or half-inserted slot | **unconfirmed on hardware** |
-| ROM out of the cartridge | **Minish Cap boots to title/save selection** on `4728cc6`; sustained gameplay not yet qualified |
-| Cartridge saves / EEPROM | implemented and simulation-tested; hardware qualification pending |
+| ROM out of the cartridge | **Minish Cap boots to title/save selection** on `99293a3`; sustained gameplay not yet qualified |
+| Cartridge saves / EEPROM | **Minish Cap existing-save reads pass on hardware**; physical write persistence pending |
 | Cartridge RTC/GPIO | not routed |
 | Writing to a cartridge | disabled by default; enabled explicitly via Cartridge Saves |
 
@@ -59,30 +61,34 @@ The fix is to hold the probe in reset until `reset_n` is high, so it runs only
 once the controller does. It is `cfd4264`, built and timing-met at seed 1 on
 2026-09-06, not yet run on the slot.
 
-## Quick start
+## Quick start (new source; pending hardware qualification)
 
-1. Set **Cartridge** in the core menu to `Detect`. The core restarts.
-2. Insert a cartridge and restart the core.
-3. Read `CG:` and `CS:` in the menu. `CG:` is the game code, `CS:` says whether
-   the read is trustworthy. Both are below.
-4. If `CS:` looks right, set **Cartridge** to `Boot`.
-5. Leave **Cartridge Saves → Read Only** for the first existing-save check. Enable writes explicitly only when testing persistence.
+1. Insert the cartridge before launching the core.
+2. Choose **Play Cartridge** in the GBA core's asset browser. The core probes
+   and boots the cartridge automatically, including existing physical saves.
+3. Select **Writes Enabled** only when testing save persistence. Every launch
+   starts in Read Only, so progress otherwise will not persist.
 
-## The three settings
+There is no separate Off/Detect/Boot switch. Choosing an SD ROM uses the SD
+path. Old persisted mode values at `0x90` are ignored. The installed
+`99293a3` package still has the old switch and needs **Cartridge → Boot**;
+removing it requires installing the new bitstream and matching package.
 
-**Cartridge** is one menu entry with three values. It persists, and changing it
-restarts the core: the save size reported to the Pocket, the ROM source and the
-game-quirk table all follow it, and none may change under a running game.
+## Launch selection
 
-| | |
-|---|---|
-| `Off` | The controller is held in reset and the slot pins sit at the same idle values every previous build of this core used. A cartridge in the slot does nothing. |
-| `Detect` | The controller owns the slot and the header probe runs. The ROM still comes from the SD card. This is the setting to read `CS:` in. |
-| `Boot` | As `Detect`, and the ROM comes from the cartridge, but only if the probe passed. |
+APF's [Cartridge Adapter notification](https://www.analogue.co/developer/docs/host-target-commands#0x00b1)
+provides Play Cartridge in bit 24 and power-at-reset-exit in bit 16. The
+[core definition](https://www.analogue.co/developer/docs/core-definition-files/core-json)
+already enables that browser entry and skips ROM-derived SD files when used.
+The command handler now consumes the notification, retains it across reset,
+and routes ROM/save traffic after a successful header probe. The controller
+stays in reset until APF Reset Exit and never runs without advertised power.
 
-`Boot` is deliberately not a promise. If the probe does not pass, the ROM comes
-from the SD card exactly as it always did. An empty slot or a half-inserted
-cartridge cannot leave you with a core that will not start.
+If the probe fails, the CPU stays in reset: there is no loaded SD ROM to fall
+back to. The core menu remains available for **CG/CS** and **Reset Core**.
+SD save size is zero and savestates are unsupported for the entire cartridge
+launch, including before detection and during reset. Unsupported savestate
+requests return an error instead of waiting forever for an acknowledgment.
 
 ## The probe
 
@@ -117,7 +123,7 @@ If it spells the game you inserted, the bus is working.
 ```
 bits 31:16  header fingerprint: every halfword of the header ORed together
 bits 15:8   header byte 0xB2
-bit     7   the Cartridge menu is not Off
+bit     7   Play Cartridge selected and firmware advertises slot power
 bit     6   cart detected, the ROM may come from it
 bit     5   the probe has finished, pass or fail
 bit     4   the probe timed out, the controller never answered
@@ -145,7 +151,7 @@ means an empty slot. Anything else is a header.
 | `A9` | Passes disagreed. Reseat the cartridge. |
 | `B0` | Timed out. The controller never answered a read. |
 | `A3` | Every halfword read `0000`. The slot is not being driven. |
-| `00` | The menu is `Off`. Nothing ran. |
+| `00` | Cartridge hardware disabled (SD launch or no advertised power). |
 
 ## Cheats on a cartridge game
 
@@ -207,6 +213,6 @@ halfword address and wraps every 128K, so a read crossing that boundary falls
 back to re-driving the address. If a cartridge turns out not to honour its own
 counter, `ROM_BURST=0` in the controller restores the original path exactly.
 
-**Saves are the next phase.** Routing them means writing to a cartridge, and
-that stays behind an explicit toggle until it is proven on a cartridge nobody
-minds losing. See `docs/PLAN.md` §5.
+**Save-write persistence is the next hardware test.** Physical saves are now
+routed and Minish Cap existing-save reads work. Writes remain behind the
+explicit test setting until persistence is qualified. See `docs/HANDOFF.md`.

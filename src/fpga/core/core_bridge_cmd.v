@@ -61,6 +61,9 @@ input   wire    [31:0]  savestate_size,
 input   wire    [31:0]  savestate_maxloadsize,
 
 output  reg             osnotify_inmenu,
+// APF 00B1, retained across Reset Enter/Exit; power applies at reset exit.
+output  reg             osnotify_cart_play,
+output  reg             osnotify_cart_power,
 
 output  reg             savestate_start,        // core should detect rising edge on this,
 input   wire            savestate_start_ack,    // and then assert ack for at least 1 cycle
@@ -196,6 +199,8 @@ initial begin
     savestate_start <= 0;
     savestate_load <= 0;
     osnotify_inmenu <= 0;
+    osnotify_cart_play <= 0;
+    osnotify_cart_power <= 0;
     
     status_setup_done_queue <= 0;
     target_dataslot_read_queue <= 0;
@@ -411,7 +416,11 @@ always @(posedge clk) begin
             if(savestate_start_ok) host_resultcode <= 2;
             if(savestate_start_err) host_resultcode <= 3;
             
-            if(host_20[0]) begin
+            if(host_20[0] && !savestate_supported) begin
+                // Unsupported requests must finish even when the consumer is gated.
+                host_resultcode <= 3;
+                hstate <= ST_DONE_CODE;
+            end else if(host_20[0]) begin
                 // Request Start!
                 savestate_start <= 1;
                 // stay in this state until ack'd
@@ -433,7 +442,11 @@ always @(posedge clk) begin
             if(savestate_load_ok) host_resultcode <= 2;
             if(savestate_load_err) host_resultcode <= 3;
             
-            if(host_20[0]) begin
+            if(host_20[0] && !savestate_supported) begin
+                // Unsupported requests must finish even when the consumer is gated.
+                host_resultcode <= 3;
+                hstate <= ST_DONE_CODE;
+            end else if(host_20[0]) begin
                 // Request Load!
                 savestate_load <= 1;
                 // stay in this state until ack'd
@@ -443,6 +456,12 @@ always @(posedge clk) begin
             end else begin
                 hstate <= ST_DONE_CODE;
             end
+        end
+        16'h00B1: begin
+            // OS Notify: Cartridge Adapter (sent while the core is in reset).
+            osnotify_cart_play <= host_20[24];
+            osnotify_cart_power <= host_20[16];
+            hstate <= ST_DONE_OK;
         end
         16'h00B0: begin
             // OS Notify: Menu State

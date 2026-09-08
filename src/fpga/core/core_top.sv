@@ -238,15 +238,17 @@ assign bridge_endian_little = 0;
 //   cart_hw_enable_s   the controller owns the slot pins and probes the header
 //   cart_rom_mode      gba_top's ROM reads come from the cart instead of SDRAM
 //
-// cart_rom_mode is the second axis ANDed with a passing header probe, so
-// asking for a cart ROM with an empty or half-inserted slot leaves the SD path
-// exactly as it was rather than booting into a bus of floating pins.
-wire       cart_hw_enable_s;    // clk_sys, from the Cartridge menu list
-wire       cart_rom_select_s;   // clk_sys, menu asked for ROM from the cart
+// Play Cartridge comes from APF, not a second menu setting. Intent is kept
+// separate from power so a failed/unpowered cartridge launch cannot run stale
+// SDRAM or advertise an SD save file. ROM routing waits for a passing probe.
+wire       osnotify_cart_play;  // clk_74a, APF 00B1 bit 24
+wire       osnotify_cart_power; // clk_74a, APF 00B1 bit 16 (power at reset exit)
+wire       cart_hw_enable_s;    // clk_sys, Play Cartridge and power available
+wire       cart_rom_select_s;   // clk_sys, Play Cartridge requested
 reg        cart_detect = 1'b0;  // header probe passed, driven at the bottom
 reg        cprobe_done = 1'b0;  // header probe has finished, pass or fail
 reg [31:0] cart_hdr_id = 32'd0; // header 0xAC..0xAF, the game code
-wire       cart_rom_mode = cart_rom_select_s & cart_detect;
+wire       cart_rom_mode = cart_rom_select_s & cart_hw_enable_s & cart_detect;
 wire       cart_writes_s;
 wire       cart_save_req, cart_save_rnw, cart_save_done;
 wire [16:0] cart_save_addr;
@@ -891,14 +893,9 @@ wire        quirk_sprite;     // → maxpixels
 // The quirk table has to describe the ROM that is actually running.
 // save_type_detector reads cart_id out of the SD download stream, and in cart
 // ROM mode there is no download stream, so the header probe supplies it
-// instead. Selected on cart_rom_mode and not on cart_hw_enable_s: with the
-// menu on Detect the running ROM is still the SD one, and its own cart_id
-// is the right answer.
-//
-// det_flash_1m is NOT resolved the same way and is left on the SD stream. It
-// only sizes the save area, and in cart ROM mode the save size reported to the
-// Pocket is forced to zero, so nothing reads it. That stops being true the day
-// saves route to the cartridge.
+// instead. Select the probed identity only after cartridge detection passes.
+// det_flash_1m stays on the SD stream: it sizes the emulated SD save area.
+// Physical saves bypass that emulation and report zero SD save size.
 wire [31:0] active_cart_id    = cart_rom_mode ? cart_hdr_id : detected_cart_id;
 wire        active_cart_valid = cart_rom_mode ? cprobe_done : det_cart_id_valid;
 
@@ -1058,12 +1055,11 @@ synch_3 s_other_dl (other_slot_downloading, other_slot_downloading_s, clk_sys);
 wire core_reset_s;
 synch_3 s_core_reset(core_reset, core_reset_s, clk_sys);
 
-// The header probe is added to the reset condition so the ROM source, the
-// quirk table and the reported save size are all settled before the CPU
-// starts. It only extends reset when the Cartridge menu is on, so the SD path
-// is untouched, and the probe times out rather than hanging if nothing answers.
+// A cartridge launch waits for power and a valid header before releasing
+// the CPU. On probe failure keep it held: Play Cartridge loads no SD ROM to
+// fall back to. The bridge/menu remains available for CG/CS and Reset Core.
 wire reset_gba = ~pll_core_locked | other_slot_downloading_s | ~reset_n_s | core_reset_s |
-                 ~save_mem_ready | (cart_hw_enable_s & ~cprobe_done);
+                 ~save_mem_ready | (cart_rom_select_s & (~cart_hw_enable_s | ~cart_detect));
 
 // ---- BIOS Loading via data_loader → gba_top internal BRAM ----
 // BIOS (16 KB) loads from data slot 4 at address 0x3xxxxxxx
@@ -1191,7 +1187,7 @@ wire    [31:0]  rtc_time_bcd;
 wire            rtc_valid;
 
 // Physical save-chip state is not part of an APF snapshot.
-wire            savestate_supported = cart_menu != 2'd2;
+wire            savestate_supported = ~osnotify_cart_play;
 wire    [31:0]  savestate_addr = 32'h40000000;
 wire    [31:0]  savestate_size = 32'h60D18;       // 0x18346 addr-units × 4 bytes
 wire    [31:0]  savestate_maxloadsize = 32'h60D18;
@@ -1297,6 +1293,8 @@ core_bridge_cmd icb (
     .savestate_load_err     ( savestate_load_err ),
 
     .osnotify_inmenu        ( osnotify_inmenu ),
+    .osnotify_cart_play     ( osnotify_cart_play ),
+    .osnotify_cart_power    ( osnotify_cart_power ),
 
     .target_dataslot_read       ( target_dataslot_read ),
     .target_dataslot_write      ( target_dataslot_write ),
@@ -1549,15 +1547,10 @@ synch_3 gpio_quirk_sync (
 // sizes match the actual save type sizes. No 4× DWORD expansion.
 // Only add 16 bytes for RTC data when the game uses GPIO/RTC or force_rtc is on.
 wire        rtc_active = gpio_quirk_s | force_rtc;
-// In cart ROM mode the game running is the cartridge's, but the .sav on the SD
-// card is named after whatever ROM was used to launch the core. Writing that
-// game's save file with this game's data would destroy it. Report zero and the
-// Pocket neither loads nor writes back, so the SD save is not touched at all.
-// Physical save access is independent of APF files; writes require the
-// Cartridge Saves setting. Taken from Wokann/openfpga-GBA, commit 243fb6a.
-wire        cart_rom_mode_74a;
-synch_3 cart_rom_mode_74a_sync(cart_rom_mode, cart_rom_mode_74a, clk_74a);
-wire [31:0] save_size_bytes = cart_rom_mode_74a ? 32'd0 :
+// Suppress SD save load/writeback for the whole cartridge launch, including
+// before the header probe and during reset. APF also skips filename-derived
+// slots when Play Cartridge is selected. Physical saves have their own path.
+wire [31:0] save_size_bytes = osnotify_cart_play ? 32'd0 :
                               flash_1m_s ? (32'h0002_0000 + (rtc_active ? 32'd16 : 32'd0)) :
                                            (32'h0001_0000 + (rtc_active ? 32'd16 : 32'd0));
 
@@ -1586,15 +1579,6 @@ reg force_rtc = 0;        // 0 = Off, 1 = Force enable RTC/GPIO
 reg [1:0] turbo_mode = 0; // 0 = Disabled, 1 = Turbo A, 2 = Turbo B
 reg ff_video_stable = 1'b1; // 0 = Classic FF, 1 = wait for complete rendered lines
 
-// Cartridge mode, written at 0x90 by the "Cartridge" menu list.
-//   0 = Off             controller held in reset, slot pins at the idle values
-//                       the pre-cartridge core used
-//   1 = Detect          controller owns the slot and reads the header; the ROM
-//                       still comes from SD
-//   2 = Boot            as 1, and gba_top's ROM reads route to the cart once
-//                       the header probe has passed
-reg [1:0] cart_menu = 2'd0;
-reg       cart_menu_seen = 1'b0;   // first write is the boot-time persist
 // Read-only at every launch. EEPROM read-address commands still need WR#;
 // cart_eeprom_bridge validates their opcode before any pin activity.
 reg       cart_writes = 1'b0;
@@ -1619,23 +1603,8 @@ always @(posedge clk_74a) begin
         32'h88: turbo_mode     <= bridge_wr_data[1:0];
         32'h8C: ff_video_stable <= bridge_wr_data[0];
         32'hF3000008: cheats_master <= bridge_wr_data[0];
-        // 0x90 is free in this core: PLAN.md section 1c reserved it for the
-        // cheats master switch, but that ended up at 0xF3000008 because APF
-        // will only preserve the other bits at an address it can read back.
-        // Wokann put their cart-hardware toggle at 0x90 too, so this keeps the
-        // two branches aligned.
-        32'h90: begin
-            // The Pocket writes the persisted value at boot; that one applies
-            // without a reset. Any later change restarts the core, because the
-            // save size reported to the OS, the ROM source and the quirk table
-            // all follow this switch and none of them may change under a
-            // running game. Same rule Wokann arrived at.
-            cart_menu <= bridge_wr_data[1:0];
-            if (cart_menu_seen && (cart_menu != bridge_wr_data[1:0]))
-                reset_counter <= 14'd8000;
-            else
-                cart_menu_seen <= 1'b1;
-        end
+        // Former Cartridge mode address 0x90 is ignored, including stale
+        // persisted Boot values from older packages. APF selects the source.
         32'h94: cart_writes <= bridge_wr_data[0];
         32'h98: cart_cfg <= bridge_wr_data;           // controller tuning
         endcase
@@ -1655,14 +1624,12 @@ synch_3 #(.WIDTH(2)) turbo_mode_sync(turbo_mode, turbo_mode_s, clk_sys);
 wire ff_video_stable_s;
 synch_3 ff_video_stable_sync(ff_video_stable, ff_video_stable_s, clk_sys);
 
-// ---- CDC: cartridge mode → clk_sys ----
-// cart_hw_enable_s hands the slot to the controller. cart_rom_select_s asks
-// for the ROM to come from the cart as well; it still has to get past the
-// header probe before rom_source_mux switches over.
-wire [1:0] cart_menu_s;
-synch_3 #(.WIDTH(2)) cart_menu_sync(cart_menu, cart_menu_s, clk_sys);
-assign cart_hw_enable_s  = cart_menu_s != 2'd0;
-assign cart_rom_select_s = cart_menu_s == 2'd2;
+// ---- CDC: cartridge launch → clk_sys ----
+// Firmware sends 00B1 while reset is asserted. The controller/probe also wait
+// for APF Reset Exit, because bit 16 describes power after that command.
+wire cart_hw_requested_74a = osnotify_cart_play & osnotify_cart_power;
+synch_3 cart_hw_sync(cart_hw_requested_74a, cart_hw_enable_s, clk_sys);
+synch_3 cart_play_sync(osnotify_cart_play, cart_rom_select_s, clk_sys);
 synch_3 cart_writes_sync(cart_writes, cart_writes_s, clk_sys);
 
 // Only the bits with a consumer are carried across. gpio_recover_set is left
@@ -2015,7 +1982,7 @@ gba_top #(
 // destructive save commands require the Cartridge Saves menu setting.
 // GPIO/RTC remains disconnected.
 
-// Held in reset whenever the Cartridge menu is Off. That is what restores the
+// Held in reset outside a powered Play Cartridge launch. This restores the
 // slot to the idle posture the pre-cartridge core used, and it is a property
 // of the controller's own reset block rather than a promise made here:
 // out_bank1/2/3_dir all reset to 0 (banks tri-stated, translators pointed in),
@@ -2229,7 +2196,7 @@ localparam [5:0] CP_LAST = 6'd46;   // last request index, 48 DWORDs in pairs
 always @(posedge clk_sys) begin
     if (~pll_core_locked || ~cart_hw_enable_s || core_reset_s || ~reset_n_s) begin
         // Re-probe on every core restart, so a cart inserted after a failed
-        // probe is picked up by toggling the menu or resetting. reset_n_s is
+        // probe is picked up by resetting the core. reset_n_s is
         // in the list because the controller resets on it: the Pocket sends
         // "data slot access all complete" before "Reset Exit", so a probe
         // that starts on allcomplete alone asks a controller still in reset,
@@ -2335,7 +2302,7 @@ end
 //   bits 15:8   header byte 0xB2. 0x96 on every licensed cartridge, so 150 in
 //               the menu's decimal is the single strongest sign the read is
 //               real. It is reported, not gated on.
-//   bit     7   the Cartridge menu is not Off
+//   bit     7   Play Cartridge selected and slot power advertised
 //   bit     6   cart detected: the probe passed and the ROM may come from it
 //   bit     5   the probe has finished, pass or fail
 //   bit     4   the probe timed out: the controller never answered a read
@@ -2359,8 +2326,8 @@ synch_3 #(.WIDTH(32)) cart_readout_id_sync(cart_readout_id, cart_readout_id_s, c
 synch_3 #(.WIDTH(32)) cart_readout_st_sync(cart_readout_st, cart_readout_st_s, clk_74a);
 
 // ---- ROM source ----
-// cart_mode is real now: the menu asked for a cart ROM and the header probe
-// agreed there is one. With it low the mux passes gba_top's reads straight to
+// cart_mode requires Play Cartridge, advertised power and a passing header
+// probe. With it low the mux passes gba_top's reads straight to
 // SDRAM, which is the pre-cartridge behaviour bit for bit.
 rom_source_mux romsrc (
     .clk                  ( clk_sys ),

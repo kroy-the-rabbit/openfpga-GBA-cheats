@@ -50,7 +50,7 @@ effect off and back on live.
 | A stray `.cht` loading zero rather than garbage | correct in simulation, **unconfirmed on hardware** |
 | Closing the lid with the engine running | **unconfirmed on hardware** |
 | Encrypted codes: GameShark v3, Action Replay v3, CodeBreaker after a `9` line | refused, and cannot be made to work |
-| Cartridges | **bring-up, unconfirmed on hardware.** The slot is powered and a header probe reads the cartridge. Saves are not routed and nothing writes to a cart. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) |
+| Cartridges | **Bring-up.** Minish Cap boots and reads existing physical saves on hardware. Write persistence and the new automatic launch path still need hardware qualification. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) |
 | 64 MB video carts | do not work |
 
 [docs/HARDWARE.md](docs/HARDWARE.md) is the checklist and says exactly which
@@ -102,10 +102,12 @@ hardware or supply your own copy.
 
 ## Usage
 
-ROMs go in `/Assets/gba/common/`. Cheats apply to ROMs on the card. A cartridge
-in the slot does nothing until the **Cartridge** menu setting is turned on, and a
-game booted from a cartridge cannot save, because saves are not routed to the
-cart. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) covers the setting and the readout.
+ROMs go in `/Assets/gba/common/`. Choose **Play Cartridge** in the asset
+browser to use the inserted cartridge. Cartridge saves default to Read Only;
+physical writes require the explicit test setting. This automatic launch path
+is new source awaiting hardware qualification; the installed `99293a3` build
+still needs **Cartridge → Boot**. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) covers
+the current hardware results and diagnostic readouts.
 
 Declaring the cartridge adapter raises the firmware this core needs: it will not
 load on a Pocket below **firmware 1.2**.

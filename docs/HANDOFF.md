@@ -5,6 +5,67 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-07: remove redundant Cartridge mode menu
+
+User request: choosing **Play Cartridge** should be sufficient to play the
+inserted game. The old handler ignored APF command `00B1`, so the browser
+selection powered the slot but left the core waiting for a separate Boot setting.
+
+- Decode `00B1` bits 24/16 (Play Cartridge / power after reset exit), retaining
+  them through APF resets. Synchronize launch intent and powered enable.
+- Remove the Off/Detect/Boot menu and its register. Ignore stale persisted
+  writes at `0x90`; there is no settings migration needed on the card.
+- Probe/boot/read saves automatically. Keep the CPU held if power or a valid
+  header is absent; do not run uninitialized SDRAM on a failed cartridge launch.
+- Suppress SD save size and savestate support from launch intent immediately.
+  Unsupported APF save/load requests now complete with error 3, without a pulse
+  to the gated consumer. Normal SD savestate handshakes are preserved.
+- CG/CS diagnostics and the nonpersistent Read Only/Writes Enabled test setting
+  remain. Physical write persistence is still unqualified.
+
+Validation: `make test` passed (7 cartridge benches, GHDL memorymux, 30 APF
+commands covering both byte orders/reset retention and savestate handshakes,
+and the cheat suites). Optional external cheat-corpus cross-check skipped
+because no corpus is configured. Independent RTL/UI review passed. The
+actual `core_top` control-path bench also passed: APF notification through
+source synchronizers, CPU/controller reset, save isolation and stale `0x90`
+immunity. This bench models probe results and omits unrelated engines; the
+real probe/VHDL/pins are covered separately, not by that launch bench.
+Next: queue seed 8 on sisko. No new package has been installed; the mounted card still runs hardware-tested `99293a3`.
+`findmnt` currently reports `/dev/sda1` at `/run/media/kroy/pocket` as **ro**
+(exFAT). No repair/remount was attempted. Check that mount before the next
+deployment; preserve the instruction to leave the card mounted after writing.
+
+## 2026-09-07: existing Minish Cap cartridge saves confirmed on hardware
+
+**`0.9999.99293a3` boots and reads the physical EEPROM save.** The user
+reported success with Cartridge Saves set to **Read Only**. The latest card
+screenshot `Memories/Screenshots/20260907_211307.png` shows Minish Cap's file
+selection with **Adam** in slot 1 and **BRO** in slot 3; slot 2 is empty.
+The image is preserved in `build/hardware-results/99293a3/` with hashes.
+Physical write persistence remains untested.
+
+The preceding BIOS-screen report is **not a confirmed code regression**.
+That attempt had CG=CS=0 (cartridge controller disabled). After checking
+**Cartridge → Boot** separately from **Cartridge Saves → Read Only**, the
+user reported that it worked. The mounted card's persisted interact setting
+is id 50, value 2 (Boot). The source's combined ROM-path simulation also passes.
+Normal use needs only **Boot**; it automatically probes. Detect is a diagnostic
+mode, not a required first step. The user found the startup process clunky;
+the user clarified that Play Cartridge should be sufficient. The new source
+change above removes the redundant mode switch.
+
+No new bitstream was installed for this confirmation. Card writes must still
+be flushed without automatically unmounting. Before any write-persistence
+test, verify the actual cartridge EEPROM backup described below and use the
+explicit Writes Enabled setting. SD card backups are not physical EEPROM
+backups.
+
+Separate audit finding, not linked to the resolved startup report:
+unsupported APF save/load commands could wait forever because Boot-mode gating
+suppressed their acknowledgments. The new launch change above also makes the
+command handler return error 3 without asserting an unsupported request.
+
 ## 2026-09-07: physical-save build installed; test existing slots in Read Only
 
 **Hardware regression:** after installing `99293a3`, Kroy reports a freeze

@@ -124,30 +124,6 @@
         "address": "0xF3000004"
       },
       {
-        "name": "Cartridge",
-        "id": 50,
-        "type": "list",
-        "enabled": true,
-        "address": "0x90",
-        "persist": true,
-        "writeonly": true,
-        "defaultval": 0,
-        "options": [
-          {
-            "name": "Off",
-            "value": 0
-          },
-          {
-            "name": "Detect",
-            "value": 1
-          },
-          {
-            "name": "Boot",
-            "value": 2
-          }
-        ]
-      },
-      {
         "name": "Cartridge Saves",
         "id": 53,
         "type": "list",
