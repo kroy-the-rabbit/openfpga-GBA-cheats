@@ -5,6 +5,65 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-08: targeted I/O timing fix building; persistent watcher active
+
+Source **`c115fbf6d3e42e38160804c072c68eb73235a876`**, seed 3, is verified
+running on sisko. Job `pocket-gba-gba-p5cart-ioreply-s3-c115fbf6d3e4`,
+launcher PID `637358`. The user asked for a watcher that reports readiness or
+failure. No card write or unmount was performed; installed baseline is `417a55f`.
+
+Actual post-fit analysis of the old diagnostic seed 3 identified only two
+failing paths at 85 C: memorymux I/O address bit 6 through the combined
+`gb_bus.done` decode into `rotate_data` (−0.055 / −0.047 ns). Seed 2 also
+failed CPU DMA-to-cycle-count and SDRAM input paths. This is placement-sensitive;
+the clock named in a timing summary is not a path diagnosis.
+
+The fix samples I/O reply data on the original cycle without gating that
+buffer write on `gb_bus.done`. Readability still selects the original state
+transition. Unreadable data is replaced by READ_UNREADABLE before ROTATE;
+no extra bus cycle or acknowledgement is added. No timing constraints changed.
+The existing stale QSF resource-sharing target was observed but not changed.
+
+Validation: `make test` passed (external cheat corpus skipped). Added I/O
+regression covers readable/unreadable replies at all widths and byte lanes,
+write pulse count and a delayed read. A temporary baseline/current GHDL
+comparison produced **3,408 identical cycle/data trace entries**. Evidence:
+`build/timing-analysis/regression.log`, `compare_memorymux.py`, and
+`seed3-all-corners/`. Snapshot raw data delay in old seed 3 is 6.854 ns at
+85 C; the new build must independently pass its routing check.
+
+`scripts/inspect_timing.tcl` now emits actual setup endpoints and raw snapshot
+payload delays at all four operating corners after every fit. The existing
+SDC remains in force. The new build also runs this report script automatically.
+
+**Watcher is a persistent user service**, not a chat process:
+`pocket-gba-watch-c115fbf.service`, PID `2211597` at startup. Its first SSH
+poll succeeded and its startup desktop notification was delivered. It polls
+sisko every 45 seconds, fetches the exact job artifacts (avoiding the
+runner-fetch ambiguity), and sends a desktop notification when finished.
+A shell/nohup launch did not survive; the user service is the verified watcher.
+
+- Durable result: `build/watch/pocket-gba-gba-p5cart-ioreply-s3-c115fbf6d3e4/result.json`.
+- Journal: `journalctl --user -u pocket-gba-watch-c115fbf.service`.
+- Readiness requires build success, five nonnegative timing summaries,
+  valid fit, all four snapshot paths under a conservative 20 ns budget,
+  exact package/source/version agreement and matching bitstream bytes.
+- On success: verifies 14 archive files, stages the 13 Assets/Cores/Platforms
+  files under that watch directory's `sd/`, and records `ready-to-write`.
+  Root `instructions.txt` is verified but not staged for the card.
+- On failure: records `not-ready` plus the reason; timing failures include
+  detailed path reports when available. Five network failures or three hours
+  without completion also report an explicit monitoring failure.
+- Watcher validation rejected a real failed report, a corrupted bitstream and
+  an over-budget snapshot fixture; its success fixture staged the expected
+  package files. The test fixture did not alter real failed artifacts.
+- **The watcher never writes the card.** When ready, adapt the guarded
+  installer to this revision and the existing `417a55f` baseline, back up
+  fresh saves/settings, flush and verify the write, and leave it mounted.
+- Metroid Zero Mission's hardware white screen remains unresolved. The
+  diagnostic package is intended to capture its CPU PC/state, IRQ/DMA and
+  Save Bus on two OS-menu entries, not a confirmed game-specific fix.
+
 ## 2026-09-08: Zero Mission also whitescreens on 417a55f
 
 User reports the same white screen after BIOS on the new installed build.
