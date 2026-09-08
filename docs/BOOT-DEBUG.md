@@ -1,12 +1,12 @@
 # Cartridge boot diagnostics
 
 These readouts are for the Zero Mission white-screen investigation. They
-observe the existing CPU and cartridge path; they do not change its timing,
-reset conditions, write policy or request handling.
+observe the existing CPU and cartridge path; they do not change its cycle
+behavior, reset conditions, write policy or request handling.
 
-After the game stops, open the core menu and capture **CPU PC**, **CPU State**,
-**IRQ / DMA**, and **Save Bus**, along with CG/CS and Save Fault. All four debug
-words are sampled together on entry to the OS menu and stay stable while it
+After the game stops, open the core menu and capture **CPU PC** and **CPU State**,
+along with CG/CS and Save Fault. Both debug words are sampled together on
+entry to the OS menu and stay stable while it
 is open. Close and reopen the menu for another sample. The CPU continues to
 run as before; opening the menu only captures its state.
 
@@ -62,24 +62,12 @@ Relevant memorymux states for this source:
 The outstanding flags track request/completion handshakes and clear on APF
 or core reset. They are observations, not timeout or error indicators.
 
-## IRQ / DMA — 0xF4000018
+The compact diagnostic build omits the former IRQ / DMA and Save Bus
+readouts. Their bridge addresses (0xF4000018 / 0xF400001C) return zero.
+The snapshot carries 64 bits instead of 128, removing 128 payload registers,
+the seven-bit save completion counter and its address/data observation paths.
+CPU State retains interrupt master enable, DMA3 active and the three wait flags.
 
-Low 16 bits: existing pending interrupt flags. Upper 16 bits: the core's
-existing DMA diagnostic word: bit 0 arbiter idle, bits 2–1 selected channel,
-bits 6–3 active channels, bits 11–8 grants, bits 15–12 channel-idle flags.
-Interrupt master enable is in CPU State bit 22.
-
-## Save Bus — 0xF400001C
-
-| Bits | Meaning |
-|---|---|
-| 16–0 | Last physical SRAM/Flash byte address |
-| 24–17 | Last returned physical byte |
-| 31–25 | Completed byte requests modulo 128, including denied writes |
-
-The address is the last/current request and the byte is the last read
-response; they need not belong to the same transaction while a read is
-pending or after a write. A zero counter can also mean it wrapped.
-
-For EEPROM games, these SRAM/Flash fields may remain zero. Save Fault is an
-EEPROM-specific guard and cannot confirm that SRAM transfers work.
+Save Fault remains an EEPROM-specific guard and cannot confirm that SRAM
+transfers work. A stable PC plus the memory state/wait flags is the next
+observation needed for Zero Mission; this build is not a confirmed boot fix.

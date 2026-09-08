@@ -1,6 +1,6 @@
 `default_nettype none
 
-// Capture the four diagnostic words together when the APF menu opens.
+// Capture the two diagnostic words together when the APF menu opens.
 // The payload is held in clk_sys from request acceptance until a later
 // request. Only request/acknowledgment toggles cross synchronizers: by the
 // time the host observes ack, the bundled payload has settled for two host
@@ -10,15 +10,15 @@ module cart_debug_snapshot (
     input  wire         clk_host,
     input  wire         clk_sys,
     input  wire         host_menu,
-    input  wire [127:0] sys_debug,
-    output reg  [127:0] host_debug = 128'd0
+    input  wire [63:0] sys_debug,
+    output reg  [63:0] host_debug = 64'd0
 );
     reg menu_previous = 1'b0;
     reg request_toggle = 1'b0;
     reg ack_seen = 1'b0;
     reg pending = 1'b0;
     reg ack_toggle = 1'b0;
-    reg [127:0] captured_debug = 128'd0;
+    reg [63:0] captured_debug = 64'd0;
 
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     reg [1:0] request_sync = 2'b00;

@@ -7,12 +7,12 @@ module tb_cart_debug_snapshot;
     always #11 clk_sys = !clk_sys;
 
     reg [31:0] epoch = 32'd1;
-    wire [127:0] sys_debug = {epoch, ~epoch, epoch ^ 32'hA55AF00F, epoch + 32'd12345};
-    wire [127:0] host_debug;
+    wire [63:0] sys_debug = {epoch ^ 32'hA55AF00F, epoch + 32'd12345};
+    wire [63:0] host_debug;
     cart_debug_snapshot dut(.*);
 
-    reg [127:0] expected [0:15];
-    reg [127:0] previous_debug = 0;
+    reg [63:0] expected [0:15];
+    reg [63:0] previous_debug = 0;
     integer captures = 0, publications = 0;
     always @(posedge clk_sys) begin
         epoch <= epoch + 1;
@@ -45,7 +45,7 @@ module tb_cart_debug_snapshot;
     initial begin
         repeat (5) @(negedge clk_host);
         #1;
-        if (host_debug !== 128'd0 || captures != 0) $fatal(1, "Initial snapshot is not zero");
+        if (host_debug !== 64'd0 || captures != 0) $fatal(1, "Initial snapshot is not zero");
         host_menu = 1;
         wait_publications(1);
         repeat (20) @(negedge clk_host);

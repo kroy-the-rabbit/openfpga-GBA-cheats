@@ -783,22 +783,15 @@ begin
                if (wait_timer > 0) then
                   wait_timer <= wait_timer - 1;
                else
-                  -- Sample the reply on the same cycle regardless of the
-                  -- address-decode acknowledgement. This removes the wide
-                  -- gb_bus.done decode from the rotate_data write enable.
-                  -- A denied read goes through READ_UNREADABLE, which replaces
-                  -- this speculative value before ROTATE can expose it.
-                  if (read_operation = '1') then
-                     if (is_simu = '0') then
-                        rotate_data <= gb_bus_out.Dout;
-                     else
-                        for i in 0 to 31 loop
-                           if (gb_bus_out.Dout(i) = '1') then rotate_data(i) <= '1'; else rotate_data(i) <= '0'; end if;
-                        end loop;
-                     end if;
-                  end if;
                   if (gb_bus_out.done /= '0') then
                      if (read_operation = '1') then
+                        if (is_simu = '0') then
+                           rotate_data <= gb_bus_out.Dout;
+                        else
+                           for i in 0 to 31 loop
+                              if (gb_bus_out.Dout(i) = '1') then rotate_data(i) <= '1'; else rotate_data(i) <= '0'; end if;
+                           end loop;
+                        end if;
                         state <= rotate;
                      else
                         mem_bus_done <= '1'; 

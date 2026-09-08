@@ -258,8 +258,8 @@ wire       cart_eeprom_dma, cart_eeprom_last, cart_eeprom_dout, cart_eeprom_done
 wire [16:0] cart_eeprom_count;
 wire       cart_eeprom_dma_active;
 wire       cart_eeprom_fault, cart_eeprom_fault_s;
-wire [31:0] gba_debug_pc, gba_debug_cpu, gba_debug_mem, gba_debug_irq, gba_debug_dma;
-wire [127:0] cart_debug_host;
+wire [31:0] gba_debug_pc, gba_debug_cpu, gba_debug_mem, gba_debug_irq;
+wire [63:0] cart_debug_host;
 wire cart_arb_busy;
 
 
@@ -1513,8 +1513,6 @@ always @(*) begin
     end
     32'hF4000010: bridge_rd_data <= cart_debug_host[31:0];
     32'hF4000014: bridge_rd_data <= cart_debug_host[63:32];
-    32'hF4000018: bridge_rd_data <= cart_debug_host[95:64];
-    32'hF400001C: bridge_rd_data <= cart_debug_host[127:96];
     32'hF3000004: begin
         bridge_rd_data <= {24'd0, cheat_overrun_s, cheats_master,
                            cheat_rejected_s};
@@ -1983,7 +1981,7 @@ gba_top #(
     .debug_cpu_pc        ( gba_debug_pc ),
     .debug_cpu_mixed     ( gba_debug_cpu ),
     .debug_irq           ( gba_debug_irq ),
-    .debug_dma           ( gba_debug_dma ),
+    .debug_dma           (),
     .debug_mem           ( gba_debug_mem )
 );
 
@@ -2128,21 +2126,18 @@ gba_cart_controller cart_ctl (
 
 // ---- Boot diagnostics ----
 // Observe only: these registers do not gate requests, clocks, reset or writes.
-// Capture all four words together on OS menu entry; the host sees a stable
+// Capture both words together on OS menu entry; the host sees a stable
 // snapshot rather than unrelated live words sampled at different times.
 reg debug_save_wait = 0, debug_rom_wait = 0, debug_psram_wait = 0;
-reg [6:0] debug_save_completions = 0;
 always @(posedge clk_sys) begin
     if (!pll_core_locked || !reset_n_s || core_reset_s) begin
         debug_save_wait <= 0;
         debug_rom_wait <= 0;
         debug_psram_wait <= 0;
-        debug_save_completions <= 0;
     end else begin
         if (cart_save_req) debug_save_wait <= 1;
         if (cart_save_done) begin
             debug_save_wait <= 0;
-            debug_save_completions <= debug_save_completions + 1'b1;
         end
         if (sdram_read_req_gba) debug_rom_wait <= 1;
         if (romsrc_gba_rd_ready) debug_rom_wait <= 0;
@@ -2156,11 +2151,9 @@ wire [31:0] cart_debug_state = {
     cart_rom_mode, gba_debug_irq[16], cart_arb_busy, cart_eeprom_dma_active,
     gba_debug_mem[7:0], gba_debug_cpu[11:0]
 };
-wire [31:0] cart_debug_irq_dma = {gba_debug_dma[15:0], gba_debug_irq[15:0]};
-wire [31:0] cart_debug_save = {debug_save_completions, cart_save_dout, cart_save_addr};
 cart_debug_snapshot boot_debug (
     .clk_host(clk_74a), .clk_sys(clk_sys), .host_menu(osnotify_inmenu),
-    .sys_debug({cart_debug_save, cart_debug_irq_dma, cart_debug_state, gba_debug_pc}),
+    .sys_debug({cart_debug_state, gba_debug_pc}),
     .host_debug(cart_debug_host)
 );
 
