@@ -32,12 +32,19 @@ this mixed test, so it does not simulate Zero Mission startup itself.
 and actual-top debug readouts, asynchronous snapshot test, and cheat suites.
 Optional external cheat corpus was unavailable and skipped.
 
-**Diagnostic build verified running on sisko**, explicit seed 3:
+**Diagnostic seed 3 failed timing**: setup **−0.055 ns**, hold +0.030 ns,
+recovery +3.578 ns, removal +0.411 ns, minimum pulse +0.827 ns;
+18,045/18,480 ALMs (98%), 25,638 registers, 282 RAM blocks, 1494 s.
+Reports, log and package are archived in
+`build/gba/artifacts/1a053b2-seed3-FAILED/`; **do not install that package**.
+The user reports the card mounted. No card writes or unmount were performed.
+
+**Retry verified running on sisko**, explicit seed 8, identical tested source:
 
 - Source: `1a053b20bc00303b2c7cc29156e001a28d57fab6`.
-- Job: `pocket-gba-gba-p5cart-debug-s3-1a053b20bc00`, PID `614454`.
-- Status: `../tools/runner-build job sisko pocket-gba gba p5cart-debug-s3 1a053b2`.
-- Fetch: `../tools/runner-build fetch sisko pocket-gba gba p5cart-debug-s3 1a053b2`.
+- Job: `pocket-gba-gba-p5cart-debug-s8-1a053b20bc00`, PID `624823`.
+- Status: `../tools/runner-build job sisko pocket-gba gba p5cart-debug-s8 1a053b2`.
+- Fetch: `../tools/runner-build fetch sisko pocket-gba gba p5cart-debug-s8 1a053b2`.
 - Do not wait interactively for compilation. Require passing timing and fit
   before installing. Preserve installed `417a55f` as the rollback baseline.
 - After installation, reproduce Zero Mission white screen, open the OS/core
