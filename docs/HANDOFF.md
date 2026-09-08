@@ -5,6 +5,21 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-07: 417a55f installed and verified; card left mounted
+
+User remounted the card and explicitly said not to unmount. The guarded
+installer completed: **13 package files verified**, **9 protected files
+unchanged**, filesystem writes flushed, and the card left mounted.
+The prior core and current GBA saves/settings are preserved in a verified
+22-file backup at `/home/kroy/Desktop/repos/pocket-dev/pocket-gba/build/card-backups/20260908T042119Z`.
+
+Installed version: **0.9999.417a55f**, seed 3, setup +0.092 ns and hold
++0.114 ns. Manifest: `build/gba/deployment-417a55f.json`.
+Next hardware test: select Play Cartridge directly, cheats off, and retry
+Metroid Zero Mission. Read Only is the default; capture CG/CS and Save Fault
+if it still whitescreens. This package is not a confirmed Metroid-specific
+fix. Physical save-write persistence remains unqualified.
+
 ## 2026-09-07: Zero Mission white screen; new GBA build passes timing
 
 User tested Metroid Zero Mission on installed `99293a3`: `CG=424D5845`

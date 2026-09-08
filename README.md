@@ -105,8 +105,7 @@ hardware or supply your own copy.
 ROMs go in `/Assets/gba/common/`. Choose **Play Cartridge** in the asset
 browser to use the inserted cartridge. Cartridge saves default to Read Only;
 physical writes require the explicit test setting. This automatic launch path
-is new source awaiting hardware qualification; the installed `99293a3` build
-still needs **Cartridge → Boot**. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) covers
+is installed in `417a55f` and awaiting hardware qualification. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) covers
 the current hardware results and diagnostic readouts.
 
 Declaring the cartridge adapter raises the firmware this core needs: it will not

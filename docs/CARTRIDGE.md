@@ -1,10 +1,11 @@
 # Cartridges on the Pocket GBA core
 
-The installed build `99293a3` boots Minish Cap, loads a working physical
+Build `99293a3` boots Minish Cap, loads a working physical
 cartridge save in Read Only mode, and plays with cheats, confirmed by the user. Physical write support passes
 simulation but still needs a hardware persistence test. See `docs/HANDOFF.md`
-for the latest results. The source now uses **Play Cartridge** directly; this
-launch change still needs a new bitstream and hardware confirmation.
+for the latest results. The installed build is now **`417a55f`**, which uses
+**Play Cartridge** directly; hardware confirmation of the new launch path
+is pending.
 
 **Cartridge Saves** defaults to **Read Only** at each launch. With Play Cartridge,
 SRAM/Flash reads and EEPROM read commands reach the physical save chip.
@@ -72,7 +73,7 @@ The fix is to hold the probe in reset until `reset_n` is high, so it runs only
 once the controller does. It is `cfd4264`, built and timing-met at seed 1 on
 2026-09-06, not yet run on the slot.
 
-## Quick start (new source; pending hardware qualification)
+## Quick start (`417a55f`; pending hardware qualification)
 
 1. Insert the cartridge before launching the core.
 2. Choose **Play Cartridge** in the GBA core's asset browser. The core probes
@@ -81,9 +82,9 @@ once the controller does. It is `cfd4264`, built and timing-met at seed 1 on
    starts in Read Only, so progress otherwise will not persist.
 
 There is no separate Off/Detect/Boot switch. Choosing an SD ROM uses the SD
-path. Old persisted mode values at `0x90` are ignored. The installed
-`99293a3` package still has the old switch and needs **Cartridge → Boot**;
-removing it requires installing the new bitstream and matching package.
+path. Old persisted mode values at `0x90` are ignored. The `417a55f`
+bitstream and matching package are installed; no mode-switch migration is
+needed.
 
 ## Launch selection
 
