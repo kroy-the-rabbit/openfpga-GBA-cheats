@@ -7,6 +7,20 @@ from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
 ## 2026-09-07: physical-save build installed; test existing slots in Read Only
 
+**Hardware regression:** after installing `99293a3`, Kroy reports a freeze
+at the BIOS screen again. `4728cc6` previously reached Minish Cap title/save
+selection. CG/CS from the failed session are pending. Do not treat the
+simulation/timing passes as a successful hardware save test. Investigation
+is checking the complete ROM mux → arbiter → controller path and startup.
+
+The new combined simulation passes: 48 held header-probe requests followed
+by 70 CPU cache-line reads through the actual ROM mux, arbiter, controller
+and cartridge pin model. All 7 cartridge benches pass; no lost/duplicate
+requests or cache ordering regression reproduced. This does not qualify the
+hardware path. A displayed GBA logo can also mean the game entered save
+initialization and stalled before drawing its first frame. CG/CS are needed
+to separate failed detection from later execution. No new FPGA build started.
+
 **`0.9999.99293a3` is installed on the Pocket card**, UUID `7AFF-9FB9`.
 The overnight sisko build completed successfully (rc=0), explicit seed 8,
 Quartus 25.1std, STANDARD FIT, in 1659 s. All timing types passed:

@@ -3,7 +3,7 @@
 // Exercise cache.vhd's two-DWORD cache-line contract through the real cart
 // controller. The second DWORD belongs to the same aligned 8-byte line,
 // including when the requested DWORD is the upper half of that line.
-module tb_rom_source_mux;
+module tb_rom_source_mux #(parameter VIA_ARBITER = 0);
     reg clk = 0;
     always #5 clk = ~clk;
     reg reset_n = 0;
@@ -13,6 +13,33 @@ module tb_rom_source_mux;
     wire [24:0] saddr, caddr;
     wire [31:0] data1, data2, cdata1, cdata2;
     reg sready = 0;
+    reg probe_req = 0;
+    reg [24:0] probe_addr = 0;
+    wire probe_done, ctl_req, ctl_ready;
+    wire [24:0] ctl_addr;
+    integer controller_requests = 0, cpu_completions = 0, probe_completions = 0;
+    always @(posedge clk) begin
+        if (ctl_req) controller_requests = controller_requests + 1;
+        if (cart_mode && ready) cpu_completions = cpu_completions + 1;
+        if (probe_done) probe_completions = probe_completions + 1;
+        if (probe_done && cready) $fatal(1, "FAIL probe completion leaked to CPU");
+    end
+    generate if (VIA_ARBITER) begin : routed
+        cart_bus_arbiter arbiter (
+            .clk(clk), .reset_n(reset_n),
+            .probe_req(probe_req), .probe_addr(probe_addr), .probe_done(probe_done),
+            .rom_req(creq), .rom_addr(caddr), .rom_done(cready),
+            .save_req(1'b0), .save_addr(17'b0), .save_rnw(1'b1), .save_din(8'b0),
+            .ee_req(1'b0), .ee_rnw(1'b1), .ee_din(1'b0), .ee_dma(1'b0),
+            .ctl_rom_req(ctl_req), .ctl_rom_addr(ctl_addr), .ctl_rom_done(ctl_ready),
+            .ctl_save_done(1'b0), .ctl_ee_done(1'b0)
+        );
+    end else begin : direct
+        assign ctl_req = creq;
+        assign ctl_addr = caddr;
+        assign cready = ctl_ready;
+        assign probe_done = 1'b0;
+    end endgenerate
 
     rom_source_mux mux (
         .clk(clk), .cart_mode(cart_mode),
@@ -33,7 +60,7 @@ module tb_rom_source_mux;
         .cart_tran_bank1(b1), .cart_tran_bank2(b2), .cart_tran_bank3(b3),
         .cart_tran_bank0(b0),
         .cart_tran_bank2_dir(b2dir), .cart_tran_bank3_dir(b3dir),
-        .rd_req(creq), .rd_addr(caddr), .rd_ready(cready),
+        .rd_req(ctl_req), .rd_addr(ctl_addr), .rd_ready(ctl_ready),
         .rd_data(cdata1), .rd_data_second(cdata2),
         .save_req(1'b0), .save_addr(17'd0), .save_rnw(1'b1), .save_din(8'd0),
         .eeprom_req(1'b0), .eeprom_rnw(1'b1), .eeprom_din(1'b0), .eeprom_dma(1'b0),
@@ -57,6 +84,30 @@ module tb_rom_source_mux;
             expected_dword = {hi, lo};
         end
     endfunction
+
+    // Match the real header probe: a level request held until completion,
+    // then a gap before the next pair. Raw probe data bypasses cache parity.
+    task read_probe(input [24:0] requested);
+        integer before_requests;
+        begin
+            @(negedge clk);
+            before_requests = controller_requests;
+            probe_addr = requested;
+            probe_req = 1;
+            @(posedge probe_done);
+            @(posedge clk);
+            if (cdata1 !== expected_dword(requested) ||
+                cdata2 !== expected_dword(requested + 1'b1))
+                $fatal(1, "FAIL probe pair %h: got %h %h", requested, cdata1, cdata2);
+            // Hold past completion as well: only the rising request edge
+            // may launch a controller transfer.
+            repeat (3) @(negedge clk);
+            probe_req = 0;
+            repeat (3) @(negedge clk);
+            if (controller_requests != before_requests + 1)
+                $fatal(1, "FAIL duplicate controller transfer for held probe");
+        end
+    endtask
 
     integer cases = 0;
     task read_line(input [24:0] requested);
@@ -103,6 +154,13 @@ module tb_rom_source_mux;
             $fatal(1, "FAIL SDRAM forwarding");
         @(negedge clk);
         req = 0; sready = 0; cart_mode = 1;
+        if (VIA_ARBITER) begin
+            // Two complete 192-byte header passes, then the CPU immediately
+            // begins cache-line reads without resetting the bus controller.
+            for (i = 0; i < 48; i = i + 1) read_probe((i % 24) * 2);
+            if (probe_completions != 48 || cpu_completions != 0)
+                $fatal(1, "FAIL header-probe response routing");
+        end
         read_line(25'd0);
         read_line(25'd1);
         read_line(25'h7fff);   // last DWORD before a 128 KiB cart boundary
@@ -112,11 +170,18 @@ module tb_rom_source_mux;
         for (i = 2; i < 66; i = i + 1) read_line(i);
         if (redrive || no_cs || while_out)
             $fatal(1, "FAIL cartridge pin protocol");
-        $display("PASS ROM mux: %0d cache-line reads and SDRAM forwarding", cases);
+        if (controller_requests != cases + (VIA_ARBITER ? 48 : 0) || cpu_completions != cases)
+            $fatal(1, "FAIL lost or duplicate ROM transaction across probe/CPU handoff");
+        $display("PASS ROM mux arbiter=%0d: %0d cache-line reads, %0d held probes and SDRAM forwarding",
+                 VIA_ARBITER, cases, probe_completions);
         $finish;
     end
     initial begin
         #1000000;
         $fatal(1, "FAIL timeout waiting for cache-line response");
     end
+endmodule
+
+module tb_rom_source_mux_arbiter;
+    tb_rom_source_mux #(.VIA_ARBITER(1)) test();
 endmodule

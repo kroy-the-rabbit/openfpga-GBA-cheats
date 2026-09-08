@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Cartridge ROM read path: src/fpga/han/gba_cart_controller.sv.
 
-Six passes.
+Seven passes.
 
 1. sim/han/tb_gba_cart_controller.sv, Wokann's whole-controller bench,
    vendored verbatim. It covers SRAM, GPIO and EEPROM as well as ROM, so it
@@ -30,6 +30,9 @@ Six passes.
 
 6. sim/han/tb_cart_bus_arbiter.sv verifies queued pulse capture, typed
    completion, payload stability and the held header-probe handshake.
+
+7. The mux bench also runs through cart_bus_arbiter and the real controller,
+   including two held-request header probe passes and the CPU handoff.
 
 ROM_BURST is a module parameter with no port, and iverilog's -P only reaches
 root modules, so pass 1 gets a copy of the controller with the parameter
@@ -115,8 +118,13 @@ def main() -> int:
                   [os.path.join(ROOT, "sim", "han", "tb_cart_bus_arbiter.sv"),
                    os.path.join(ROOT, "src", "fpga", "han", "cart_bus_arbiter.sv")],
                   top="tb_cart_bus_arbiter")
-    print(f"\n{passes}/6 benches pass")
-    return 0 if passes == 6 else 1
+    passes += run("ROM mux through arbiter/controller, header probe and CPU handoff",
+                  os.path.join(BUILD, "tb_rom_source_mux_arbiter"),
+                  [TB_MUX, TB_BURST, CTRL, MUX,
+                   os.path.join(ROOT, "src", "fpga", "han", "cart_bus_arbiter.sv")],
+                  top="tb_rom_source_mux_arbiter")
+    print(f"\n{passes}/7 benches pass")
+    return 0 if passes == 7 else 1
 
 
 if __name__ == "__main__":
