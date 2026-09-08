@@ -5,6 +5,57 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-08: pattern diagnostic queued; stop requested
+
+User requested: **queue it, then stop and hand off for now**. Do not continue
+into additional builds or installation without a resumed request. The queued
+build and its completion watcher should continue running.
+
+**Pattern source `c0c1040ce03328600b11c1e3b3fec4992007bba4`, seed 3**, is
+verified running on sisko. Job `pocket-gba-gba-p5cart-pattern-s3-c0c1040ce033`,
+launcher PID `655805`. Status command:
+`../tools/runner-build job sisko pocket-gba gba p5cart-pattern-s3 c0c1040`.
+
+This isolates the existing 64-bit menu snapshot from CPU output retention
+and cartridge/memory request fanout. CPU debug outputs and arbiter debug
+output are disconnected exactly as in `417a55f`; all GBA engine sources still
+match that passing baseline. A local 64-bit word `D1A65EED4B3C2907` rotates
+left each system clock and feeds the snapshot. It has 64 distinct nonzero
+rotations. The local source adds 64 registers, so this is an isolation
+experiment, not an equal-area comparison with the live diagnostic variant.
+
+Menu readouts are **Pattern Lo / Pattern Hi**, not CPU PC/State. A menu entry
+captures them together; join Hi then Lo to obtain one rotation of the seed.
+Snapshots stay stable while open and may repeat across captures. Pattern
+works while GBA reset is held. It does not diagnose Zero Mission's CPU stall.
+See `docs/BOOT-DEBUG.md` for the exact purpose and capture procedure.
+
+**Full make test passed**, including actual top-level dynamic pattern capture,
+menu retention/recapture during GBA reset, retired addresses returning zero,
+standalone async snapshot test, nine cartridge benches, GHDL and cheat suites.
+Optional external corpus skipped. Log: `build/timing-analysis/pattern-regression.log`.
+Post-fit checks now require at least 64 source, capture and publication
+registers, preventing optimized-away pattern circuitry from counting as a
+successful experiment. Timing and snapshot-delay gates remain unchanged.
+
+**Watcher active and first poll verified**:
+`pocket-gba-watch-c0c1040.service`, PID `2273532` at startup. Startup desktop
+notification delivered. Result and fetched artifacts will be at:
+`build/watch/pocket-gba-gba-p5cart-pattern-s3-c0c1040ce033/result.json`.
+It will report ready-to-write or not-ready by desktop notification, then exit.
+Post-fit analysis logs are now fetched even on failure, with their first error
+included in the failure reason when available. No automatic card writes.
+
+On resumption: read that result first. If passing, inspect the actual fit and
+preserved-pattern report and staged 13-file package. Decide whether to install
+this pattern experiment or proceed with a separately validated live-observer
+variant. The pattern fit alone cannot establish live CPU diagnostic timing.
+If failing, inspect the saved paths/analysis error before deciding another build.
+
+**Card untouched and not unmounted**, still installed `417a55f`. The exact
+baseline control passed and reproduced its bitstream hash (next section).
+Metroid Zero Mission remains unresolved; no save-write persistence claimed.
+
 ## 2026-09-08: control passed and reproduced the original bitstream exactly
 
 The clean `417a55f` seed-3 control completed successfully in 1443 s.
