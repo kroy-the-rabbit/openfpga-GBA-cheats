@@ -5,6 +5,18 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-07: new screenshot reports CartTools restore progress
+
+The user's latest screenshot `20260907_224214.png` is **CartTools Save
+Restore**, not the GBA gameplay core. It reaches the recovery-backup filename
+probe and stops at SD error 4, with cartridge save writes disabled. The
+restore engine only enters that stage after validating metadata/input-save
+CRC, matching ROM identity, and comparing two complete 8192-byte reads of
+the original cartridge save. This is additional CartTools preflight progress;
+it does not qualify GBA save-write persistence or a completed restore.
+Evidence is archived separately in `build/hardware-results/carttools-1540/`.
+The preceding screenshots show the older input-open and slot-ID failures.
+
 ## 2026-09-07: EEPROM persistence preparation and interrupted-DMA fix
 
 User asked to fan out and continue toward cartridge play/save support.
