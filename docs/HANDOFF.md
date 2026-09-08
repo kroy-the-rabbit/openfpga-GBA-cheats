@@ -39,12 +39,20 @@ Reports, log and package are archived in
 `build/gba/artifacts/1a053b2-seed3-FAILED/`; **do not install that package**.
 The user reports the card mounted. No card writes or unmount were performed.
 
-**Retry verified running on sisko**, explicit seed 8, identical tested source:
+**Diagnostic seed 8 also failed timing**: setup **−0.300 ns**, hold +0.026 ns,
+recovery +2.429 ns, removal +0.276 ns, minimum pulse +0.827 ns;
+17,819/18,480 ALMs (96%), 25,579 registers, 282 RAM blocks, 1626 s.
+Artifacts: `build/gba/artifacts/1a053b2-seed8-FAILED/`; do not install.
+
+**Retry verified running on sisko**, explicit seed 2, identical tested source:
 
 - Source: `1a053b20bc00303b2c7cc29156e001a28d57fab6`.
-- Job: `pocket-gba-gba-p5cart-debug-s8-1a053b20bc00`, PID `624823`.
-- Status: `../tools/runner-build job sisko pocket-gba gba p5cart-debug-s8 1a053b2`.
-- Fetch: `../tools/runner-build fetch sisko pocket-gba gba p5cart-debug-s8 1a053b2`.
+- Job: `pocket-gba-gba-p5cart-debug-s2-1a053b20bc00`, PID `630211`.
+- Status: `../tools/runner-build job sisko pocket-gba gba p5cart-debug-s2 1a053b2`.
+- Fetch caveat: runner fetch currently matches all checkouts at the same
+  commit and fails with multiple seeds. Use explicit file paths under
+  `/root/pocket-builds/checkouts/pocket-gba-gba-p5cart-debug-s2-1a053b20bc00/build/gba/`
+  via SCP to avoid selecting another seed.
 - Do not wait interactively for compilation. Require passing timing and fit
   before installing. Preserve installed `417a55f` as the rollback baseline.
 - After installation, reproduce Zero Mission white screen, open the OS/core
