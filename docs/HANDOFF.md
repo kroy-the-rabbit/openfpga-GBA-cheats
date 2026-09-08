@@ -44,20 +44,30 @@ recovery +2.429 ns, removal +0.276 ns, minimum pulse +0.827 ns;
 17,819/18,480 ALMs (96%), 25,579 registers, 282 RAM blocks, 1626 s.
 Artifacts: `build/gba/artifacts/1a053b2-seed8-FAILED/`; do not install.
 
-**Retry verified running on sisko**, explicit seed 2, identical tested source:
+**Diagnostic seed 2 also failed timing**: setup **−0.593 ns**, hold +0.025 ns,
+recovery +3.131 ns, removal +0.449 ns, minimum pulse +0.827 ns;
+17,829/18,480 ALMs (96%), 25,549 registers, 282 RAM blocks, 1572 s.
+Artifacts: `build/gba/artifacts/1a053b2-seed2-FAILED/`; do not install.
+All three diagnostic fits (seeds 3, 8, 2) failed. No diagnostic build is
+currently running, and none has been installed. Card remains on `417a55f`.
+
+Next: extract actual post-fit setup paths from the diagnostic checkout before
+choosing another fit or RTL change. The summary names a clock, not the
+failing path endpoints; it does not establish the cause. Do not use the stale
+local `build/gba/work` reports for this purpose or relax timing exceptions.
 
 - Source: `1a053b20bc00303b2c7cc29156e001a28d57fab6`.
-- Job: `pocket-gba-gba-p5cart-debug-s2-1a053b20bc00`, PID `630211`.
-- Status: `../tools/runner-build job sisko pocket-gba gba p5cart-debug-s2 1a053b2`.
-- Fetch caveat: runner fetch currently matches all checkouts at the same
-  commit and fails with multiple seeds. Use explicit file paths under
-  `/root/pocket-builds/checkouts/pocket-gba-gba-p5cart-debug-s2-1a053b20bc00/build/gba/`
-  via SCP to avoid selecting another seed.
-- Do not wait interactively for compilation. Require passing timing and fit
-  before installing. Preserve installed `417a55f` as the rollback baseline.
-- After installation, reproduce Zero Mission white screen, open the OS/core
-  menu and capture CPU PC, CPU State, IRQ / DMA and Save Bus. Close/reopen and
-  capture a second set to establish whether the PC or completion count moves.
+- Latest job: `pocket-gba-gba-p5cart-debug-s2-1a053b20bc00`, completed.
+- Remote output:
+  `/root/pocket-builds/checkouts/pocket-gba-gba-p5cart-debug-s2-1a053b20bc00/build/gba/`.
+- Fetch caveat: runner fetch matches all checkouts at the same commit and
+  fails with multiple seeds. Use explicit file paths via SCP.
+- Require passing timing and fit before installing. Preserve installed
+  `417a55f` as the rollback baseline; leave the card mounted after writes.
+- Once a diagnostic build passes and is installed, reproduce Zero Mission's
+  white screen, open the OS/core menu and capture CPU PC, CPU State,
+  IRQ / DMA and Save Bus. Close/reopen and capture a second set to establish
+  whether the PC or completion count moves.
 
 After fit,
 check the snapshot's bundled data routing against the ~27 ns settling window.
