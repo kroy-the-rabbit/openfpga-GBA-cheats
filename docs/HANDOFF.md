@@ -5,6 +5,33 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-07: physical-save build installed; test existing slots in Read Only
+
+**`0.9999.99293a3` is installed on the Pocket card**, UUID `7AFF-9FB9`.
+The overnight sisko build completed successfully (rc=0), explicit seed 8,
+Quartus 25.1std, STANDARD FIT, in 1659 s. All timing types passed:
+setup **+0.088 ns**, hold **+0.054 ns**, recovery +2.379 ns, removal +0.248 ns,
+minimum pulse width +0.827 ns. Utilization: 18,057/18,480 ALMs (98%),
+25,347 registers, 282 RAM blocks.
+
+Fresh verification passed all 6 cartridge benches and the GHDL memorymux
+bench. Existing-save reads, write protection, EEPROM program/readback and
+raw byte-save routing are simulation-tested; physical saves are not yet
+hardware-qualified. **Next test: Minish Cap Boot, Cartridge Saves → Read Only;
+check whether the existing save slots appear.** Writes remain an explicit,
+nonpersistent menu opt-in. The 32 MiB EEPROM/Flash/reset limits below still apply.
+
+The package's 13 files were installed and hash-verified; 8 existing
+BIOS/save/settings/firmware files were verified unchanged against a new
+21-file backup at `build/card-backups/20260908T010801Z`.
+Writes were flushed and **the card was left mounted**, as requested.
+
+- Package: `build/gba/kroy.GBA_0.9999.99293a3.zip`
+- Package SHA256: `f7090310c8ecf07db8efcbf2257bc457fdb88f5698fc2e5bf7fe7ba74b65ed43`
+- Bitstream SHA256: `04ab61d4f79d228a51c8313d216da3a900b04b002015c15c07f83b622a2a784e`
+- Report/log/bitstream archive: `build/gba/artifacts/99293a3-seed 8/`
+- Deployment manifest: `build/gba/deployment-99293a3.json`
+
 ## 2026-09-06 overnight: physical saves implemented; FPGA build to check tomorrow
 
 Kroy asked to fan out and implement save support, then finish for the night
@@ -54,8 +81,24 @@ now includes GHDL (`make sim-image` rebuilt locally).
 
 ### Tomorrow
 
-The exact queued commit and runner command are recorded immediately below
-once launch succeeds. Check the job's return code and **all-corner timing**
+**Running on sisko:** source commit **`99293a3`**
+(`99293a313577213c2ac545b286dc984ba6b209ad`), job
+`pocket-gba-gba-p5cart-saves-s8-99293a313577`, launcher PID `579902`.
+Started with explicit `SEED=8`, Quartus 25.1std, STANDARD FIT, 16 processors.
+The build was confirmed running before ending the session; no timing result
+was available yet. Do not use `HEAD` for this job, since the handoff itself is
+committed afterward.
+
+```sh
+../tools/runner-build job sisko pocket-gba gba p5cart-saves-s8 99293a3
+../tools/runner-build fetch sisko pocket-gba gba p5cart-saves-s8 99293a3
+```
+
+Expected package: `build/gba/kroy.GBA_0.9999.99293a3.zip`.
+If it fails timing, preserve that report/package as failed and try another
+explicit seed against the same source; do not install a timing-failed build.
+
+Check the job's return code and **all-corner timing**
 before fetching/installing; do not infer success from a `.zip` existing.
 The prior build's report/bitstream is archived under
 `build/gba/artifacts/4728cc6-seed8/`.
