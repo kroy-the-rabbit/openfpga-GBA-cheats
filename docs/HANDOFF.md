@@ -5,6 +5,68 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09 evening: the EEPROM bridge was never built into the hardware
+
+**The most important finding on this branch.** Every cartridge build so far,
+including every one installed on the card, fitted `cart_eeprom_bridge` as
+**one ALM and two registers**. From `ap_core.map.rpt` of the `0cc707c` fit:
+
+| Register | Fate |
+|---|---|
+| `fault` | **Stuck at VCC** |
+| `fault_why[31:29]` / `[28]` / rest | Stuck at VCC / GND / GND |
+| `transfer_open`, `transfer_sent`, `transfer_writable` | Stuck at GND |
+| `ctl_req`, `command_active` | Stuck at GND |
+| `host_dout` | **Stuck at VCC** |
+| `command_raw`, `command_allowed`, `prefix_pending`, memorymux `cart_eeprom_*` | Lost fanout |
+
+So the bridge never issued a physical EEPROM access to a cartridge, **every
+EEPROM read returned all ones**, and `SF: 00000001` in every hardware capture
+ever taken was a hardwired constant, not a report about the cartridge.
+Simulation passed the whole time, because simulation does not constant-fold.
+
+That retrospectively explains: Zero Mission's empty save menu against
+Analogue's two saves; `SF` reading 1 from the first cartridge build onward;
+the `E0000000` reason word whose fields contradicted their own trigger
+condition, because those bits were folded constants and carried no
+information; and `417a55f`, which was written to chase an EEPROM abort that
+never happened.
+
+**Cause.** `fault` was declared `output reg fault = 1'b0`. An initialiser on
+a port declaration is not reliably honoured, so the latch had no defined
+power-up state, and it sat in a cycle: `fault` gated the clear of
+`transfer_open`, which feeds `abort_fault`, which sets `fault`. Constant
+propagation resolved that cycle to the degenerate fixed point and took the
+rest of the module with it.
+
+**Fix, `c5f58b6`.** Power-up values live on internal registers driven out
+through wires; `fault` no longer gates the transfer-tracking clear; and
+`scripts/inspect_timing.tcl` now **fails any build** where `transfer_open`,
+`ctl_req`, `command_active` or the bridge FSM state does not survive
+synthesis. All benches pass. This lands on top of the write-arming and
+retire-on-condition changes from `0cc707c`.
+
+**Do not install `0cc707c`.** Its fit passed timing but its bitstream is
+byte-identical to `eeab971`, verified by comparing `ap_core.rbf` on the
+runner: the guard changes were inside logic that had already folded away, so
+it would change nothing on hardware. `eeab971` is what is on the card.
+
+**Three fits are running, one per host, all of `c5f58b6`:**
+
+| Runner | Seed | Job | Watcher |
+|---|---|---|---|
+| sisko | 3 | `pocket-gba-gba-p5cart-eefix-s3-c5f58b6e9d57` | `pocket-gba-watch-eefix-s3-c5f58b6.service` |
+| kira | 1 | `pocket-gba-gba-p5cart-eefix-s1-c5f58b6e9d57` | `pocket-gba-watch-eefix-s1-c5f58b6.service` |
+| odo | 8 | `pocket-gba-gba-p5cart-eefix-s8-c5f58b6e9d57` | none; poll the runner directly |
+
+**On resume.** Check the two `build/watch/<job>/result.json` files and odo's
+`/root/pocket-builds/jobs/<key>.done`. Take a `ready-to-write` fit, prefer
+the largest setup slack, and **before installing confirm the post-fit log
+contains the `EEPROM_BRIDGE` lines** with non-zero counts. Then the hardware
+question is simple: does Zero Mission's save menu list the two files that
+Analogue's mode shows? Expect the bridge to grow the design by a few hundred
+ALMs now that it is real, so a seed missing timing would not be surprising.
+
 ## 2026-09-09: contacts were the ROM fault; now a white screen and a guard that misfires
 
 **There was a hair in the slot.** After cleaning, the GBA banner draws
