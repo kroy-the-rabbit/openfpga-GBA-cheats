@@ -41,6 +41,15 @@ core at all rather than start it without the slot.
 
 For the current white-screen investigation, see [boot diagnostics](BOOT-DEBUG.md).
 
+The abort guard is armed by the write switch, not by the abort. Since
+2026-09-09 the fail-closed latch is set only when the interrupted physical
+transfer was **opened with writes enabled**. With Cartridge Saves on Read
+Only the bridge forwards nothing that can alter what the chip stores, so an
+interrupted read leaves the serial parser confused rather than the save
+damaged, and the save path stays usable for the rest of the session. The
+abort still retires its accepted bit and drops the command policy either
+way; only the permanent latch is conditional.
+
 ## Interrupted EEPROM transfers (new source)
 
 **Save Fault** is normally 0. If a physical EEPROM transfer is interrupted,

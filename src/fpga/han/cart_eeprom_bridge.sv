@@ -29,12 +29,17 @@ module cart_eeprom_bridge (
     output reg         ctl_dma,
     input  wire        ctl_dout,
     input  wire        ctl_done,
-    // An interrupted physical serial transfer cannot safely be restarted by
+    // An interrupted physical serial WRITE cannot safely be restarted by
     // pulsing CS#. Only FPGA configuration clears this fail-closed latch.
+    // With write_enable low the bridge cannot alter the chip, so the latch
+    // is not armed; `fault_why` still records the first abort condition.
     output reg         fault = 1'b0,
     // Why the latch fired, sampled on the clock it fired and held. Marker
-    // E, the FSM state, which input dropped, the request flags, and the
-    // host's bit index. Zero until the first fault.
+    // E in 31:28, FSM state 27:26, then dma_active dropped, reset_n
+    // dropped, transfer_sent, ctl_req, command_active, host_rnw,
+    // transfer_open, transfer_writable, host_dma, host_req, and the host's bit
+    // index in 15:0. Recorded on the first abort condition whether or not
+    // it latched the guard, so a read-only session still explains itself.
     output reg  [31:0] fault_why = 32'd0
 );
 
@@ -49,12 +54,25 @@ module cart_eeprom_bridge (
     reg host_last_r;
     reg transfer_open = 1'b0;
     reg transfer_sent = 1'b0;
+    // Whether writes were enabled when this physical transfer was opened.
+    // The instantaneous write_enable is the wrong gate: a write can be in
+    // flight when the switch is turned off.
+    reg transfer_writable = 1'b0;
 
     // ctl_req is the request accepted by the outer queue on this edge. Count
     // it even if DMA/reset changes simultaneously: the accepted bit may drain.
-    wire abort_fault = transfer_open && (transfer_sent || ctl_req) &&
-                       (!host_dma_active || !reset_n) &&
-                       !(host_done && host_last_r);
+    wire abort_condition = transfer_open && (transfer_sent || ctl_req) &&
+                           (!host_dma_active || !reset_n) &&
+                           !(host_done && host_last_r);
+    // The latch protects the chip from a half-finished WRITE. With writes
+    // disabled the bridge forwards only verified read commands, so nothing
+    // it sends can alter what the chip stores; an interrupted read leaves
+    // the serial parser confused, which costs reads, not data. Record the
+    // condition either way; latch only when the interrupted transfer was
+    // opened with writes enabled. 2026-09-09: on hardware the guard latched
+    // with Cartridge Saves on Read Only, and its own recorded reason showed
+    // no interrupted transfer at all.
+    wire abort_fault = abort_condition && transfer_writable;
 
     wire read_command_length = host_count == 17'd9 || host_count == 17'd17;
 
@@ -64,26 +82,30 @@ module cart_eeprom_bridge (
     // it. APF reset or loss of cartridge power can also reset that controller
     // and is not a promise of electrically safe write interruption.
     always @(posedge clk) begin
-        if (abort_fault && !fault) begin
+        if (abort_condition && fault_why == 32'd0) begin
             fault_why <= {4'hE, state, !host_dma_active, !reset_n,
                           transfer_sent, ctl_req, command_active, host_rnw,
-                          4'd0, host_count[15:0]};
+                          transfer_open, transfer_writable, host_dma, host_req,
+                          host_count[15:0]};
         end
         if (abort_fault) fault <= 1'b1;
 
         if (!reset_n || !host_dma_active || fault || abort_fault) begin
             transfer_open <= 1'b0;
             transfer_sent <= 1'b0;
+            transfer_writable <= 1'b0;
         end else begin
             if (host_done && host_last_r) begin
                 // The last physical bit has completed, not merely queued.
                 transfer_open <= 1'b0;
                 transfer_sent <= 1'b0;
+                transfer_writable <= 1'b0;
             end
             if (state == IDLE && host_req && host_dma &&
                 (!transfer_open || (host_done && host_last_r))) begin
                 transfer_open <= 1'b1;
                 transfer_sent <= 1'b0;
+                transfer_writable <= write_enable;
             end
             if (ctl_req) transfer_sent <= 1'b1;
         end
@@ -111,7 +133,11 @@ module cart_eeprom_bridge (
                 command_allowed <= 1'b0;
                 prefix_pending  <= 1'b0;
             end
-            if (fault || abort_fault) begin
+            // Any abort condition retires the accepted bit and drops the
+            // policy, latched or not: the retirement path must not depend on
+            // the permanent latch, or a read-only abort would hang the
+            // emulated memory bus exactly as a faulted one used to.
+            if (fault || abort_condition) begin
                 command_active  <= 1'b0;
                 command_raw     <= 1'b0;
                 command_allowed <= 1'b0;

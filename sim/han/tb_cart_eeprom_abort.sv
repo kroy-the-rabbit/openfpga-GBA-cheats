@@ -133,23 +133,43 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
                 if (fault!==0 || accepted!=81 || completed!=81)
                     $fatal(1,"normal last completion plus DMA drop faulted");
             end
-            3,4: begin
-                // Abort while physically pending. CASE4 interrupts prefix
-                // replay: bit1 drains and bit2 must never be launched.
-                write_enable=(CASE_ID==3);
-                if(CASE_ID==4) begin host_count=17;bit_access(1,0);end
+            4: begin
+                // Read-only abort while physically pending. Writes were
+                // disabled when the transfer opened, so nothing forwarded
+                // could alter the chip: record the reason, retire the bit,
+                // and leave the save path usable for the rest of the session.
+                write_enable=0;host_count=17;bit_access(1,0);
+                launch(1,0);wait(accepted==1);
+                @(negedge clk);host_dma_active=0;retire();
+                if (fault!==0)
+                    $fatal(1,"read-only abort latched the guard");
+                check_fault_why();
+                wait(completed==1);
+                repeat(8) @(negedge clk);
+                if (accepted!=1 || completed!=1)
+                    $fatal(1,"case4 failed to drain exactly one accepted bit");
+                // The path must still work afterwards.
+                host_dma_active=1;host_count=9;
+                for(i=0;i<9;i=i+1) bit_access(i<2,i==8);
+                if (fault!==0 || accepted!=10)
+                    $fatal(1,"read-only abort blocked later traffic");
+            end
+            3: begin
+                // Abort while physically pending, writes enabled: the guard
+                // latches, because a write may have been in flight.
+                write_enable=1;
                 launch(1,0);wait(accepted==1);
                 @(negedge clk);host_dma_active=0;retire();
                 // The host retires on the fault rather than on the drain, so
                 // that a completion the arbiter may never deliver cannot hang
                 // the memory bus. The controller still drains its one bit.
                 if (fault!==1 || completed>1)
-                    $fatal(1,"case%0d faulted retirement was wrong",CASE_ID);
+                    $fatal(1,"case3 faulted retirement was wrong");
                 check_fault_why();
                 wait(completed==1);
                 repeat(8) @(negedge clk);
                 if (accepted!=1 || completed!=1)
-                    $fatal(1,"case%0d failed to drain exactly one accepted bit",CASE_ID);
+                    $fatal(1,"case3 failed to drain exactly one accepted bit");
                 reject_after_fault();
             end
             5: begin

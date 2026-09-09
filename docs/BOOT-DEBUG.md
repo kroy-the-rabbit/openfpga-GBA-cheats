@@ -40,7 +40,7 @@ corrupted startup, open the core menu and photograph **CG, CS, SF, HS**.
 No repeated pattern captures are needed. Menu entry snapshots HS; the value
 remains stable while it is open. Close/reopen to refresh.
 
-- **HS:** (`F4000014`): on alternate menu opens, the status word below, then a detail word. Close and reopen the menu to switch. The detail is the first bad header DWORD's value when the status word's mismatch bit is set, and otherwise **why the EEPROM guard latched**: zero if it never did, else marker `E` in bits 31:28, the bridge FSM state in 27:26, then `host_dma_active` fell, `reset_n` fell, `transfer_sent`, `ctl_req`, `command_active`, `host_rnw`, four zero bits, and the host's bit index in 15:0. `SF` says whether the guard is latched at all.
+- **HS:** (`F4000014`): on alternate menu opens, the status word below, then a detail word. Close and reopen the menu to switch. The detail is the first bad header DWORD's value when the status word's mismatch bit is set, and otherwise **why the EEPROM abort condition first fired**: zero if it never did, else marker `E` in bits 31:28, the bridge FSM state in 27:26, then `host_dma_active` fell, `reset_n` fell, `transfer_sent`, `ctl_req`, `command_active`, `host_rnw`, `transfer_open`, `transfer_writable`, `host_dma`, `host_req`, and the host's bit index in 15:0. It is recorded whether or not the guard latched, so a Read Only session still explains itself. `SF` says whether the guard is latched.
 - **SF:** retains its EEPROM-abort meaning; it is not an SRAM status flag.
 
 HS encoding:
