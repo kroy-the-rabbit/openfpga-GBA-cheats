@@ -188,6 +188,22 @@ Followed against `odo.lan.kroy.io` (Proxmox 8.4, E5-2640 v4, 40 threads,
 What this document did not need to say again: the fuse-overlayfs step was
 exactly as described and the error is verbatim.
 
+**Proof.** The same source and seed as a sisko job (`6c767ca`, seed 3,
+STANDARD FIT, NPROC 16) gave the identical result on odo: 17,985 ALMs,
+25,434 registers, setup -0.291 ns, the same post-fit register counts.
+Elapsed, all three runners, that job or its equivalent:
+
+| Runner | CPU | Elapsed |
+|---|---|---|
+| sisko | E5-2680 v4 | 1450 s |
+| kira | | 1977 s |
+| odo | E5-2640 v4, node at load 8 to 16 | 2113 s |
+
+odo is the slowest of the three; use it for a third seed in parallel, not
+for the one fit you are waiting on. `runner-build` in the orchestrator
+needs an `odo) RUNNER_HOST=root@10.50.1.244` entry beside sisko and kira
+before it can drive odo; until then the manual form above works.
+
 ## Checklist
 
 - [ ] node surveyed, VMID free, load low, disk sufficient
