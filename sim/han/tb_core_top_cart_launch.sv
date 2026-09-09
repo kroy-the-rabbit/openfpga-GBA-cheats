@@ -55,16 +55,14 @@ module tb_core_top_cart_launch;
                 $fatal(1,"FAIL top SD-save size %h",dut.save_size_bytes);
         end
     endtask
-    task expect_debug(input [31:0] pc,input [31:0] status);
+    task expect_debug(input [31:0] status);
         integer word_index;
         reg [31:0] expected;
         begin
             for(word_index=0;word_index<4;word_index=word_index+1) begin
                 case(word_index)
-                    0: expected=pc;
                     1: expected=status;
-                    2: expected=0; // Retired readout must not expose stale state.
-                    3: expected=0;
+                    default: expected=0; // Retired readouts must not expose stale state.
                 endcase
                 @(negedge clk);bridge_addr=32'hf4000010+word_index*4;bridge_rd=1;
                 @(negedge clk);
@@ -74,7 +72,7 @@ module tb_core_top_cart_launch;
             end
         end
     endtask
-    reg [63:0] captured_header=0, stable_header=0;
+    reg [31:0] captured_header=0, stable_header=0;
     integer header_samples=0;
     reg hreq=0, hready=0;
     reg [24:0] haddr=0;
@@ -131,17 +129,17 @@ module tb_core_top_cart_launch;
         command(16'h00b1,32'h01010000);
         force dut.reset_gba=1;
         bad_header_read();
-        expect_debug(0,0); // Not captured yet.
+        expect_debug(0); // Not captured yet.
         command(16'h00b0,1);
-        expect_debug(32'h12345678,32'h00013a14);
+        expect_debug(32'h013a14f0);
         stable_header = captured_header;
         bad_header_read();
         command(16'h00b0,1); // Already open: retain the same snapshot.
-        expect_debug(stable_header[31:0],stable_header[63:32]);
+        expect_debug(stable_header);
         if (captured_header !== stable_header) $fatal(1,"FAIL recaptured while menu open");
         command(16'h00b0,0);
         command(16'h00b0,1);
-        expect_debug(32'h12345678,32'h00023a14);
+        expect_debug(32'h023a14f0);
         if (header_samples != 2) $fatal(1,"FAIL header capture count %0d",header_samples);
         $display("PASS core_top cartridge launch: real APF notification, synchronization, reset/probe gating, SD-save isolation and stale-menu immunity");
         $display("PASS core_top debug packing, live header mismatch, retired addresses zero and stable APF menu snapshots during GBA reset");

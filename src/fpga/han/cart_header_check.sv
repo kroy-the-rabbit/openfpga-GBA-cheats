@@ -13,7 +13,7 @@ module cart_header_check (
     input wire [24:0] rd_addr, // DWORD address, same as rom_source_mux
     input wire rd_ready,
     input wire [31:0] rd_data, rd_data_second,
-    output wire [63:0] diagnostic
+    output wire [31:0] diagnostic
 );
     // A synchronous ROM can live in one M10K rather than ALMs. It has no
     // reset on its read port; validity comes from the request/response FSM.
@@ -80,17 +80,23 @@ module cart_header_check (
                                 (rd_ready ? request_word ^ 6'd1 : request_word);
     always @(posedge clk) expected_word <= header_rom[reference_addr];
     reg [23:0] seen_lines = 0;
-    reg [15:0] checked_pairs = 0;
+    reg [7:0] checked_pairs = 0;
     reg mismatch = 0, protocol_error = 0;
     reg [5:0] bad_offset = 0; // DWORD offset, exported as byte offset
-    reg [31:0] bad_word = 0;
+    reg [3:0] bad_lanes = 0;  // byte lanes of the first bad DWORD that differed
+    reg bad_second = 0;       // the first bad DWORD was the companion beat
     wire compare_valid = second_due || (rd_ready && pending && in_header);
     wire [31:0] compare_word = second_due ? rd_data_second : rd_data;
+    wire [31:0] compare_diff = compare_word ^ expected_word;
+    wire [3:0] compare_lanes = {|compare_diff[31:24], |compare_diff[23:16],
+                                |compare_diff[15:8], |compare_diff[7:0]};
     wire [5:0] compare_offset = request_word ^ {5'd0, second_due};
-    // HS: count[31:16], flags[15:12] = complete/protocol/mismatch/seen,
-    // marker A[11:8], first bad byte offset[7:0]. HD: first bad DWORD.
+    // HS: count[31:24], flags[23:20] = complete/protocol/mismatch/seen,
+    // marker A[19:16], first bad byte offset[15:8], its differing byte
+    // lanes[7:4], bit 0 set when that DWORD was the companion beat.
     assign diagnostic = {checked_pairs, &seen_lines, protocol_error,
-                         mismatch, |checked_pairs, 4'ha, bad_offset, 2'b00, bad_word};
+                         mismatch, |checked_pairs, 4'ha, bad_offset, 2'b00,
+                         bad_lanes, 3'b000, bad_second};
 
     always @(posedge clk) begin
         second_due <= 0;
@@ -104,11 +110,12 @@ module cart_header_check (
             mismatch <= 0;
             protocol_error <= 0;
             bad_offset <= 0;
-            bad_word <= 0;
+            bad_lanes <= 0;
+            bad_second <= 0;
         end else begin
             if (second_due) begin
                 seen_lines[request_word[5:1]] <= 1'b1;
-                if (checked_pairs != 16'hffff) checked_pairs <= checked_pairs + 1'b1;
+                if (checked_pairs != 8'hff) checked_pairs <= checked_pairs + 1'b1;
             end
             if (rd_ready) begin
                 if (!pending || second_due) protocol_error <= 1;
@@ -117,10 +124,11 @@ module cart_header_check (
                     second_due <= 1;
                 end
             end
-            if (compare_valid && !mismatch && compare_word != expected_word) begin
+            if (compare_valid && !mismatch && |compare_lanes) begin
                 mismatch <= 1;
                 bad_offset <= compare_offset;
-                bad_word <= compare_word;
+                bad_lanes <= compare_lanes;
+                bad_second <= second_due;
             end
             if (rd_req) begin
                 if (pending && !rd_ready) protocol_error <= 1;

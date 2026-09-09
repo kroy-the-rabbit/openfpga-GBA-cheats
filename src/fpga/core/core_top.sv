@@ -258,8 +258,7 @@ wire       cart_eeprom_dma, cart_eeprom_last, cart_eeprom_dout, cart_eeprom_done
 wire [16:0] cart_eeprom_count;
 wire       cart_eeprom_dma_active;
 wire       cart_eeprom_fault, cart_eeprom_fault_s;
-wire [63:0] cart_debug_host;
-
+wire [31:0] cart_debug_host;
 
 // Menu readouts, in clk_74a for the bridge read mux. Driven at the bottom.
 wire [31:0] cart_readout_id_s;
@@ -1509,8 +1508,7 @@ always @(*) begin
     32'hF4000008: begin
         bridge_rd_data <= {31'd0, cart_eeprom_fault_s};
     end
-    32'hF4000010: bridge_rd_data <= cart_debug_host[31:0];
-    32'hF4000014: bridge_rd_data <= cart_debug_host[63:32];
+    32'hF4000014: bridge_rd_data <= cart_debug_host;
     32'hF3000004: begin
         bridge_rd_data <= {24'd0, cheat_overrun_s, cheats_master,
                            cheat_rejected_s};
@@ -2125,14 +2123,14 @@ gba_cart_controller cart_ctl (
 // ---- Passive BMXE ROM-header diagnostic ----
 // CPU debug outputs remain disconnected. Observe the same pair and cycles
 // delivered to the game ROM cache, independently of the direct header probe.
-wire [63:0] cart_header_debug;
+wire [31:0] cart_header_debug;
 cart_header_check header_check (
     .clk(clk_sys), .enable(cart_rom_mode && cart_hdr_id == 32'h424D5845),
     .rd_req(sdram_read_req_gba), .rd_addr(sdram_read_addr_gba),
     .rd_ready(romsrc_gba_rd_ready), .rd_data(romsrc_gba_rd_data),
     .rd_data_second(romsrc_gba_rd_data_second), .diagnostic(cart_header_debug)
 );
-cart_debug_snapshot boot_debug (
+cart_debug_snapshot #(.WIDTH(32)) boot_debug (
     .clk_host(clk_74a), .clk_sys(clk_sys), .host_menu(osnotify_inmenu),
     .sys_debug(cart_header_debug),
     .host_debug(cart_debug_host)

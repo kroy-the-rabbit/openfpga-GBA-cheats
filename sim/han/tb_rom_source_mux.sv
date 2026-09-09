@@ -110,7 +110,7 @@ module tb_rom_source_mux #(parameter VIA_ARBITER = 0, HEADER = 0);
         end
     endtask
 
-    wire [63:0] diagnostic;
+    wire [31:0] diagnostic;
     generate if (HEADER) begin : checked
         cart_header_check checker_inst(clk, cart_mode && reset_n, req, addr,
                                       ready, data1, data2, diagnostic);
@@ -179,7 +179,7 @@ module tb_rom_source_mux #(parameter VIA_ARBITER = 0, HEADER = 0);
         read_line(25'h7fffff); // last DWORD in 32 MiB ROM space
         for (i = 2; i < 66; i = i + 1) read_line(i);
         repeat(3) @(negedge clk);
-        if (HEADER && (diagnostic[63:32] !== 32'h00309a00 || diagnostic[31:0] !== 0))
+        if (HEADER && diagnostic !== 32'h309a0000)
             $fatal(1,"FAIL header through arbiter/controller/mux %h", diagnostic);
         if (redrive || no_cs || while_out)
             $fatal(1, "FAIL cartridge pin protocol");

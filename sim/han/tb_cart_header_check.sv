@@ -6,8 +6,8 @@ module tb_cart_header_check;
     reg enable=0, req=0, ready=0;
     reg [24:0] addr=0;
     reg [31:0] first=0, second=0;
-    wire [63:0] diagnostic;
-    wire [31:0] hs=diagnostic[63:32], hd=diagnostic[31:0];
+    wire [31:0] diagnostic;
+    wire [31:0] hs=diagnostic;
     reg [31:0] header[0:47];
     cart_header_check dut(clk,enable,req,addr,ready,first,second,diagnostic);
     task restart;
@@ -37,47 +37,46 @@ module tb_cart_header_check;
         $readmemh("sim/fixtures/bmxe-header.hex",header);
         restart();
         for(i=47;i>=0;i=i-1) pair_read(i,0,0);
-        if(hs!==32'h00309a00 || hd!==0) $fatal(1,"FAIL complete header %h %h",hs,hd);
+        if(hs!==32'h309a0000) $fatal(1,"FAIL complete header %h",hs);
         restart();
         response_delay=0; // Ready on the first clock after request acceptance.
         for(i=0;i<48;i=i+1) pair_read(i,0,0);
-        if(hs!==32'h00309a00 || hd!==0) $fatal(1,"FAIL minimum-latency header %h %h",hs,hd);
+        if(hs!==32'h309a0000) $fatal(1,"FAIL minimum-latency header %h",hs);
         response_delay=3;
         pair_read(48,32'hffffffff,32'hffffffff);
         pair_read(25'h1000000,32'hffffffff,32'hffffffff);
-        if(hs!==32'h00309a00) $fatal(1,"FAIL non-header alias counted");
+        if(hs!==32'h309a0000) $fatal(1,"FAIL non-header alias counted");
         restart();
         pair_read(5,32'h00010000,32'h01000000);
-        if(hs!==32'h00013a14 || hd!==(header[5]^32'h00010000))
-            $fatal(1,"FAIL first beat priority %h %h",hs,hd);
+        if(hs!==32'h013a1440) $fatal(1,"FAIL first beat priority %h",hs);
         pair_read(2,32'hffffffff,32'hffffffff);
-        if(hs!==32'h00023a14 || hd!==(header[5]^32'h00010000))
-            $fatal(1,"FAIL first mismatch retention");
+        if(hs!==32'h023a1440) $fatal(1,"FAIL first mismatch retention %h",hs);
+        restart();
+        pair_read(9,32'hffffffff,0);
+        if(hs!==32'h013a24f0) $fatal(1,"FAIL all lanes %h",hs);
         restart();
         pair_read(5,0,32'h00000001);
-        if(hs!==32'h00013a10 || hd!==(header[4]^32'h00000001))
-            $fatal(1,"FAIL odd companion address/data %h %h",hs,hd);
+        if(hs!==32'h013a1011) $fatal(1,"FAIL odd companion address/lanes %h",hs);
         restart();
         pair_read(4,0,32'h80000000);
-        if(hs!==32'h00013a14 || hd!==(header[5]^32'h80000000))
-            $fatal(1,"FAIL even companion address/data %h %h",hs,hd);
+        if(hs!==32'h013a1481) $fatal(1,"FAIL even companion address/lanes %h",hs);
         restart();
         @(negedge clk);ready=1;
         @(negedge clk);ready=0;
-        if(hs!==32'h00004a00) $fatal(1,"FAIL orphan response flag %h",hs);
+        if(hs!==32'h004a0000) $fatal(1,"FAIL orphan response flag %h",hs);
         restart();
         @(negedge clk);addr=0;req=1;
         @(negedge clk);addr=1;
         @(negedge clk);req=0;
-        if(!hs[14]) $fatal(1,"FAIL overlapping request flag");
+        if(!hs[22]) $fatal(1,"FAIL overlapping request flag");
         restart();
-        // Check saturation without running 65536 slow transactions.
-        dut.checked_pairs=16'hfffe;
+        // Check saturation without running 256 slow transactions.
+        dut.checked_pairs=8'hfe;
         pair_read(0,0,0);pair_read(1,0,0);
-        if(hs[31:16]!==16'hffff) $fatal(1,"FAIL count saturation");
+        if(hs[31:24]!==8'hff) $fatal(1,"FAIL count saturation");
         restart();
         enable=0;pair_read(0,32'hffffffff,32'hffffffff);
-        if(hs!==32'h00000a00 || hd!==0) $fatal(1,"FAIL disabled checker");
+        if(hs!==32'h000a0000) $fatal(1,"FAIL disabled checker %h",hs);
         $display("PASS header diagnostic: all 48 words, both beat cycles, corruption, retention, scope, reset and protocol guards");
         $finish;
     end

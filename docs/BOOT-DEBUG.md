@@ -19,42 +19,49 @@ a new fit and timing qualification before hardware use.
 The revised checker keeps its 48 reference DWORDs in a synchronous M10K
 ROM and shares one 32-bit comparator across the two response clocks. This
 replaces the resettable 64-bit reference register and two separate compares.
-The HD/HS encoding and sampling cycles are unchanged. Actual M10K placement
-is checked after fitting; timing improvement is not assumed from the RTL.
+The sampling cycles are unchanged. Actual M10K placement is checked after
+fitting; timing improvement is not assumed from the RTL.
+
+The shrunk checker (2026-09-09) reports one 32-bit word. The first bad
+DWORD's value is no longer stored; its differing byte lanes and beat are.
+The count is eight bits, the snapshot bundle is 32 bits wide and `HD:` is
+retired (`F4000010` reads zero).
 This follows [Altera's ROM inference guidance](https://docs.altera.com/r/docs/683323/18.1/intel-quartus-prime-standard-edition-user-guide-design-recommendations/inferring-rom-functions-from-hdl-code).
 
 ## Hardware capture
 
 After installing a timing-qualified package, fully power off/on and launch
 BMXE with Cartridge Saves set to Read Only and cheats disabled. At the
-corrupted startup, open the core menu and photograph **CG, CS, SF, HD, HS**.
-No repeated pattern captures are needed. Menu entry snapshots HD/HS together;
-values remain stable while it is open. Close/reopen to refresh.
+corrupted startup, open the core menu and photograph **CG, CS, SF, HS**.
+No repeated pattern captures are needed. Menu entry snapshots HS; the value
+remains stable while it is open. Close/reopen to refresh.
 
-- **HD:** (`F4000010`): actual first mismatching 32-bit ROM word.
-- **HS:** (`F4000014`): comparison count, flags and its header byte offset.
+- **HS:** (`F4000014`): comparison count, flags, first bad header byte offset, its differing byte lanes and beat.
 - **SF:** retains its EEPROM-abort meaning; it is not an SRAM status flag.
 
 HS encoding:
 
 | Bits | Meaning |
 |---|---|
-| 31:16 | Completed header pairs checked, saturates at FFFF |
-| 15 | All 24 aligned header pairs have been observed |
-| 14 | Unexpected response or overlapping request; treat the diagnostic as invalid |
-| 13 | At least one header DWORD differed from the verified reference |
-| 12 | At least one header pair has been checked |
-| 11:8 | Fixed marker A, distinguishes initialized payload from pre-capture zeros |
-| 7:0 | First mismatching byte offset, aligned to four bytes; meaningful only with bit 13 |
+| 31:24 | Completed header pairs checked, saturates at FF |
+| 23 | All 24 aligned header pairs have been observed |
+| 22 | Unexpected response or overlapping request; treat the diagnostic as invalid |
+| 21 | At least one header DWORD differed from the verified reference |
+| 20 | At least one header pair has been checked |
+| 19:16 | Fixed marker A, distinguishes initialized payload from pre-capture zeros |
+| 15:8 | First mismatching byte offset, aligned to four bytes; meaningful only with bit 21 |
+| 7:4 | Byte lanes of that DWORD that differed, bit 7 the most significant byte; meaningful only with bit 21 |
+| 3:1 | Zero |
+| 0 | That DWORD was the companion beat, sampled the clock after ready |
 
-For example, HS `00309A00`, HD `00000000` means 48 pairs checked, all
-24 header lines covered, and no mismatch or protocol error. HS `00013A14`,
-HD `12345678` means the first checked pair contained bad word `12345678`
-at ROM address `08000014`. The first failure stays latched while counts and
-coverage continue updating. HD may legitimately be zero for a failing word;
-use the mismatch flag, not HD alone.
+For example, HS `309A0000` means 48 pairs checked, all 24 header lines
+covered, and no mismatch or protocol error. HS `013A14F0` means the first
+checked pair had a bad first-beat DWORD at ROM address `08000014` with all
+four bytes wrong; `013A1011` means the companion DWORD at `08000010` was
+wrong in its low byte only. The first failure stays latched while counts and
+coverage continue updating.
 
-HS `00000A00` means no completed header pair has been checked (also the
+HS `000A0000` means no completed header pair has been checked (also the
 inactive/non-BMXE state). It is not a pass. A missing full-coverage flag is
 also not a mismatch: the CPU may not have requested every header line.
 Resetting the GBA CPU alone preserves evidence if cartridge mode/identity
@@ -76,9 +83,9 @@ and memorymux; and actual top-level APF menu snapshots. The reference fixture
 and provenance are in `sim/fixtures/README.md`. These simulations do not
 prove cartridge electrical timing or reproduce a full BIOS boot.
 
-Post-fit checks require all 32 mismatch-data and six DWORD-offset source
-registers, and at least 58 variable bits in each snapshot bank. The remaining
-six payload bits are constants. All timing categories must pass; the existing
+Post-fit checks require the four lane, six DWORD-offset and one beat source
+registers, and at least 23 variable bits in each snapshot bank. The remaining
+nine payload bits are constants. All timing categories must pass; the existing
 20 ns raw snapshot routing budget remains unchanged at all corners.
 
 The previous pattern build is documented in `git show d6a04ff:docs/BOOT-DEBUG.md`.
