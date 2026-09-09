@@ -5,6 +5,45 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09: `d7ecfaa` on hardware: header clean, game boots, failures intermittent
+
+Kroy ran the installed `d7ecfaa`. **HS `189A0000`**: 24 pairs checked, all
+24 header lines seen, **no mismatch and no protocol error**. The whole
+192-byte header reached the cache intact on that boot. There was no second
+value to read: with the mismatch flag clear the value payload is zero.
+
+**And Zero Mission booted.** Screenshot `20260909_125147.png` on the card
+is its Samus Data save select with both save slots showing, one 00:18:26
+in Norfair and one 03:03:30. Tiles around the slot labels are corrupted
+but the game runs and reads its save. Every earlier build stopped at the
+BIOS logo.
+
+Then it stopped being repeatable: further boots **froze at different
+points with looping audio**, and the run before this one reached the save
+menu empty.
+
+**This changes the diagnosis.** The fault is not a deterministic wrong
+halfword at 0x98; the same address compared clean here. It is marginal
+reads that land in different places each boot. The RTL is identical to
+`a4fe3f4` except for the removed cheat readouts, so what moved is
+placement and therefore the routing to the cartridge pins.
+
+Kroy also captured the Pocket's **own** Play Cartridge mode, not this
+core: `20260909_125241.png` and `20260909_125259.png`, 18 seconds apart,
+show only "EM" then "EME" in blue on black. Analogue's own cartridge path
+did not boot this cartridge cleanly either. If that reproduces, the
+cartridge contacts or the slot are suspect and no amount of core timing
+work will fix it. **Check that before the next fit:** clean the cartridge
+edge connector, retry Analogue's Play Cartridge mode, and only then
+retest this core.
+
+If the cartridge proves good, the next core-side move is more read margin,
+not more diagnostics: `ROM_WAIT` 24 and `ADDR_SETUP` 4 for the
+non-sequential access, `ROM_SEQ_WAIT` 20 / `ROM_SEQ_RD_HIGH` 6 for the
+burst. CartTools reads this same cartridge reliably at 24 non-sequential
+and 18 sequential, so the window is not obviously short; the difference is
+that CartTools is the only master and this core interleaves a live CPU.
+
 ## 2026-09-09: value-capture diagnostic fitting at two seeds; watchers active
 
 Kroy chose option 1. `6c767ca` keeps the first bad DWORD's value again and
