@@ -5,6 +5,56 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-08 night: reduced header checker failed; stop and handoff
+
+User's final instruction: **install if it passes, otherwise hand off**.
+`1e9add1b89263cb9564e84f838a224d334c53601`, seed 3, finished compilation
+in **1649 seconds** but is **not qualified for the card**. No replacement
+build queued. Stop here until the user resumes the work.
+
+Actual all-corner timing from `ap_core.sta.summary`: setup **-0.373 ns**
+(slow 1100mV/85C), hold +0.089 ns, recovery +3.508 ns, removal +0.352 ns,
+minimum pulse +0.827 ns. Resource use: **18,014/18,480 ALMs (97%)**,
+25,619 registers, 283 RAM blocks. Relative to `195904c`, this saved 38 ALMs
+and 49 registers at the cost of one RAM block, but setup still fails.
+Do not infer this is the same CPU endpoint as the preceding fit: the
+current summary names the clock; exact paths still need extraction.
+
+There is also an error in our new post-fit parser: Quartus reports the
+reference as **Type `M10K block`**, while `scripts/inspect_timing.tcl`
+requires exact `M10K`. The actual Fitter RAM Summary confirms
+`header_check|...header_rom_rtl_0|...` is a **64x32 ROM in one M10K** at
+`M10K_X46_Y40_N0`. Our parser falsely rejected it. The test used a synthetic
+row with our assumed label, so it missed this real-format difference.
+The parser failure stopped the job before packaging and before generating
+our all-corner path/snapshot reports. Fixing that parser alone will NOT
+qualify this bitstream: setup independently fails by 0.373 ns.
+
+Retention check did pass: data 64 / offset 19 (including duplicates),
+captured 59 / published 59. The raw snapshot delay was not qualified for
+this fit because the parser stopped the script before the corner loop.
+Next session: correct the parser against the real archived report, then
+rerun STA on this existing fit to collect exact failing paths and snapshot
+delays. That analysis does not require another full compile. Use those paths
+to choose the next change; keep timing gates and physical save guards intact.
+
+Watcher `pocket-gba-watch-1e9add1.service` completed **not-ready**, with its
+desktop notification delivered. It names the parser failure because that
+was the first build-stopping check. Both independent failures are recorded in
+`build/watch/pocket-gba-gba-p5cart-header-m10k-s3-1e9add1b8926/failure-analysis.json`.
+That folder also holds the build log, `path-analysis.log`, `ap_core.fit.rpt`
+(Latin-1), and `ap_core.sta.summary`.
+Remote fit: `/root/pocket-builds/checkouts/pocket-gba-gba-p5cart-header-m10k-s3-1e9add1b8926/build/gba/work` on sisko.
+
+**No card installation occurred.** The mounted card UUID `7AFF-9FB9`
+remains on `0.9999.c0c1040` with the short PL/PH/SF menu patch. It was
+mounted writable outside the sandbox. No fsck, repair, unmount or save write.
+Prepared installer `build/gba/install_1e9add1.py` was never executed;
+`build/gba/deployment-1e9add1.json` is now **failed-not-installed** and its
+state guard prevents installation. Do not reuse it without requalifying a
+new successful build and its actual baseline. No new hardware test needed
+for this failed fit.
+
 ## Reduced header checker build running; watcher active
 
 **Source `1e9add1b89263cb9564e84f838a224d334c53601`, seed 3**, queued on
