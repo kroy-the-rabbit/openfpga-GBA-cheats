@@ -12,37 +12,51 @@ Kroy ran the installed `d7ecfaa`. **HS `189A0000`**: 24 pairs checked, all
 192-byte header reached the cache intact on that boot. There was no second
 value to read: with the mismatch flag clear the value payload is zero.
 
-**And Zero Mission booted.** Screenshot `20260909_125147.png` on the card
-is its Samus Data save select with both save slots showing, one 00:18:26
-in Norfair and one 03:03:30. Tiles around the slot labels are corrupted
-but the game runs and reads its save. Every earlier build stopped at the
-BIOS logo.
+**And Zero Mission booted on this core**, past the BIOS logo for the
+first time, reaching its save menu. That menu was **empty**.
 
-Then it stopped being repeatable: further boots **froze at different
-points with looping audio**, and the run before this one reached the save
-menu empty.
+Which screenshot is which, from Kroy: `20260909_125147.png`, the Samus
+Data select showing both saves (00:18:26 and 03:03:30 in Norfair), is
+**Analogue's own Play Cartridge mode**, the control. `20260909_125241.png`
+and `20260909_125259.png` are **this core**: blue "EM" then "EME" on
+black, 18 seconds apart. The cartridge and the slot are therefore fine;
+Analogue reads the ROM and the saves from it without trouble.
 
-**This changes the diagnosis.** The fault is not a deterministic wrong
-halfword at 0x98; the same address compared clean here. It is marginal
-reads that land in different places each boot. The RTL is identical to
-`a4fe3f4` except for the removed cheat readouts, so what moved is
-placement and therefore the routing to the cartridge pins.
+So on this core the game boots, renders its opening text at roughly one
+character every nine seconds, shows no saves, then freezes at a different
+point on each boot with looping audio.
 
-Kroy also captured the Pocket's **own** Play Cartridge mode, not this
-core: `20260909_125241.png` and `20260909_125259.png`, 18 seconds apart,
-show only "EM" then "EME" in blue on black. Analogue's own cartridge path
-did not boot this cartridge cleanly either. If that reproduces, the
-cartridge contacts or the slot are suspect and no amount of core timing
-work will fix it. **Check that before the next fit:** clean the cartridge
-edge connector, retry Analogue's Play Cartridge mode, and only then
-retest this core.
+**The ROM path is no longer the suspect. The EEPROM path is.**
 
-If the cartridge proves good, the next core-side move is more read margin,
-not more diagnostics: `ROM_WAIT` 24 and `ADDR_SETUP` 4 for the
-non-sequential access, `ROM_SEQ_WAIT` 20 / `ROM_SEQ_RD_HIGH` 6 for the
-burst. CartTools reads this same cartridge reliably at 24 non-sequential
-and 18 sequential, so the window is not obviously short; the difference is
-that CartTools is the only master and this core interleaves a live CPU.
+- `SF: 00000001` in every hardware capture, including this one. That is
+  `cart_eeprom_bridge`'s `fault` latch. It is deliberately fail-closed and
+  **only FPGA reconfiguration clears it**, so once it trips the cartridge's
+  saves are dead for the rest of that session.
+- Its condition is `abort_fault`: a physical serial transfer was open and
+  had been queued or sent when `host_dma_active` (`dma3_active` out of
+  `gba_top`) dropped, without the last bit having completed. It was added
+  by `417a55f` as a write-safety guard.
+- Empty save menu on this core against two saves under Analogue's is
+  exactly what a dead EEPROM read path looks like.
+- The crawl, the looping audio and the varying freeze points are all
+  consistent with the game polling a save chip that never answers, though
+  that is not yet proved.
+
+Two ways to take it, both cheap, neither started:
+
+1. **Find out why the guard fires.** With the header clean the alternating
+   snapshot's second page carries nothing, so give it the EEPROM state at
+   the moment of the fault: the bridge FSM state, `host_count`, and
+   whether `dma3_active` fell or `reset_n` did. No new readout, no new
+   menu entry, about the size of what it replaces.
+2. **Do not latch the guard for reads.** The latch exists so an
+   interrupted *write* cannot corrupt the save chip. A read cannot damage
+   anything, and Cartridge Saves is on Read Only. Faulting only on an
+   interrupted write would let the game read its saves while keeping the
+   protection that matters.
+
+Doing 1 then 2 is the safe order; 2 alone would probably make the game
+work and would leave the reason unknown.
 
 ## 2026-09-09: value-capture diagnostic fitting at two seeds; watchers active
 
