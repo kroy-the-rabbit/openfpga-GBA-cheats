@@ -5,6 +5,60 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09: the corruption is two bus lines reading high, AD0 and AD8
+
+Kroy captured both snapshot pages on `eeab971`, on a boot where the first
+bad DWORD was at offset **0x00** rather than 0x98, so the failing address
+moves between boots.
+
+| Page | Reading |
+|---|---|
+| status | `18BA0031`: 24 pairs, all lines seen, no protocol error, mismatch at offset 0x00, byte lanes 0 and 1, companion beat |
+| detail | `EA00012F`, the value actually read |
+
+The reference DWORD at 0x08000000 is `EA00002E`. The exclusive-or is
+**`00000101`**: exactly bit 0 and bit 8, and both are 0 in the reference
+and 1 in what arrived. `cart_tran_bank3` is AD[7:0] and `cart_tran_bank2`
+is AD[15:8], so those two bits are **AD0 and AD8, the least significant
+line of each byte lane**.
+
+**One model explains every mismatch ever captured.** Take the correct
+halfword and force AD0 and/or AD8 high:
+
+| Build | Offset | Correct `words[0]` | With AD0+AD8 high | With AD8 only | Lanes reported |
+|---|---|---|---|---|---|
+| `a4fe3f4` | 0x98 | `0A38` | `0B39` (both bytes differ) | | 0 and 1 |
+| `eeab971` | 0x98 | `0A38` | | `0B38` (byte 1 differs) | 1 only |
+| `eeab971` | 0x00 | `002E` | `012F` (both bytes differ) | | 0 and 1, value confirms |
+
+Every capture is a subset of {AD0, AD8} reading high where the true bit is
+low. Nothing else has ever been wrong, and it is always `words[0]`, the
+non-sequential halfword.
+
+**It is not the residual address.** The halfword address driven just
+before the data phase is `0000` for offset 0x00 and `004C` for 0x98; AD0
+and AD8 are low in both. The bus is reading high where both the address
+*and* the data are low, so nothing on the FPGA side was driving those
+bits high.
+
+**Two candidate causes, in cost order:**
+
+1. **The cartridge's contacts on those two pins.** A line that nothing is
+   pulling low reads high. This costs nothing to test: clean the edge
+   connector and retest. Analogue's own mode reading the cartridge does
+   not rule it out, since its bus timing differs.
+2. **Bus turnaround in `S_ROM_DATA`.** It releases the AD bus and asserts
+   RD# on the same clock, where CartTools has an explicit four-clock
+   `READ_TURN` between the two. Adding that parameter is a small change.
+
+**Worth noting either way:** `cart_tran_bank*` appears nowhere in
+`src/fpga/core/core_constraints.sdc`. The cartridge pins carry no
+`set_input_delay` and are not false-pathed, so the pin-to-register capture
+path has never been timing-signed-off, and its delay is whatever each
+placement gives. That is consistent with the same RTL being clean on
+`d7ecfaa` and wrong on two other placements, and it should be constrained
+regardless of what causes this.
+
 ## 2026-09-09: `eeab971` on hardware, and the fault finally has a shape
 
 Corrupted logo again. **HS `18BA9821`**: 24 pairs, all lines seen, no
