@@ -189,7 +189,7 @@ def main():
                         raise ValueError('Timing failed: ' + ', '.join(f'{k} {v} ns' for k, v in failures))
                 if analysis_exists:
                     errors = [line.strip() for line in (folder / 'path-analysis.log').read_text().splitlines()
-                              if line.startswith('Error') or line.startswith('Pattern experiment requires')]
+                              if line.startswith('Error') or line.startswith(('Pattern experiment requires', 'Header diagnostic requires'))]
                     if errors:
                         raise RuntimeError('Post-fit analysis failed: ' + errors[0])
                 raise RuntimeError(f'Build exited {state["build_rc"]}; see {folder / "build.log"}')

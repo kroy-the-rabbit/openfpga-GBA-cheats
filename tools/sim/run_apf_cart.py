@@ -27,6 +27,7 @@ def main():
                     '-o', str(exe),
                     str(ROOT / 'sim/han/tb_core_top_cart_launch.sv'),
                     str(ROOT / 'src/fpga/han/cart_debug_snapshot.sv'),
+                    str(ROOT / 'src/fpga/han/cart_header_check.sv'),
                     *map(str, sources), str(ROOT / 'src/fpga/core/core_top.sv')], check=True)
     result = subprocess.run(['vvp', str(exe)], capture_output=True, text=True)
     output = result.stdout + result.stderr

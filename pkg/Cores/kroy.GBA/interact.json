@@ -165,14 +165,14 @@
         "address": "0xF4000008"
       },
       {
-        "name": "PL:",
+        "name": "HD:",
         "id": 60,
         "type": "number_u32",
         "enabled": true,
         "address": "0xF4000010"
       },
       {
-        "name": "PH:",
+        "name": "HS:",
         "id": 61,
         "type": "number_u32",
         "enabled": true,

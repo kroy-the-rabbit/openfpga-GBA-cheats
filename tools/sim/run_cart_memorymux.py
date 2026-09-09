@@ -2,6 +2,7 @@
 """Exercise the actual VHDL save routing with GHDL (no FPGA primitives)."""
 from pathlib import Path
 import subprocess
+import shutil
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build/sim/cart_memorymux"
@@ -10,6 +11,7 @@ SRC = ROOT / "src/fpga/gba"
 
 def main():
     BUILD.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / "sim/fixtures/bmxe-header.hex", BUILD / "bmxe-header.hex")
     def run(*args):
         subprocess.run(["ghdl", *args], cwd=BUILD, check=True)
     run("-a", "--std=08", "--work=mem", str(SRC / "SyncRamDual.vhd"))
@@ -19,10 +21,10 @@ def main():
     run("-e", "--std=08", "tb_gba_cart_memorymux")
     result = subprocess.run(
         ["ghdl", "-r", "--std=08", "tb_gba_cart_memorymux", "--assert-level=error",
-         "--ieee-asserts=disable-at-0", "--stop-time=100us"],
+         "--ieee-asserts=disable-at-0", "--stop-time=300us"],
         cwd=BUILD, check=True, capture_output=True, text=True)
     output = result.stdout + result.stderr
-    if "PASS cartridge memorymux" not in output:
+    if "PASS cartridge memorymux" not in output or "PASS BMXE ROM header" not in output:
         raise RuntimeError("Memorymux bench did not reach PASS:\n" + output)
     for line in output.splitlines():
         if "PASS" in line:

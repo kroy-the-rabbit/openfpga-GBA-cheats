@@ -12,13 +12,15 @@ set published [get_registers {*boot_debug|host_debug[*]}]
 if {[get_collection_size $captured] == 0 || [get_collection_size $published] == 0} {
     error "Diagnostic snapshot registers were not found"
 }
-set pattern [get_registers {*|cart_debug_pattern[*]}]
-if {[get_collection_size $pattern] < 64 ||
-    [get_collection_size $captured] < 64 ||
-    [get_collection_size $published] < 64} {
-    error "Pattern experiment requires the full source and both 64-bit snapshot banks"
+# 58 variable payload bits: data32, offset6, count16, flags4.
+# The fixed marker nibble and low two address bits legitimately fold away.
+set badword [get_registers {*header_check|bad_word[*]}]
+set offset [get_registers {*header_check|bad_offset[*]}]
+if {[get_collection_size $badword] < 32 || [get_collection_size $offset] < 6 ||
+    [get_collection_size $captured] < 58 || [get_collection_size $published] < 58} {
+    error "Header diagnostic requires its complete mismatch data/address and 58 variable snapshot bits"
 }
-puts "PATTERN_REGISTERS source=[get_collection_size $pattern] captured=[get_collection_size $captured] published=[get_collection_size $published]"
+puts "HEADER_REGISTERS data=[get_collection_size $badword] offset=[get_collection_size $offset] captured=[get_collection_size $captured] published=[get_collection_size $published]"
 foreach corner [get_available_operating_conditions] {
     set_operating_conditions $corner
     update_timing_netlist

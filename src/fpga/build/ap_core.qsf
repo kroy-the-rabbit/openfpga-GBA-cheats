@@ -942,3 +942,5 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../han/cart_eeprom_bridge.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../han/cart_bus_arbiter.sv
 
 set_global_assignment -name SYSTEMVERILOG_FILE ../han/cart_debug_snapshot.sv
+
+set_global_assignment -name SYSTEMVERILOG_FILE ../han/cart_header_check.sv

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Cartridge ROM read path: src/fpga/han/gba_cart_controller.sv.
 
-Nine passes.
+Ten passes.
 
 1. sim/han/tb_gba_cart_controller.sv, Wokann's whole-controller bench,
    vendored verbatim. It covers SRAM, GPIO and EEPROM as well as ROM, so it
@@ -40,6 +40,9 @@ Nine passes.
 9. sim/han/tb_cart_sram_integration.sv runs the real top-level save-write
    policy, arbiter and cartridge controller with concurrent ROM traffic and
    thousands of SRAM reads, copy writes, verification reads and denied writes.
+
+10. The header variant of the mux/arbiter bench reads the verified BMXE
+    header from the cartridge pin model and checks the passive diagnostic.
 
 ROM_BURST is a module parameter with no port, and iverilog's -P only reaches
 root modules, so pass 1 gets a copy of the controller with the parameter
@@ -142,8 +145,14 @@ def main() -> int:
                    os.path.join(ROOT, "src", "fpga", "core", "core_top.sv"),
                    os.path.join(ROOT, "src", "fpga", "han", "cart_bus_arbiter.sv"), CTRL],
                   top="tb_cart_sram_integration", allow_missing=True)
-    print(f"\n{passes}/9 benches pass")
-    return 0 if passes == 9 else 1
+    passes += run("BMXE header through probe handoff, controller, mux and passive diagnostic",
+                  os.path.join(BUILD, "tb_rom_header_integration"),
+                  [TB_MUX, TB_BURST, CTRL, MUX,
+                   os.path.join(ROOT, "src", "fpga", "han", "cart_bus_arbiter.sv"),
+                   os.path.join(ROOT, "src", "fpga", "han", "cart_header_check.sv")],
+                  top="tb_rom_header_integration")
+    print(f"\n{passes}/10 benches pass")
+    return 0 if passes == 10 else 1
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 // Exercise cache.vhd's two-DWORD cache-line contract through the real cart
 // controller. The second DWORD belongs to the same aligned 8-byte line,
 // including when the requested DWORD is the upper half of that line.
-module tb_rom_source_mux #(parameter VIA_ARBITER = 0);
+module tb_rom_source_mux #(parameter VIA_ARBITER = 0, HEADER = 0);
     reg clk = 0;
     always #5 clk = ~clk;
     reg reset_n = 0;
@@ -67,7 +67,7 @@ module tb_rom_source_mux #(parameter VIA_ARBITER = 0);
         .gpio_req(1'b0), .gpio_rnw(1'b1), .gpio_addr(2'd0), .gpio_din(4'd0),
         .gpio_timing_mode(3'd0), .gpio_recover_set(14'd0)
     );
-    cart_seq_rom_model cart (
+    cart_seq_rom_model #(.HEADER(HEADER)) cart (
         .bank1(b1), .bank2(b2), .bank3(b3), .bank0(b0),
         .bank2_dir(b2dir), .bank3_dir(b3dir),
         .err_redrive(redrive), .err_rd_no_cs(no_cs), .err_rd_while_out(while_out)
@@ -82,6 +82,7 @@ module tb_rom_source_mux #(parameter VIA_ARBITER = 0);
             halfaddr = halfaddr + 1'b1;
             hi = (halfaddr[15:0] * 16'h9e37) ^ 16'hc0de ^ {8'd0, halfaddr[23:16]};
             expected_dword = {hi, lo};
+            if (HEADER && a < 48) expected_dword = header[a];
         end
     endfunction
 
@@ -109,6 +110,15 @@ module tb_rom_source_mux #(parameter VIA_ARBITER = 0);
         end
     endtask
 
+    wire [63:0] diagnostic;
+    generate if (HEADER) begin : checked
+        cart_header_check checker_inst(clk, cart_mode && reset_n, req, addr,
+                                      ready, data1, data2, diagnostic);
+    end else begin
+        assign diagnostic = 0;
+    end endgenerate
+    reg [31:0] header[0:47];
+    initial if (HEADER) $readmemh("sim/fixtures/bmxe-header.hex", header);
     integer cases = 0;
     task read_line(input [24:0] requested);
         reg [63:0] cache_line;
@@ -168,6 +178,9 @@ module tb_rom_source_mux #(parameter VIA_ARBITER = 0);
         read_line(25'h8001);
         read_line(25'h7fffff); // last DWORD in 32 MiB ROM space
         for (i = 2; i < 66; i = i + 1) read_line(i);
+        repeat(3) @(negedge clk);
+        if (HEADER && (diagnostic[63:32] !== 32'h00309a00 || diagnostic[31:0] !== 0))
+            $fatal(1,"FAIL header through arbiter/controller/mux %h", diagnostic);
         if (redrive || no_cs || while_out)
             $fatal(1, "FAIL cartridge pin protocol");
         if (controller_requests != cases + (VIA_ARBITER ? 48 : 0) || cpu_completions != cases)
@@ -184,4 +197,8 @@ endmodule
 
 module tb_rom_source_mux_arbiter;
     tb_rom_source_mux #(.VIA_ARBITER(1)) test();
+endmodule
+
+module tb_rom_header_integration;
+    tb_rom_source_mux #(.VIA_ARBITER(1), .HEADER(1)) test();
 endmodule

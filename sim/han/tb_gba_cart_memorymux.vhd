@@ -2,12 +2,32 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use std.env.all;
+use std.textio.all;
+use ieee.std_logic_textio.all;
 use work.pProc_bus_gba.all;
 
 entity tb_gba_cart_memorymux is end entity;
 architecture test of tb_gba_cart_memorymux is
    signal clk : std_logic := '0';
    signal reset : std_logic := '0';
+   signal gb_on : std_logic := '0';
+   signal rom_req, rom_done : std_logic := '0';
+   signal rom_addr : std_logic_vector(24 downto 0);
+   signal rom_first, rom_second : std_logic_vector(31 downto 0) := (others => '0');
+   signal rom_wait : natural range 0 to 4 := 0;
+   signal rom_word : natural range 0 to 47 := 0;
+   signal rom_requests : natural := 0;
+   type header_words is array(0 to 47) of std_logic_vector(31 downto 0);
+   impure function load_header return header_words is
+      file f : text open read_mode is "bmxe-header.hex";
+      variable l : line;
+      variable h : header_words;
+   begin
+      for i in h'range loop readline(f,l); hread(l,h(i)); end loop;
+      return h;
+   end function;
+   constant header : header_words := load_header;
+
    signal ss_bus, gb_bus : proc_bus_gb_type := ((others => 'Z'), (others => 'Z'), (others => 'Z'), 'Z', '0', 'Z', "ZZ", "ZZZZ", '0');
    signal cart_save_mode : std_logic := '1';
    signal cart_save_req, cart_save_rnw, cart_save_done : std_logic := '0';
@@ -40,14 +60,14 @@ begin
          Softmap_GBA_EEPROM_ADDR => 16908288)
       port map (
       clk100 => clk,
-      gb_on => '1',
+      gb_on => gb_on,
       reset => reset,
       savestate_bus => ss_bus,
-      sdram_read_ena => open,
-      sdram_read_done => '0',
-      sdram_read_addr => open,
-      sdram_read_data => (others => '0'),
-      sdram_second_dword => (others => '0'),
+      sdram_read_ena => rom_req,
+      sdram_read_done => rom_done,
+      sdram_read_addr => rom_addr,
+      sdram_read_data => rom_first,
+      sdram_second_dword => rom_second,
       bus_out_Din => bus_out_din,
       bus_out_Dout => x"000000A5",
       bus_out_Adr => bus_out_adr,
@@ -97,7 +117,7 @@ begin
       dma3_active => dma3_active,
       dma_eepromcount => dma_eepromcount,
       flash_1m => '0',
-      MaxPakAddr => (others => '0'),
+      MaxPakAddr => (others => '1'),
       SramFlashEnable => '1',
       memory_remap => '0',
       bitmapdrawmode => '0',
@@ -140,6 +160,22 @@ begin
    responder : process(clk)
    begin
       if rising_edge(clk) then
+         rom_done <= '0';
+         if rom_req = '1' then
+            assert unsigned(rom_addr) < 48 report "Unexpected ROM request outside header" severity failure;
+            assert rom_wait = 0 report "Overlapping ROM request" severity failure;
+            rom_word <= to_integer(unsigned(rom_addr));
+            rom_wait <= 3;
+            rom_requests <= rom_requests + 1;
+         elsif rom_wait > 0 then
+            rom_wait <= rom_wait - 1;
+            if rom_wait = 1 then
+               rom_done <= '1';
+               rom_first <= header(rom_word);
+               if rom_word mod 2 = 0 then rom_second <= header(rom_word + 1);
+               else rom_second <= header(rom_word - 1); end if;
+            end if;
+         end if;
          cart_save_done <= cart_save_req;
          cart_eeprom_done <= cart_eeprom_req;
          bus_out_done <= bus_out_ena;
@@ -178,7 +214,48 @@ begin
       constant access_sizes : access_list := (ACCESS_8BIT, ACCESS_16BIT, ACCESS_32BIT);
       variable expected : std_logic_vector(31 downto 0);
    begin
+      reset <= '1';
       wait for 100 ns;
+      reset <= '0'; gb_on <= '1';
+      -- Clear the actual 1024-entry cache before the first miss.
+      for i in 0 to 1030 loop wait until falling_edge(clk); end loop;
+      -- Cold fills request upper DWORDs first. Subsequent byte/halfword/word
+      -- reads cover cache hits, mini-cache hits and every byte lane.
+      for i in 0 to 23 loop
+         access_bus(std_logic_vector(to_unsigned(16#08000004# + 8*i,32)),
+                    '1', x"00000000", ACCESS_32BIT);
+         assert mem_bus_din = header(2*i+1) report "Cold odd-DWORD ROM fill mismatch" severity failure;
+      end loop;
+      assert rom_requests = 24 report "Unexpected header cache fill count" severity failure;
+      gb_on <= '0'; wait for 30 ns; gb_on <= '1';
+      for i in 0 to 1030 loop wait until falling_edge(clk); end loop;
+      for i in 0 to 23 loop
+         access_bus(std_logic_vector(to_unsigned(16#08000000# + 8*i,32)),
+                    '1', x"00000000", ACCESS_32BIT);
+         assert mem_bus_din = header(2*i) report "Cold even-DWORD ROM fill mismatch" severity failure;
+      end loop;
+      assert rom_requests = 48 report "Unexpected even header cache fill count" severity failure;
+      for size in access_sizes'range loop
+         for offset in 0 to 191 loop
+            access_bus(std_logic_vector(to_unsigned(16#08000000# + offset,32)),
+                       '1', x"00000000", access_sizes(size));
+            expected := header(offset / 4);
+            case access_sizes(size) is
+               when ACCESS_8BIT =>
+                  expected := x"000000" & expected(8*(offset mod 4)+7 downto 8*(offset mod 4));
+               when ACCESS_16BIT =>
+                  if offset mod 4 < 2 then expected := x"0000" & expected(15 downto 0);
+                  else expected := x"0000" & expected(31 downto 16); end if;
+                  if offset mod 2 = 1 then expected := expected(7 downto 0) & x"0000" & expected(15 downto 8); end if;
+               when others => expected := std_logic_vector(rotate_right(unsigned(expected),8*(offset mod 4)));
+            end case;
+            assert mem_bus_din = expected
+               report "ROM header lane/width mismatch offset=" & integer'image(offset) & " size=" & integer'image(size)
+               severity failure;
+         end loop;
+      end loop;
+      assert rom_requests = 48 report "Header cache hits unexpectedly fetched ROM again" severity failure;
+      report "PASS BMXE ROM header: 48 cold odd/even fills, 576 lane/width reads through actual cache and memorymux";
       -- An unreadable I/O reply must never leak its speculative data. Check
       -- every lane/width, then immediately follow it with a readable reply.
       for readable in 0 to 1 loop

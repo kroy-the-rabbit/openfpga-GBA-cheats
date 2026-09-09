@@ -5,6 +5,65 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## BMXE header diagnostic implemented; regression passed, fit next
+
+User asked what is next. Implemented a passive header comparison at the game
+ROM mux output, replacing the pattern source. HD/HS replace PL/PH in the menu.
+`docs/BOOT-DEBUG.md` defines the precise encoding and hardware procedure.
+The first bad DWORD and byte offset latch; count/coverage continue. A separate
+protocol flag disqualifies unexpected or overlapping handshakes. The checker
+uses the verified BMXE 192-byte header and only enables for its cartridge ID.
+It samples the companion on the clock after ready, matching the actual cache.
+No changes to CPU/GBA engine, save policy or cartridge controller.
+
+New tests cover all reference words, both response orders, corruption on
+either beat, retention and protocol guards; the real controller/arbiter/mux
+with a header-backed pin model; actual VHDL cache/memorymux byte/halfword/word
+reads; and actual top-level menu snapshots. Full regression log:
+`build/timing-analysis/header-regression.log`. **Full make test passed**, including
+all ten cartridge benches, 48 cold odd/even fills, 576 byte/halfword/word
+reads, APF snapshots and the corruption checker. Optional cheat corpus skipped.
+Post-fit register guards now require the 58 variable payload bits (six others
+are intentional constants), with the existing timing and snapshot-delay gates.
+
+Installed card remains `0.9999.c0c1040` with the shorter PL/PH/SF menu patch.
+This source is not a boot fix and is not installed. Next:
+queue one seed-3 sisko fit plus the persistent desktop watcher, then return
+without waiting for the full build. No card write or unmount in this work.
+
+## Follow-up pattern passes again; startup remains corrupted
+
+Follow-up photo `/tmp/codex-clipboard-4AEjhO.png` shows CG `424D5845`,
+CS `FFFF96E1`, **SF `00000001`**, PL `4B3C2907`, PH `D1A65EED`.
+Joined `D1A65EED4B3C2907` is exactly rotation **0** of the seed. Together
+with the previous rotation-55 capture, this completes the requested hardware
+pattern check for the observed samples. The corrupted startup persists;
+neither capture measures CPU state or validates cartridge ROM data.
+Archived photo and analysis: `build/hardware-results/c0c1040/pattern-sf1-followup*`.
+The photo follows the request for full power-off/on; reset history was not
+explicitly confirmed in text. SF remains one in the follow-up observation.
+
+Code inspection found a limit of CG/CS: the probe reads the full 192-byte
+header twice, but compares only accumulated 16-bit OR/AND values. It does
+not compare each byte or validate the Nintendo logo. Passing detection can
+therefore coexist with bad header data. The game ROM path also passes through
+`rom_source_mux` and the GBA cache, unlike the direct header probe.
+
+Next diagnostic should compare header data returned through the game ROM
+path against the verified BMXE dump, capturing the first mismatch address
+and returned word. Exercise byte/halfword/word reads and both DWORD orders
+in simulation before fitting. A correct response at the mux would only
+clear that boundary; cache/memorymux consumption would still need checking.
+Avoid another pattern-only build or treating SF as proof of SRAM failure.
+Preserve the EEPROM abort guard while investigating its request sequence.
+
+[GBATEK's header reference](https://problemkaputt.de/gbatek-gba-cartridge-header.htm)
+describes the cartridge-supplied compressed Nintendo logo, BIOS comparison,
+and startup dummy reads. Thus SRAM save type alone does not establish which
+ROM addresses the BIOS accesses; the actual EEPROM/DMA sequence remains
+unexplained. No root cause or fix is established. No new build is queued,
+and no card changes were made for this follow-up.
+
 ## Full pattern verified on hardware; EEPROM abort flag is now one
 
 User explicitly corrected the earlier screenshot interpretation: the Game Boy

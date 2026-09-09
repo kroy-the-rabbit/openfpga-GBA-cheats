@@ -41,7 +41,7 @@
 
 `timescale 1ns / 1ps
 
-module cart_seq_rom_model (
+module cart_seq_rom_model #(parameter HEADER = 0) (
     inout  wire [7:0] bank2,      // AD[15:8]
     inout  wire [7:0] bank3,      // AD[7:0]
     inout  wire [7:0] bank1,      // A[23:16]
@@ -59,6 +59,8 @@ module cart_seq_rom_model (
     wire cs_n = bank0[0];
     wire rd_n = bank0[1];
 
+    reg [31:0] header[0:47];
+    initial if (HEADER) $readmemh("sim/fixtures/bmxe-header.hex", header);
     // Cart contents. Multiplying the halfword address by an odd constant is a
     // bijection on 16 bits, so any wrong address gives a different halfword.
     function [15:0] rom_word(input [23:0] a);
@@ -66,6 +68,7 @@ module cart_seq_rom_model (
         begin
             m = a[15:0] * 16'h9E37;
             rom_word = m ^ {8'h00, a[23:16]} ^ 16'hC0DE;
+            if (HEADER && a < 96) rom_word = a[0] ? header[a>>1][31:16] : header[a>>1][15:0];
         end
     endfunction
 
