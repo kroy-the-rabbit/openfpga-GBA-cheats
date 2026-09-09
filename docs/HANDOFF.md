@@ -5,6 +5,26 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09: value-capture diagnostic fitting at two seeds; watchers active
+
+Kroy chose option 1. `6c767ca` keeps the first bad DWORD's value again and
+alternates the one 32-bit snapshot: the first menu open captures HS, the
+next the value, then HS again. About 33 registers and a 32-bit mux over
+`a4fe3f4`. All cartridge benches pass. Encoding in `docs/BOOT-DEBUG.md`.
+
+| runner | seed | job | watcher unit |
+|---|---|---|---|
+| sisko | 3 | `pocket-gba-gba-p5cart-header-value-s3-6c767ca847af` | `pocket-gba-watch-value-s3-6c767ca.service` |
+| kira | 1 | `pocket-gba-gba-p5cart-header-value-s1-6c767ca847af` | `pocket-gba-watch-value-s1-6c767ca.service` |
+
+sisko is the faster runner (1484 s against kira's 2236 s for `a4fe3f4`);
+kira's seed 1 was started first, before Kroy said so. Install only a
+passing fit; if both pass, take the larger setup slack. Card is mounted
+and holds `a4fe3f4`. On the Pocket afterwards: full shutdown, boot with
+Zero Mission, open the menu twice, photograph HS both times. The second
+value is the halfword pair read at 0x08000098; expected `72AC0A38`, and
+the low halfword `0A38` is the one that was wrong.
+
 ## 2026-09-09: first hardware capture, HS `18BA9831`: one bad halfword at 0x08000098
 
 Kroy booted Zero Mission on the `a4fe3f4` diagnostic after a full card
