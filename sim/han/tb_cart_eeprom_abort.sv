@@ -9,6 +9,7 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
     reg host_dma_active=1;
     reg [16:0] host_count=81;
     wire host_dout, host_done, fault;
+    wire [31:0] fault_why;
     wire ctl_req, ctl_rnw, ctl_din, ctl_dma;
     reg ctl_done=0;
     wire ctl_dout=1;
@@ -44,6 +45,34 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
     endtask
     task bit_access(input bit value, input bit last_bit);
         begin launch(value,last_bit);retire();end
+    endtask
+    // The faulted transfer must retire without a controller completion:
+    // waiting on one can hang the emulated memory bus for good.
+    task retire_without_completion;
+        integer timeout, previous;
+        begin
+            previous=completed;
+            @(negedge clk);host_din=0;host_last=0;host_req=1;
+            @(negedge clk);host_req=0;
+            timeout=0;
+            while (!host_done && timeout<100) begin
+                @(negedge clk);timeout=timeout+1;
+            end
+            if (!host_done)
+                $fatal(1,"case%0d faulted request never retired: the memory bus would hang",CASE_ID);
+            if (completed!=previous)
+                $fatal(1,"case%0d retired only because the controller completed",CASE_ID);
+            if (host_dout!==1)
+                $fatal(1,"case%0d faulted read did not return the idle level",CASE_ID);
+        end
+    endtask
+    task check_fault_why;
+        begin
+            if (fault_why[31:28]!==4'hE)
+                $fatal(1,"case%0d fault_why has no marker: %h",CASE_ID,fault_why);
+            if (fault_why===32'd0)
+                $fatal(1,"case%0d fault_why was not captured",CASE_ID);
+        end
     endtask
     task reject_after_fault;
         integer previous;
@@ -89,6 +118,8 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
                 write_enable=1;bit_access(1,0);bit_access(0,0);
                 host_dma_active=0;write_enable=0;repeat(4) @(negedge clk);
                 if (fault!==1) $fatal(1,"physical abort did not latch fault");
+                check_fault_why();
+                retire_without_completion();
                 reject_after_fault();
             end
             2: begin
@@ -109,7 +140,15 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
                 if(CASE_ID==4) begin host_count=17;bit_access(1,0);end
                 launch(1,0);wait(accepted==1);
                 @(negedge clk);host_dma_active=0;retire();
-                if (fault!==1 || accepted!=1 || completed!=1)
+                // The host retires on the fault rather than on the drain, so
+                // that a completion the arbiter may never deliver cannot hang
+                // the memory bus. The controller still drains its one bit.
+                if (fault!==1 || completed>1)
+                    $fatal(1,"case%0d faulted retirement was wrong",CASE_ID);
+                check_fault_why();
+                wait(completed==1);
+                repeat(8) @(negedge clk);
+                if (accepted!=1 || completed!=1)
                     $fatal(1,"case%0d failed to drain exactly one accepted bit",CASE_ID);
                 reject_after_fault();
             end

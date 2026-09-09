@@ -31,7 +31,11 @@ module cart_eeprom_bridge (
     input  wire        ctl_done,
     // An interrupted physical serial transfer cannot safely be restarted by
     // pulsing CS#. Only FPGA configuration clears this fail-closed latch.
-    output reg         fault = 1'b0
+    output reg         fault = 1'b0,
+    // Why the latch fired, sampled on the clock it fired and held. Marker
+    // E, the FSM state, which input dropped, the request flags, and the
+    // host's bit index. Zero until the first fault.
+    output reg  [31:0] fault_why = 32'd0
 );
 
     localparam [1:0] IDLE = 2'd0, WAIT_BIT = 2'd1,
@@ -60,6 +64,11 @@ module cart_eeprom_bridge (
     // it. APF reset or loss of cartridge power can also reset that controller
     // and is not a promise of electrically safe write interruption.
     always @(posedge clk) begin
+        if (abort_fault && !fault) begin
+            fault_why <= {4'hE, state, !host_dma_active, !reset_n,
+                          transfer_sent, ctl_req, command_active, host_rnw,
+                          4'd0, host_count[15:0]};
+        end
         if (abort_fault) fault <= 1'b1;
 
         if (!reset_n || !host_dma_active || fault || abort_fault) begin
@@ -109,12 +118,15 @@ module cart_eeprom_bridge (
                 prefix_pending  <= 1'b0;
                 host_dout <= 1'b1;
                 case (state)
-                    WAIT_BIT, WAIT_PREFIX: if (ctl_done) begin
-                        host_done <= 1'b1;
-                        state <= IDLE;
-                    end
-                    ISSUE_SECOND: begin
-                        // Prefix bit one may finish; never launch bit two.
+                    // Retire the accepted bit immediately instead of waiting
+                    // on ctl_done. The transfer is already dead, and
+                    // cart_bus_arbiter only forwards that done while EEPROM
+                    // is the active master, so waiting on it can hang
+                    // gba_memorymux's CART_EEPROM_WAIT forever: a stopped CPU
+                    // with the audio DMA still looping its buffer. The bus
+                    // controller owns the electrical pulse and finishes it on
+                    // its own; no new ctl_req is issued once faulted.
+                    WAIT_BIT, WAIT_PREFIX, ISSUE_SECOND: begin
                         host_done <= 1'b1;
                         state <= IDLE;
                     end

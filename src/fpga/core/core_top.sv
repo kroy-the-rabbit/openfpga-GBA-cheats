@@ -258,6 +258,7 @@ wire       cart_eeprom_dma, cart_eeprom_last, cart_eeprom_dout, cart_eeprom_done
 wire [16:0] cart_eeprom_count;
 wire       cart_eeprom_dma_active;
 wire       cart_eeprom_fault, cart_eeprom_fault_s;
+wire [31:0] cart_eeprom_fault_why;
 wire [31:0] cart_debug_host;
 
 // Menu readouts, in clk_74a for the bridge read mux. Driven at the bottom.
@@ -2019,6 +2020,7 @@ cart_eeprom_bridge ee_bridge (
     .host_req(cart_eeprom_req && cart_rom_mode), .host_rnw(cart_eeprom_rnw),
     .host_din(cart_eeprom_din), .host_dma(cart_eeprom_dma),
     .host_dma_active(cart_eeprom_dma_active), .fault(cart_eeprom_fault),
+    .fault_why(cart_eeprom_fault_why),
     .host_count(cart_eeprom_count), .host_last(cart_eeprom_last),
     .host_dout(cart_eeprom_dout), .host_done(cart_eeprom_done),
     .ctl_req(ee_bridge_req), .ctl_rnw(ee_bridge_rnw), .ctl_din(ee_bridge_din),
@@ -2107,10 +2109,15 @@ cart_header_check header_check (
     .bad_word(cart_header_word)
 );
 // One snapshot register, two payloads: the first menu open captures HS,
-// the next captures the first bad DWORD's value, and so on alternately.
+// the next captures the detail word, and so on alternately. The detail is
+// the first bad header DWORD's value when HS shows a mismatch, and
+// otherwise why the EEPROM guard latched (marker E, or zero if it never
+// did). HS's own mismatch flag says which of the two is on show.
+wire [31:0] cart_debug_detail = cart_header_debug[21] ? cart_header_word
+                                                      : cart_eeprom_fault_why;
 cart_debug_snapshot #(.WIDTH(32)) boot_debug (
     .clk_host(clk_74a), .clk_sys(clk_sys), .host_menu(osnotify_inmenu),
-    .sys_debug(cart_debug_page ? cart_header_word : cart_header_debug),
+    .sys_debug(cart_debug_page ? cart_debug_detail : cart_header_debug),
     .host_debug(cart_debug_host), .page(cart_debug_page)
 );
 

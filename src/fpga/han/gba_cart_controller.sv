@@ -51,10 +51,19 @@ module gba_cart_controller #(
     // the same electrical read margin through the Pocket. Power-on WAITCNT
     // is 0000h: WS0 sequential access takes 1+2 clocks, about 179 ns.
     // Neither matching a total period nor simulation qualifies this core
-    // on real carts. Keep 20/6 until ROM hashes and gameplay qualify faster
-    // timings. Non-sequential timing and the per-word fallback are unchanged.
-    parameter integer ROM_SEQ_WAIT    = 20, // clk_sys cycles per burst halfword
-    parameter integer ROM_SEQ_RD_HIGH = 6,  // of which RD# is held high
+    // on real carts.
+    //
+    // 2026-09-09, on hardware: 20/6 makes an eight-byte cache line take
+    // 834.5 ns, which is exactly a real GBA's power-on WAITCNT 0000h. Games
+    // set 4317h and are written against 596.0 ns, so the core was delivering
+    // 71 % of the read bandwidth Zero Mission's opening cutscene expects; it
+    // froze there and START skipped past it. 12/4 is that 4317h timing
+    // exactly: 119.2 ns sequential against 238.4 ns non-sequential. The
+    // conservative window came from `85bb71a`, chasing a GBA-logo freeze
+    // later traced to the cache-line ordering bug in `4728cc6`. Unlike then,
+    // `HS` in the menu proves header integrity at whatever window is fitted.
+    parameter integer ROM_SEQ_WAIT    = 12, // clk_sys cycles per burst halfword
+    parameter integer ROM_SEQ_RD_HIGH = 4,  // of which RD# is held high
     // 0 = re-drive the full address for every halfword (the original per-word
     // path, kept as the fallback for a cart that does not honour its own
     // sequential counter). 1 = burst.

@@ -35,8 +35,10 @@
 //   - the host never re-drives AD while CS# is low, never strobes RD# with
 //     CS# high, and never strobes RD# while it is still driving AD.
 //
-// Default sequential pulse widths are checked separately: 6 clocks high and
-// 14 clocks low. The immediate data model does not prove electrical margin.
+// Default sequential pulse widths are checked separately: 4 clocks high and
+// 8 clocks low, which is a real GBA's WAITCNT 4317h sequential access, the
+// setting games actually use. The immediate data model does not prove
+// electrical margin.
 // Whole-request cycle counts for both paths are also reported.
 
 `timescale 1ns / 1ps
@@ -243,13 +245,13 @@ module tb_gba_cart_rom_burst;
     always @(negedge b_b0[1]) begin
         low_is_seq = reset_n && have_seq_rise;
         seq_fall = $time;
-        if (low_is_seq && ($time - seq_rise != 60))
-            fail("default sequential RD high is not 6 clocks");
+        if (low_is_seq && ($time - seq_rise != 40))
+            fail("default sequential RD high is not 4 clocks");
     end
     always @(posedge b_b0[1]) begin
         if (reset_n && low_is_seq) begin
-            if ($time - seq_fall != 140)
-                fail("default sequential RD low is not 14 clocks");
+            if ($time - seq_fall != 80)
+                fail("default sequential RD low is not 8 clocks");
             seq_pulses = seq_pulses + 1;
         end
         low_is_seq = 0;

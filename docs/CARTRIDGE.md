@@ -184,20 +184,29 @@ on later launches.
 ## What is not settled
 
 **The bus timing still needs hardware qualification in this core.** The
-sequential defaults are now `ROM_SEQ_WAIT=20`, `ROM_SEQ_RD_HIGH=6`, matching
-the actual RTL edge intervals in `pocket-cartridge`'s `gba_cart_bus.sv`.
-CartTools has dumped cartridges, including Minish Cap, byte-exact against
-No-Intro. That is evidence for its complete implementation, not proof that
-matching one window makes this controller work on hardware.
+sequential defaults are `ROM_SEQ_WAIT=12`, `ROM_SEQ_RD_HIGH=4` since
+2026-09-09, which is a real GBA's `WAITCNT=4317h` sequential access. They
+were 20/6, matching `pocket-cartridge`'s `gba_cart_bus.sv` edge intervals,
+until hardware showed what that costs: 20/6 makes an eight-byte cache line
+take 834.5 ns, exactly a GBA's **power-on** `WAITCNT=0000h`, while a game
+that has set `4317h` is written against 596.0 ns. Zero Mission froze in its
+opening cutscene at 20/6 and START skipped past the freeze. CartTools can
+afford the slower window because it is the only master and is not racing a
+frame budget. CartTools has dumped cartridges, including Minish Cap,
+byte-exact against No-Intro. That is evidence for its complete
+implementation, not proof that either window makes this controller work on
+hardware.
 
 The following counts were checked by simulating both controllers, not by
 measuring connector pins. At `clk_sys=100.663296 MHz`:
 
 | Sequential halfword | RD# high | RD# low | Total |
 |---|---|---|---|
-| Previous pocket-gba defaults, 12/4 | 4 clocks, 40 ns | 8 clocks, 79 ns | 12 clocks, 119 ns |
-| Current pocket-gba defaults, 20/6 | 6 clocks, 60 ns | 14 clocks, 139 ns | 20 clocks, 199 ns |
+| Current pocket-gba defaults, 12/4 | 4 clocks, 40 ns | 8 clocks, 79 ns | 12 clocks, 119 ns |
+| pocket-gba 20/6, 2026-09-06 to 09-09 | 6 clocks, 60 ns | 14 clocks, 139 ns | 20 clocks, 199 ns |
 | CartTools | 6 clocks, 60 ns | 14 clocks, 139 ns | 20 clocks, 199 ns |
+| Real GBA, `WAITCNT=4317h` | | | 2 GBA clocks, 119 ns |
+| Real GBA, `WAITCNT=0000h` | | | 3 GBA clocks, 179 ns |
 
 CartTools' turnaround parameter is 4, but its countdown and state transitions
 add two clocks to the high pulse. The earlier 18-clock comparison omitted
