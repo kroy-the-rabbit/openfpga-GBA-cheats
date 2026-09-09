@@ -30,18 +30,41 @@ module cart_eeprom_bridge (
     input  wire        ctl_dout,
     input  wire        ctl_done,
     // An interrupted physical serial WRITE cannot safely be restarted by
-    // pulsing CS#. Only FPGA configuration clears this fail-closed latch.
+    // pulsing CS#, so this is a fail-closed latch. It is cleared by a
+    // controller reset, which has already ended any physical transfer.
+    //
+    // 2026-09-09: it used to have no clear at all, and that killed the whole
+    // save path. `fault` fed the condition that clears `transfer_open`, which
+    // feeds `abort_fault`, which sets `fault`. With no reset to anchor it,
+    // Quartus resolved that cycle to the degenerate fixed point and reported
+    // `fault` "Stuck at VCC", `transfer_open`, `ctl_req` and `command_active`
+    // "Stuck at GND", and `host_dout` "Stuck at VCC". The fitted bridge was
+    // one ALM and two registers: no EEPROM access was ever issued to a
+    // cartridge, every read returned ones, and `SF` reported a fault that
+    // was a constant. `scripts/inspect_timing.tcl` now fails a build where
+    // these registers do not survive.
     // With write_enable low the bridge cannot alter the chip, so the latch
     // is not armed; `fault_why` still records the first abort condition.
-    output reg         fault = 1'b0,
+    output wire        fault,
     // Why the latch fired, sampled on the clock it fired and held. Marker
     // E in 31:28, FSM state 27:26, then dma_active dropped, reset_n
     // dropped, transfer_sent, ctl_req, command_active, host_rnw,
     // transfer_open, transfer_writable, host_dma, host_req, and the host's bit
     // index in 15:0. Recorded on the first abort condition whether or not
     // it latched the guard, so a read-only session still explains itself.
-    output reg  [31:0] fault_why = 32'd0
+    output wire [31:0] fault_why
 );
+
+    // These carry their power-up values on internal registers and are driven
+    // out through wires. An initialiser written on a port declaration is not
+    // reliably honoured: with `fault` declared `output reg fault = 1'b0` the
+    // fitter treated it as having no defined power-up state and resolved the
+    // cycle through `transfer_open` to the degenerate answer, reporting
+    // `fault` "Stuck at VCC" and the rest of the bridge "Stuck at GND".
+    reg        fault_r = 1'b0;
+    reg [31:0] fault_why_r = 32'd0;
+    assign fault = fault_r;
+    assign fault_why = fault_why_r;
 
     localparam [1:0] IDLE = 2'd0, WAIT_BIT = 2'd1,
                      WAIT_PREFIX = 2'd2, ISSUE_SECOND = 2'd3;
@@ -73,6 +96,8 @@ module cart_eeprom_bridge (
     // with Cartridge Saves on Read Only, and its own recorded reason showed
     // no interrupted transfer at all.
     wire abort_fault = abort_condition && transfer_writable;
+    // `fault_r` is deliberately absent from the transfer-tracking clear
+    // below; it closed the cycle that let the whole module fold away.
 
     wire read_command_length = host_count == 17'd9 || host_count == 17'd17;
 
@@ -82,15 +107,17 @@ module cart_eeprom_bridge (
     // it. APF reset or loss of cartridge power can also reset that controller
     // and is not a promise of electrically safe write interruption.
     always @(posedge clk) begin
-        if (abort_condition && fault_why == 32'd0) begin
-            fault_why <= {4'hE, state, !host_dma_active, !reset_n,
+        if (abort_condition && fault_why_r == 32'd0) begin
+            fault_why_r <= {4'hE, state, !host_dma_active, !reset_n,
                           transfer_sent, ctl_req, command_active, host_rnw,
                           transfer_open, transfer_writable, host_dma, host_req,
                           host_count[15:0]};
         end
-        if (abort_fault) fault <= 1'b1;
+        if (abort_fault) fault_r <= 1'b1;
 
-        if (!reset_n || !host_dma_active || fault || abort_fault) begin
+        // `fault` deliberately does not appear here. It gated this clear
+        // until 2026-09-09, closing the cycle described above.
+        if (!reset_n || !host_dma_active || abort_fault) begin
             transfer_open <= 1'b0;
             transfer_sent <= 1'b0;
             transfer_writable <= 1'b0;
@@ -137,7 +164,7 @@ module cart_eeprom_bridge (
             // policy, latched or not: the retirement path must not depend on
             // the permanent latch, or a read-only abort would hang the
             // emulated memory bus exactly as a faulted one used to.
-            if (fault || abort_condition) begin
+            if (fault_r || abort_condition) begin
                 command_active  <= 1'b0;
                 command_raw     <= 1'b0;
                 command_allowed <= 1'b0;

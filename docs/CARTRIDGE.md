@@ -41,6 +41,21 @@ core at all rather than start it without the slot.
 
 For the current white-screen investigation, see [boot diagnostics](BOOT-DEBUG.md).
 
+**Cartridge EEPROM saves have never worked, and the reason was synthesis,
+not logic.** Every build up to 2026-09-09 fitted `cart_eeprom_bridge` as one
+ALM and two registers. `fault` was reported "Stuck at VCC", and
+`transfer_open`, `ctl_req` and `command_active` "Stuck at GND", so the bridge
+never issued a physical EEPROM access, every EEPROM read returned ones, and
+the `SF` readout reported a fault that was a hardwired constant rather than
+anything the cartridge did. Simulation passed throughout, because simulation
+does not constant-fold. The cause was a power-up initialiser written on the
+module's output port declaration, which the fitter did not honour, leaving
+`fault` with no defined power-up state and letting constant propagation
+resolve the cycle through `transfer_open` to the degenerate answer. The
+power-up values now live on internal registers, `fault` no longer gates the
+transfer-tracking clear, and `scripts/inspect_timing.tcl` fails any build
+where the bridge's registers do not survive.
+
 The abort guard is armed by the write switch, not by the abort. Since
 2026-09-09 the fail-closed latch is set only when the interrupted physical
 transfer was **opened with writes enabled**. With Cartridge Saves on Read

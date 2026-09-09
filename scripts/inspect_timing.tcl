@@ -45,6 +45,19 @@ foreach line [split [read $report_file] "\n"] {
 close $report_file
 if {$header_m10ks < 1} {error "Header diagnostic requires the reference ROM in M10K memory"}
 puts "HEADER_REFERENCE_M10K blocks=$header_m10ks"
+
+# The EEPROM bridge must survive as real logic. On 2026-09-09 constant
+# propagation resolved a cycle through its fault latch and reduced the whole
+# module to one ALM and two registers: no cartridge EEPROM access was ever
+# issued and every read returned ones, while simulation passed throughout.
+# These are the registers that must exist for the bridge to do anything.
+foreach reg {transfer_open ctl_req command_active state} {
+    set found [get_registers "*ee_bridge|$reg*"]
+    if {[get_collection_size $found] == 0} {
+        error "EEPROM bridge register '$reg' did not survive synthesis; the save path is not built"
+    }
+    puts "EEPROM_BRIDGE $reg=[get_collection_size $found]"
+}
 foreach corner [get_available_operating_conditions] {
     set_operating_conditions $corner
     update_timing_netlist
