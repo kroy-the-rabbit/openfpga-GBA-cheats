@@ -5,6 +5,25 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## Reduced header checker build running; watcher active
+
+**Source `1e9add1b89263cb9564e84f838a224d334c53601`, seed 3**, queued on
+sisko as `pocket-gba-gba-p5cart-header-m10k-s3-1e9add1b8926`, launcher PID
+`670632`. Verified Quartus started elaboration. This is the proposed timing
+fix; passing timing and actual M10K placement remain pending.
+
+Watcher **`pocket-gba-watch-1e9add1.service`**, PID `2354034`, is active.
+Initial poll returned running and the startup desktop notification succeeded.
+It checks timing, diagnostic retention, snapshot routing and package integrity;
+the build additionally rejects a reference ROM not fitted in M10K memory.
+Durable result: `build/watch/pocket-gba-gba-p5cart-header-m10k-s3-1e9add1b8926/result.json`.
+Check: `../tools/runner-build job sisko pocket-gba gba p5cart-header-m10k-s3 1e9add1`.
+
+All ten cartridge benches plus checker/snapshot/APF integration passed for
+this revision. No card write. Return after queueing; completion is reported
+by desktop notification. Do not claim timing or boot corruption fixed until
+those separate build and hardware checks pass.
+
 ## Header checker reduced to synchronous ROM and shared comparison
 
 User requested fixing the failed build. The -0.416 ns path is in existing
