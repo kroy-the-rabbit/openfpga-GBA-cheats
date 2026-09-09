@@ -33,7 +33,7 @@ foreach line [split [read $report_file] "\n"] {
     set column [lsearch -exact $fields "M10K blocks"]
     if {$column >= 0} {set m10k_column $column}
     if {$m10k_column >= 0 && [string match {*header_check*header_rom*} [lindex $fields 1]] &&
-        [lindex $fields 2] eq "M10K"} {
+        [lindex $fields 2] in {"M10K" "M10K block"}} {
         set blocks [lindex $fields $m10k_column]
         if {[string is integer -strict $blocks]} {incr header_m10ks $blocks}
     }

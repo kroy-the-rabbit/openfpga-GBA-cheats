@@ -5,6 +5,40 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09: resumed; parser fixed and exact paths recovered
+
+User resumed the work. Fixed the M10K type-label parser to recognize
+`M10K block` as emitted by Quartus. Verified against **both complete real
+reports**: the `1e9add1` memory implementation passes and the `195904c`
+logic implementation is still rejected. No FPGA logic changed.
+
+Reran `quartus_sta` on the existing `1e9add1` seed-3 fit, using a separate
+`inspect_timing_resumed.tcl`; the original failed analysis log is preserved.
+The corrected analysis succeeds: reference ROM uses one M10K, mismatch
+source and 59-bit snapshot banks are retained. Raw snapshot delays are
+**4.001 / 3.977 / 2.089 / 1.848 ns** (slow85/slow0/fast85/fast0), all below
+20 ns. This clears the snapshot route, not whole-design setup timing.
+
+The exact worst setup path is **execute_Rn_op1[2]~DUPLICATE to
+Mux415~0_OTERM6858**, -0.373 ns at slow85 and -0.324 ns at slow0. Slow85
+also fails on savestate write data to a CPU savestate register (-0.298 ns)
+and memorymux rotate_data to CPU decode_data (-0.289 ns). These are multiple
+existing engine paths; changing one CPU operation is not justified by the
+reports. All GBA engine RTL still matches the passing `417a55f` baseline.
+
+Reports: `build/watch/pocket-gba-gba-p5cart-header-m10k-s3-1e9add1b8926/`
+contains `path-analysis-resumed.log`, all four `timing-paths/setup-*` and
+`snapshot-*`, and updated `failure-analysis.json`. No fit was rerun and the
+failed bitstream is still not installable.
+
+Next bounded experiment: **same M10K diagnostic RTL at seed 8**, with only
+the corrected parser/documentation in the source commit. Seed 3 is the only
+placement attempted for this revision. Existing cartridge/APF/checker
+regressions from `1e9add1` remain applicable because hardware is identical.
+The new fit must pass all timing and retention checks before installation.
+Queue its persistent watcher, save the job details, and return rather than
+waiting interactively through another full fit. Card remains `c0c1040`.
+
 ## 2026-09-08 night: reduced header checker failed; stop and handoff
 
 User's final instruction: **install if it passes, otherwise hand off**.
