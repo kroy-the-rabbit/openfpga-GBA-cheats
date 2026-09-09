@@ -5,6 +5,54 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09: `eeab971` on hardware, and the fault finally has a shape
+
+Corrupted logo again. **HS `18BA9821`**: 24 pairs, all lines seen, no
+protocol error, **mismatch at offset 0x98, byte lane 1 only, companion
+beat**. `SF` still `00000001`.
+
+Put beside the earlier mismatch:
+
+| Build | Window | HS | Offset | Bad byte lanes | Beat |
+|---|---|---|---|---|---|
+| `a4fe3f4` | 20/6 | `18BA9831` | 0x98 | 0 and 1 | companion |
+| `d7ecfaa` | 20/6 | `189A0000` | none, clean boot | | |
+| `eeab971` | 12/4 | `18BA9821` | 0x98 | 1 only | companion |
+
+**Every mismatch is the same halfword, and it is the non-sequential one.**
+The CPU asks for DWORD 39 (`0x9C`); `rom_source_mux` fetches the aligned
+pair from DWORD 38 and swaps, so the companion DWORD is 38, which the
+controller assembles as `{words[1], words[0]}`. Byte lanes 0 and 1 are
+`words[0]`: the halfword read in `S_ROM_DATA` right after CS# falls and
+the address is latched. `words[1..3]`, the three burst halfwords, have
+**never** been wrong in any capture.
+
+That is why the sequential window change did nothing for the logo: the
+corrupt halfword is served by the non-sequential path, which `eeab971`
+did not touch. It did make it smaller, two bad bytes down to one, which
+is what a marginal window does when its timing shifts.
+
+**Working hypothesis: bus turnaround.** `S_ROM_DATA` releases the AD bus
+and asserts RD# on the *same* clock (`out_bank2_dir <= 0` alongside
+`rd_n <= 0`), then samples 23 clocks later. CartTools instead has an
+explicit `READ_TURN` phase of 4 clocks between releasing the address and
+starting its read setup. The expected halfword at `0x98` is `0A38` and
+the address driven just before it is `004C`, so a lane still carrying the
+residual address would show exactly this pattern: the high byte wrong
+alone, or both bytes wrong when the whole halfword lags.
+
+**The cheap next step needs no build.** `eeab971` still captures the bad
+DWORD's value on the second menu open. Boot, open the menu, close it,
+open it again, and photograph the second HS. That word distinguishes:
+
+| Second HS | Meaning |
+|---|---|
+| `72AC004C` or similar | residual address still on the bus, turnaround too short |
+| `72ACFFFF` | cartridge not driving at all when sampled |
+| anything else | neither; the value says what actually arrived |
+
+Only then is a timing change worth fitting.
+
 ## 2026-09-09: `eeab971` installed, card unmounted; what to look for next
 
 Both fixes from the analysis below, in one commit, passing at seed 3 on
