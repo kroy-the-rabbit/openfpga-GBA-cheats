@@ -5,6 +5,33 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## Pattern diagnostic passed; verified package staged, not installed
+
+Check-in confirmed `c0c1040` seed 3 completed successfully in 1535 s:
+setup **+0.092 ns**, hold **+0.121 ns**, recovery +2.933 ns,
+removal +0.276 ns, minimum pulse +0.827 ns. Utilization 18,052/18,480 ALMs
+(98%), 25,632 registers, 282 RAM blocks.
+
+Post-fit checks found **65 source registers, 64 captured and 64 published**;
+the pattern/snapshot was not optimized away. Worst raw snapshot data delay
+is **3.085 ns**, below the 20 ns budget at all four corners. The watcher
+verified all 14 archive files against source and staged 13 card files.
+Bitstream SHA256:
+`10fe733a309abb343443126e3e6e3219feead956a1a7d428f7f48be273de6c54`.
+
+Result, reports and stage:
+`build/watch/pocket-gba-gba-p5cart-pattern-s3-c0c1040ce033/`.
+Watcher state **ready-to-write**; completion notification delivered.
+The card remains untouched on `417a55f`; this check-in did not authorize
+resuming installation after the prior stop request. No build is running.
+
+This establishes that the snapshot can meet timing with its local pattern
+source at seed 3, despite higher total ALM use than the failing compact live
+variant. It points the next isolation experiment toward retained CPU debug
+outputs and their routing/optimization effects, rather than total register
+count alone. It does not prove which live observation causes the problem,
+qualify live CPU diagnostics, or fix Zero Mission's white screen.
+
 ## 2026-09-08: pattern diagnostic queued; stop requested
 
 User requested: **queue it, then stop and hand off for now**. Do not continue
