@@ -337,6 +337,34 @@ SHA-256 is `b876ec7a2ae9f30e9c2fd4ae40bbdcc89696c3fa1a7de26e521fcc4cf82a65ad`.
 not establish cartridge detection, boot, gameplay or electrical read margin.
 `docs/HANDOFF.md` has the package hash, backup location and next checks.
 
+### Boot diagnostics for the Zero Mission white screen, 2026-09-08 to 09-09
+
+Every row is Quartus 25.1std, STANDARD FIT, 16 processors, through
+`runner-build`; the reports are under `build/watch/<job>/`. The GBA engine
+RTL is `417a55f` throughout. Setup is the worst corner.
+
+| Commit | What it adds | Seed | ALMs | Setup | Result, runner, elapsed |
+|---|---|---|---|---|---|
+| `417a55f` | nothing, control | 3 | 17,819 (96 %) | **+0.092** | pass, sisko, 1443 s |
+| `1a053b2` | CPU PC/state/DMA capture, 64-bit snapshot | 3, 8, 2 | | fail | sisko |
+| `c115fbf` | same, without I/O reply decode | 3 | 18,017 (97 %) | **-1.573** | fail, sisko, 1425 s |
+| `3f7ae09` | PC and state only | 3 | 17,751 (96 %) | **-2.790** | fail, sisko, 1463 s |
+| `c0c1040` | rotating pattern source, 64-bit snapshot | 3 | 18,052 (98 %) | **+0.092** | pass, sisko, 1535 s; installed |
+| `195904c` | BMXE header checker, reference in logic | 3 | 18,052 (98 %) | **-0.416** | fail, sisko, 1638 s |
+| `1e9add1` | reference in M10K, shared comparator | 3 | | **-0.373** | fail, sisko |
+| `424bd12` | same RTL | 8 | 18,019 (98 %) | **-0.190** | fail, sisko, 1550 s |
+| `a4fe3f4` | 32-bit result: lanes and beat, no bad word | 3 | 17,925 (97 %) | **-0.197** | fail, sisko, 1484 s |
+| `a4fe3f4` | same RTL | 1 | 17,976 (97 %) | **+0.034** | pass, kira, 2236 s |
+
+The failing path is always inside `gba_cpu`, not the diagnostic. The first
+passing checker, `a4fe3f4` seed 1, has hold +0.038, recovery +2.665,
+removal +0.288, pulse +0.827, 25,415 registers, 283 RAM blocks with the
+reference in one M10K, and snapshot data delays of 3.800 / 3.762 / 1.963 /
+1.725 ns at the four corners. Package `kroy.GBA_0.9999.a4fe3f4.zip`,
+SHA-256 `1fb8a62e4b464db928de0437438b4b2fa33bfea2434d1f0e91b886d4af82c378`;
+bitstream SHA-256
+`f72426ab1865f8065578573501f793cac82eb75e231681ad7e60b17aea41c3d6`.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on
