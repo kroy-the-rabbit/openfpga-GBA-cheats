@@ -1,31 +1,45 @@
 # Handoff
 
-State of the fork as of 2026-09-06, evening. Read the sections in order, newest first;
+State of the fork as of 2026-09-09. Read the sections in order, newest first;
 the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
-## Seed-8 M10K diagnostic fit running; watcher active
+## 2026-09-09: seed 8 of the M10K diagnostic also failed; nothing queued
 
-**Source `424bd12ec92c86e9e97b650e7cdac5a73337a262`, seed 8**, running on
-sisko as `pocket-gba-gba-p5cart-header-m10k-s8-424bd12ec92c`, launcher PID
-`681618`. FPGA source is byte-identical to `1e9add1`; this commit changes
-only the parser and handoff. This is the first seed-8 attempt for this RTL,
-not a fix claim. All timing, M10K and snapshot gates remain mandatory.
+`424bd12` (FPGA source identical to `1e9add1`), seed 8, sisko, 1550 s.
+**Not installable.** The watcher recorded `not-ready`, "Timing failed: Setup
+-0.190 ns", and delivered its notification. Both runners are free, nothing is
+queued, and the card was not mounted when this was written. Its last known
+content is the `c0c1040` pattern diagnostic with the short PL/PH/SF menu, not
+the working `417a55f`.
 
-Persistent watcher **`pocket-gba-watch-424bd12.service`** started; initial
-poll confirmed running and the startup desktop notification was delivered.
-Result: `build/watch/pocket-gba-gba-p5cart-header-m10k-s8-424bd12ec92c/result.json`.
-Check: `../tools/runner-build job sisko pocket-gba gba p5cart-header-m10k-s8 424bd12`.
-Expected duration is approximately 25–30 minutes based on the previous fits.
+| | |
+|---|---|
+| Setup | **-0.190 ns** slow 0C (6 violated), -0.140 ns slow 85C (4 violated); both fast corners pass |
+| Hold / recovery / removal / pulse | +0.059 / +3.313 / +0.273 / +0.827 ns |
+| ALMs / registers / RAM blocks | 18,019 (98%) / 25,563 / 283 |
+| Worst path | `gba_cpu` `execute_Rn_op1[0]` to `comb~13_OTERM8957_OTERM10431` at slow 0C; `execute_Rn_op1[1]~DUPLICATE` to the same node at slow 85C |
 
-On success, package qualification/staging precedes any card installation.
-The user's earlier instruction was to install a passing build and hand off;
-verify the actual mounted card against the `c0c1040` + short-menu baseline,
-back up, verify writes/protected files and leave mounted. The old prepared
-`install_1e9add1.py` is locked to a failed build and must not be reused as-is.
-On failure, save exact endpoints/results before deciding another experiment;
-do not install a failed fit. No card changes or additional builds queued.
+Reports: `build/watch/pocket-gba-gba-p5cart-header-m10k-s8-424bd12ec92c/`,
+with all four `timing-paths/setup-*` and `snapshot-*` and `path-analysis.log`.
+Remote: `/root/pocket-builds/checkouts/pocket-gba-gba-p5cart-header-m10k-s8-424bd12ec92c/build/gba`.
+
+**Where this leaves the diagnostic.** Every fit since `1a053b2` has missed
+setup, eight of them across four commits and three seeds, from -0.055 to
+-0.593 ns, and the failing path is the CPU operand select into a mux each
+time. The passing baseline closes that path with under 0.1 ns to spare, at
+96% of the device; the diagnostics take it to 98%. Another seed of the same
+RTL is a coin toss weighted against. The choice is Kroy's:
+
+1. A smaller diagnostic, or the header checker with the PC/state/DMA capture
+   from `1a053b2` removed, so the design sits back near 96%.
+2. Take the evidence another way: read the Zero Mission cartridge through
+   CartTools' proven bus and compare its dump with what this core's ROM path
+   returns, without any in-core checker.
+3. Stop diagnosing Zero Mission on this branch, land what works (Minish Cap
+   boots, loads its save, plays with cheats) and carry the white screen as a
+   known failure.
 
 ## 2026-09-09: resumed; parser fixed and exact paths recovered
 
