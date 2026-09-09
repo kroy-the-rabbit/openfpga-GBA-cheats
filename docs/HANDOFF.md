@@ -5,6 +5,53 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09: contacts were the ROM fault; now a white screen and a guard that misfires
+
+**There was a hair in the slot.** After cleaning, the GBA banner draws
+correctly and `HS` reads **`189A0000`**: 24 pairs, all 24 header lines
+seen, no protocol error, **no mismatch**. That closes the AD0/AD8 finding
+below: it was contacts, not bus turnaround and not the read window. The
+ROM path delivers the header intact.
+
+The game now stops at a **white screen**, `SF` still `00000001`, and the
+detail page reads **`E0000000`**.
+
+**Decoded, that word says nothing was interrupted:**
+
+| Field | Value |
+|---|---|
+| marker | `E`, so this is the EEPROM guard's account |
+| bridge FSM state | IDLE |
+| `host_dma_active` dropped | no |
+| `reset_n` dropped | no |
+| `transfer_sent` | no |
+| `ctl_req` | no |
+| `command_active` | no |
+| direction | write |
+| `host_count` | 0 |
+
+**That contradicts the guard's own trigger.** `abort_fault` requires
+`transfer_open && (transfer_sent || ctl_req) && (!host_dma_active ||
+!reset_n)`. The capture shows `transfer_sent` and `ctl_req` both clear,
+and neither `host_dma_active` nor `reset_n` dropped, so the condition
+that latched the guard reads as false in the guard's own record of the
+moment it fired. Either the capture is not sampling the instant the
+condition was true, or the latch fires without the conditions it
+describes. `transfer_open` is the one term of the expression that was not
+recorded, so it is the first thing to add.
+
+What is not in doubt: **there is no evidence here of a genuinely
+interrupted physical transfer.** The guard exists to stop an interrupted
+*write* corrupting the save chip, Cartridge Saves is on Read Only, and
+the recorded reason shows no DMA drop and no reset.
+
+**Proposed next build, one change and one instrument.** Do not latch the
+guard while writes are disabled, since a read cannot damage the chip and
+Read Only is the mode being tested; and record `transfer_open` plus the
+`host_dma`/`host_req` inputs in the detail word so the next capture can
+be trusted. That directly answers whether EEPROM is what holds the boot
+at the white screen.
+
 ## 2026-09-09: the corruption is two bus lines reading high, AD0 and AD8
 
 Kroy captured both snapshot pages on `eeab971`, on a boot where the first
