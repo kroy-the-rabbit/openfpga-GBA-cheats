@@ -28,7 +28,39 @@ been there; every reboot of this core after that **froze during boot** at
 a different point, with looping audio. The two blue-text captures are two
 of those frozen boots, not a slow render.
 
-**The ROM path is no longer the suspect. The EEPROM path is.**
+**START skips the freeze, and that names a second, separate fault.**
+Kroy: pressing START through the white screen bypasses the freeze on the
+opening cartoon. So the hang is inside the intro, the most ROM-hungry
+part of the game, and skipping it gets past. The menu on that boot read
+`HS: 00000000`, which is the alternating snapshot's **value** page: no
+marker nibble, and zero because there was no mismatch. The header was
+clean again. `SF` was still `00000001`.
+
+**The core reads ROM at exactly power-on speed and never speeds up.**
+At 100.663296 MHz, `ROM_WAIT` 24 and `ROM_SEQ_WAIT` 20 give 238.4 ns
+non-sequential and 198.7 ns sequential, so an eight-byte cache line takes
+834.5 ns. A real GBA:
+
+| WAITCNT | non-seq | seq | 8-byte line |
+|---|---|---|---|
+| `0000h`, power-on | 298.0 ns | 178.8 ns | **834.5 ns** |
+| `4317h`, what games set | 238.4 ns | 119.2 ns | **596.0 ns** |
+
+The core's line time matches the power-on default exactly and is **40 %
+slower than what a game that has set `4317h` is written against**. A
+cutscene streaming into VRAM against a VBlank budget would move roughly
+70 % of what it needs to, every frame. That is a much better fit for a
+freeze in the intro that START skips than anything in the save path.
+
+Fast sequential works out to exactly **12** `clk_sys` cycles, which is
+the `ROM_SEQ_WAIT` this core had before `85bb71a` made it conservative at
+20/6. That change was made to chase the GBA-logo freeze, which was later
+traced to the cache-line ordering bug in `4728cc6` and the probe fix. The
+conservative window may no longer be buying anything, and it now has a
+check it did not have then: `HS` proves header integrity at whatever
+timing is fitted, and the Minish Cap is a working regression.
+
+**The EEPROM path is a separate fault.**
 
 - `SF: 00000001` in every hardware capture, including this one. That is
   `cart_eeprom_bridge`'s `fault` latch. It is deliberately fail-closed and
@@ -74,6 +106,13 @@ Two ways to take it, both cheap, neither started:
 1 and 3 together in one fit is the honest order: fix the hang, keep the
 guard, and learn why it trips. 2 without 3 would probably make the game
 work and leave the reason unknown.
+
+**And separately, the read window.** Restoring `ROM_SEQ_WAIT` 12 /
+`ROM_SEQ_RD_HIGH` 4 makes the core match `4317h` timing, which is what
+the game expects. It is one line, it is independent of the EEPROM work,
+and `HS` plus a Minish Cap boot are the evidence that it is safe. Doing
+it in the same fit as the EEPROM changes is cheaper but confounds the
+two results; doing it alone answers the intro freeze on its own.
 
 ## 2026-09-09: value-capture diagnostic fitting at two seeds; watchers active
 
