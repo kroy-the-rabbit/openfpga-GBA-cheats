@@ -5,6 +5,29 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## Pattern diagnostic installed and verified; card left mounted
+
+User explicitly requested installation. **Installed version `0.9999.c0c1040`**
+(pattern diagnostic, seed 3). The guarded installer verified card UUID
+`7AFF-9FB9`, prior `417a55f` version/bitstream, timing and snapshot budgets,
+and exact package contents before writing. It verified **13 installed files**,
+**9 protected files unchanged**, flushed writes and confirmed the card remained
+mounted. No filesystem check, repair or unmount was performed.
+
+Fresh verified **22-file backup**: `/home/kroy/Desktop/repos/pocket-dev/pocket-gba/build/card-backups/20260909T021649Z`.
+Contains prior core plus current GBA settings/saves, BIOS and package paths.
+Manifest: `build/gba/deployment-c0c1040.json` (`installed-verified-mounted`).
+Installer: `build/gba/install_c0c1040.py`; it expects the old baseline and is
+not intended to be rerun blindly after successful installation.
+
+Next hardware observation: open the core menu and capture **Pattern Lo** and
+**Pattern Hi**. Join Hi then Lo (eight hex digits each); it must be one of the
+64 rotations of `D1A65EED4B3C2907`. It stays stable while the menu is open.
+Close/reopen to recapture; a repeated value is possible. These are pattern
+data, not CPU state. This installation does not claim a Zero Mission boot fix
+or physical save-write persistence. Future installs must recognize `c0c1040`
+as the current card baseline; `417a55f` is the backed-up rollback version.
+
 ## Pattern diagnostic passed; verified package staged, not installed
 
 Check-in confirmed `c0c1040` seed 3 completed successfully in 1535 s:
