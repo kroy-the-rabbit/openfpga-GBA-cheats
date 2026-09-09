@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Watch one sisko GBA job, verify its package, and notify this desktop.
+"""Watch one runner GBA job, verify its package, and notify this desktop.
 
 Never writes the card. Results and fetched artifacts stay under build/watch/.
 The process can outlive the chat turn; result.json is its durable handoff.
@@ -16,7 +16,8 @@ import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-HOST = 'root@10.50.1.246'
+RUNNERS = {'sisko': 'root@10.50.1.246', 'kira': 'root@10.50.1.245'}
+HOST = RUNNERS['sisko']
 SSH = ['ssh', '-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', HOST]
 SCP = ['scp', '-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
 CORNERS = ('8_slow_1100mv_85c', '8_slow_1100mv_0c', 'MIN_fast_1100mv_85c', 'MIN_fast_1100mv_0c')
@@ -110,7 +111,12 @@ def main():
     parser.add_argument('commit')
     parser.add_argument('--baseline', action='store_true',
                         help='Verify a control build without snapshot RTL; report baseline-passed, never ready-to-write')
+    parser.add_argument('--runner', choices=sorted(RUNNERS), default='sisko',
+                        help='Build runner the job was started on (default: sisko)')
     args = parser.parse_args()
+    global HOST
+    HOST = RUNNERS[args.runner]
+    SSH[-1] = HOST
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,39}', args.job):
         parser.error('Invalid job name')
     if not re.fullmatch(r'[0-9a-f]{40}', args.commit):
@@ -122,8 +128,8 @@ def main():
     folder.mkdir(parents=True, exist_ok=True)
     result_path = folder / 'result.json'
     state = dict(state='watching', job=key, commit=args.commit, pid=os.getpid(),
-                 started=datetime.now(timezone.utc).isoformat(), card_written=False,
-                 baseline=args.baseline)
+                 runner=args.runner, started=datetime.now(timezone.utc).isoformat(),
+                 card_written=False, baseline=args.baseline)
 
     def save():
         state['updated'] = datetime.now(timezone.utc).isoformat()
@@ -148,7 +154,7 @@ def main():
     deadline = time.monotonic() + 10800
     errors = 0
     try:
-        notify('Pocket GBA watcher started', f'Watching {args.commit[:7]} on sisko. Completion will be reported here; the card will stay untouched.')
+        notify('Pocket GBA watcher started', f'Watching {args.commit[:7]} on {args.runner}. Completion will be reported here; the card will stay untouched.')
         while time.monotonic() < deadline:
             try:
                 response = run(SSH + [f'if test -f {done}; then cat {done}; else echo state=running; fi'], timeout=30)
@@ -158,7 +164,7 @@ def main():
                 state['last_poll_error'] = str(exc)
                 save()
                 if errors >= 5:
-                    raise RuntimeError('Cannot reach sisko after five attempts; build status is unknown') from exc
+                    raise RuntimeError(f'Cannot reach {args.runner} after five attempts; build status is unknown') from exc
                 time.sleep(45)
                 continue
             (folder / 'job-status.txt').write_text(response)

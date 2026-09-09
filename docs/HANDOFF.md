@@ -5,6 +5,36 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09: shrunk diagnostic fitting at two seeds; watchers active
+
+Kroy chose option 1. `a4fe3f4` shrinks the header checker to one 32-bit
+word: the M10K reference and shared comparator stay, the first bad DWORD's
+value is replaced by its four byte-lane flags and a companion-beat bit, the
+count is eight bits, the snapshot bundle is 32 bits, `HD:` is retired and
+`HS:` (`F4000014`) carries the whole result. Encoding is in
+`docs/BOOT-DEBUG.md`. All cartridge benches pass (`run_cart_debug`,
+`run_apf_cart`, `run_cart_rom` 10/10, `run_cart_memorymux`).
+
+Two STANDARD FIT builds of the same source are running, one per runner:
+
+| runner | seed | job | watcher unit |
+|---|---|---|---|
+| sisko | 3 | `pocket-gba-gba-p5cart-header-lite-s3-a4fe3f48b313` | `pocket-gba-watch-lite-s3-a4fe3f4.service` |
+| kira | 1 | `pocket-gba-gba-p5cart-header-lite-s1-a4fe3f48b313` | `pocket-gba-watch-lite-s1-a4fe3f4.service` |
+
+Results land in `build/watch/<job>/result.json`; each watcher notifies the
+desktop on completion. `tools/watch_gba_build.py` gained `--runner kira`
+for this. Check a job with
+`../tools/runner-build job <runner> pocket-gba gba <job name> a4fe3f4`.
+
+If either passes: `ready-to-write` in its result, package staged under
+`sd/`. Install only a passing fit; if both pass, take the larger setup
+slack. Card is still `c0c1040`; verify it before merging, back up, leave
+mounted. If both fail, record the ALM count and worst path in
+`docs/BASELINE.md` and stop; the next cut is the coverage mask and the
+protocol check, about 30 ALMs, after which the diagnostic is at the
+floor and option 2 or 3 is what remains.
+
 ## 2026-09-09: seed 8 of the M10K diagnostic also failed; nothing queued
 
 `424bd12` (FPGA source identical to `1e9add1`), seed 8, sisko, 1550 s.
