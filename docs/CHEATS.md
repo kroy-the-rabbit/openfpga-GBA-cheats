@@ -64,8 +64,8 @@ By hand, with this repo checked out:
 3. Load the game. **Cheats Enabled** in the core menu turns the whole lot on
    and off; it is on at every launch and is not persisted.
 
-4. If nothing happens, read `CL:` in the menu. It is three numbers packed into
-   one, and it says which of the three things went wrong.
+4. If nothing happens, run `cht2bin.py` on the file again and read what it
+   prints; the core no longer reports counts in its menu (see below).
 
 If you copy a `.cht` to the SD card by mistake, the core loads **zero** cheats
 rather than misbehaving: the `.chtbin` header carries a magic number precisely
@@ -177,11 +177,15 @@ has 32 slots in it.
   cheat it is skipped and counted, and a later, smaller cheat can still fit.
 * 1 MB of file.
 
-## The readout
+## The readout, removed 2026-09-09
 
-Two numbers in the core menu, for when a file does not do what you expected.
-There is no console on a Pocket, so these five counters are the whole
-diagnostic surface.
+`CL:` and `CD:` were two numbers in the core menu for when a file did not do
+what you expected. They were removed to give the fitter room while the
+cartridge branch is near the device limit; Cheats Enabled is the only
+control now. The loader still keeps the counters internally and the
+simulation benches still check them, so the description stays for the RTL
+and for a future readout. A file's expected numbers come from
+`cht2bin.py`, which prints them as it writes.
 
 `CL:` packs three counters into one 32-bit number:
 

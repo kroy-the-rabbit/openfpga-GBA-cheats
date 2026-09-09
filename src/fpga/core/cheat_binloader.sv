@@ -74,7 +74,8 @@
 //
 // -------------------------------------------------------------- the readout --
 //
-// The five diagnostic outputs are the ones core_top's CL:/CD: bridge readout
+// The five diagnostic outputs used to feed core_top's CL:/CD: bridge readout,
+// removed 2026-09-09; core_top leaves them open now. They were the ones it
 // already reads, kept so that readout keeps working. Two of them no longer
 // mean what their names say, because there is no longer any such thing as a
 // cheat here, only entries:

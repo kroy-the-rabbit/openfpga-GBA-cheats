@@ -137,10 +137,11 @@ be mistaken for the new one and shifted into the cheat table as garbage. That is
 correct in simulation and is one of the two things still unconfirmed on
 hardware.
 
-**Cheats Enabled** in the core menu turns the whole lot on and off. `CL:` and
-`CD:` say how many bytes, cheats and codes were parsed and what the engine is
-doing with them, which is the whole diagnostic surface on a handheld with no
-console. [docs/CHEATS.md](docs/CHEATS.md) explains how to read them.
+**Cheats Enabled** in the core menu turns the whole lot on and off, and is
+the only cheat control. The `CL:` and `CD:` readouts that counted bytes,
+entries and rejects were removed on 2026-09-09 to give the fitter room;
+[docs/CHEATS.md](docs/CHEATS.md) says what they showed and how to check a
+file without them.
 
 Encrypted codes, meaning GameShark v3, Action Replay v3 and CodeBreaker codes
 after a `9` line, are enciphered with a per-game seed and cannot work. The

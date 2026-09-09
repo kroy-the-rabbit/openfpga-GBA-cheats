@@ -122,7 +122,7 @@ Some cartridges do not have one.
 ## The readout
 
 The Pocket has no console, so `CG:` and `CS:` are the whole diagnostic surface,
-the same trick the cheat loader uses for `CL:` and `CD:`.
+the same trick the cheat loader used for `CL:` and `CD:` until those went.
 
 ### `CG:`, the game code
 

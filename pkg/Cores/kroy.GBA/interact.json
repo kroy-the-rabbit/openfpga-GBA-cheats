@@ -110,20 +110,6 @@
         "value": "0x00000001"
       },
       {
-        "name": "CL:",
-        "id": 41,
-        "type": "number_u32",
-        "enabled": true,
-        "address": "0xF3000000"
-      },
-      {
-        "name": "CD:",
-        "id": 42,
-        "type": "number_u32",
-        "enabled": true,
-        "address": "0xF3000004"
-      },
-      {
         "name": "Cartridge Saves",
         "id": 53,
         "type": "list",

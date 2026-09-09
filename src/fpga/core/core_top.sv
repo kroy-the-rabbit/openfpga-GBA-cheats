@@ -1415,14 +1415,10 @@ data_loader #(
 
 wire [127:0] cheat_in;
 wire         cheat_on;
-wire [5:0]   cheat_entries, cheat_cheats, cheat_rejected;
-wire [19:0]  cheat_bytes;
-wire         cheat_overrun;
 
-// The readout names are inherited from the ASCII parser and two of them have
-// shifted meaning: cheat_cheats is now the entry count the file's header
-// declared, not a number of cheats, and cheat_overrun now means the file was
-// malformed. See the header of cheat_binloader.sv.
+// The loader's five counters used to feed the CL:/CD: menu readouts. Those
+// went on 2026-09-09 to give the fitter room; Cheats Enabled is the only
+// control. The ports are left open and the fitter removes the counters.
 cheat_binloader #(
     .MAX_ENTRIES ( 32 )             // must match gba_cheats' CHEATCOUNT
 ) cheats_parser (
@@ -1433,11 +1429,11 @@ cheat_binloader #(
     .eof          ( cheat_eof ),
     .cheat_in     ( cheat_in ),
     .cheat_on     ( cheat_on ),
-    .entry_count  ( cheat_entries ),
-    .group_count  ( cheat_cheats ),
-    .byte_count   ( cheat_bytes ),
-    .reject_count ( cheat_rejected ),
-    .overrun      ( cheat_overrun )
+    .entry_count  (  ),
+    .group_count  (  ),
+    .byte_count   (  ),
+    .reject_count (  ),
+    .overrun      (  )
 );
 
 // These feed the cheat ports restored on gba_top in P1: cheat_clear,
@@ -1445,21 +1441,6 @@ cheat_binloader #(
 // engine and is left open until there is a readout that wants it.
 wire cheats_enabled = cheats_on;
 wire cheat_clear    = cheat_reset;
-
-// Readout, in clk_74a for the bridge. Two flops each: these change while the
-// file streams and are read asynchronously by the Pocket.
-reg [5:0]  cheat_entries_s, cheat_entries_ss;
-reg [5:0]  cheat_cheats_s,  cheat_cheats_ss;
-reg [19:0] cheat_bytes_s,   cheat_bytes_ss;
-reg [5:0]  cheat_rejected_s, cheat_rejected_ss;
-reg        cheat_overrun_s, cheat_overrun_ss;
-always @(posedge clk_74a) begin
-    cheat_entries_ss  <= cheat_entries;   cheat_entries_s  <= cheat_entries_ss;
-    cheat_cheats_ss   <= cheat_cheats;    cheat_cheats_s   <= cheat_cheats_ss;
-    cheat_bytes_ss    <= cheat_bytes;     cheat_bytes_s    <= cheat_bytes_ss;
-    cheat_rejected_ss <= cheat_rejected;  cheat_rejected_s <= cheat_rejected_ss;
-    cheat_overrun_ss  <= cheat_overrun;   cheat_overrun_s  <= cheat_overrun_ss;
-end
 
 // ============================================================
 // Section 3: Bridge Read Mux
@@ -1485,9 +1466,6 @@ always @(*) begin
     // switch, the entries the table had no room for, and the malformed flag,
     // which is the only thing that separates a wrong file from a valid one
     // carrying no cheats.
-    32'hF3000000: begin
-        bridge_rd_data <= {cheat_bytes_s, cheat_cheats_s, cheat_entries_s};
-    end
     // The cheats master switch, readable because its interact entry carries a
     // mask. A mask asks APF to preserve the other bits at the address, which
     // it can only do by reading first; declaring one on a write-only address
@@ -1509,10 +1487,6 @@ always @(*) begin
         bridge_rd_data <= {31'd0, cart_eeprom_fault_s};
     end
     32'hF4000014: bridge_rd_data <= cart_debug_host;
-    32'hF3000004: begin
-        bridge_rd_data <= {24'd0, cheat_overrun_s, cheats_master,
-                           cheat_rejected_s};
-    end
     default: begin
         bridge_rd_data <= 0;
     end
