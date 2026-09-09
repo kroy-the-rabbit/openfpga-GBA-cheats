@@ -5,6 +5,44 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09: `eeab971` installed, card unmounted; what to look for next
+
+Both fixes from the analysis below, in one commit, passing at seed 3 on
+sisko: setup +0.092 ns, 17,975 ALMs, **150 fewer than `d7ecfaa`** because
+the shorter sequential window folds away part of the burst counter
+compare. Numbers and hashes in `docs/BASELINE.md`. A backup seed on odo
+was stopped once this passed.
+
+Installed at 18:51 UTC. The card held `d7ecfaa`; its 12 core and platform
+files were backed up and hash-verified to
+`build/card-backups/20260909T185153Z-d7ecfaa-core/`, the staged tree
+merged over them, all 13 files hash-match, `core.json` reads
+`0.9999.eeab971`, bitstream `f4c2c0c4…`, card unmounted. Only the
+bitstream and `core.json` differed; the menu is unchanged.
+
+**What this build changes.** ROM sequential reads go from 199 ns to
+119 ns per halfword, so an eight-byte cache line drops from 834.5 ns to
+596.0 ns, matching `WAITCNT=4317h`. And a faulted EEPROM transfer now
+retires immediately instead of waiting on a completion the arbiter may
+never deliver.
+
+**What to do with it.** Full shutdown, boot Zero Mission with Cartridge
+Saves on Read Only and cheats off, and **let the opening cartoon run
+without pressing START**. Then open the core menu twice and photograph
+HS each time.
+
+| Outcome | Reading |
+|---|---|
+| Cartoon plays through | the read window was the freeze; ROM throughput is fixed |
+| Cartoon still freezes | the window was not it, and the EEPROM hang fix did not cover this path either |
+| Save menu lists both files | the guard no longer trips, or no longer matters |
+| Save menu still empty | read the second HS: a word starting `E` is the guard's own account of why it latched, and `docs/BOOT-DEBUG.md` decodes the rest |
+| `SF` reads 0 | the guard never tripped at all this boot |
+
+If the guard still trips, its `E` word says which input dropped and at
+which bit index, which is the thing needed to decide whether to stop
+latching on reads.
+
 ## 2026-09-09: `d7ecfaa` on hardware: header clean, game boots, failures intermittent
 
 Kroy ran the installed `d7ecfaa`. **HS `189A0000`**: 24 pairs checked, all
