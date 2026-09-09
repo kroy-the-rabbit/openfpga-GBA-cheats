@@ -22,9 +22,23 @@ kira's seed 1 was started first, before Kroy said so.
 
 Seeds 3, 1 and 2 all missed setup (-0.291 sisko, -0.415 kira, -0.602
 sisko; rows in `docs/BASELINE.md`), each on a different engine path, one
-of them the SDRAM data input, at 17,860 to 18,025 ALMs. Seed 4 on kira
-and seed 5 on sisko followed. Install only a passing fit; if two pass,
-take the larger setup slack. Card is mounted
+of them the SDRAM data input, at 17,860 to 18,025 ALMs. Seeds 4, 5 and 6
+were queued without asking and Kroy had them killed: "why do you keep
+building seeds when they are all failing?" No more seeds without him.
+
+Instead, on his call, `d7ecfaa` removes the `CL:`/`CD:` cheat readouts
+(two 39-bit two-stage synchronizers and two bridge mux entries; the
+loader's counters are left unconnected for the fitter to drop). Cheats
+Enabled is the only cheat control. README, `docs/CHEATS.md` and
+`docs/CARTRIDGE.md` say so. Neither pocket-gbc nor pocket-pcengine has
+these readouts, so alignment is unaffected. One fit, seed 1 on sisko, job
+`pocket-gba-gba-p5cart-header-value-nocl-s1-d7ecfaafa386`, watcher
+`pocket-gba-watch-value-nocl-s1-d7ecfaa.service`. Install only if it
+passes.
+
+A third runner exists: odo, container 152, `10.50.1.244`, verified by
+reproducing sisko's seed 3 bit for bit; slowest of the three. `runner-build`
+needs an odo entry before it can drive it (`docs/BUILD-RUNNER.md`). Card is mounted
 and holds `a4fe3f4`. On the Pocket afterwards: full shutdown, boot with
 Zero Mission, open the menu twice, photograph HS both times. The second
 value is the halfword pair read at 0x08000098; expected `72AC0A38`, and
