@@ -5,6 +5,28 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## Seed-8 M10K diagnostic fit running; watcher active
+
+**Source `424bd12ec92c86e9e97b650e7cdac5a73337a262`, seed 8**, running on
+sisko as `pocket-gba-gba-p5cart-header-m10k-s8-424bd12ec92c`, launcher PID
+`681618`. FPGA source is byte-identical to `1e9add1`; this commit changes
+only the parser and handoff. This is the first seed-8 attempt for this RTL,
+not a fix claim. All timing, M10K and snapshot gates remain mandatory.
+
+Persistent watcher **`pocket-gba-watch-424bd12.service`** started; initial
+poll confirmed running and the startup desktop notification was delivered.
+Result: `build/watch/pocket-gba-gba-p5cart-header-m10k-s8-424bd12ec92c/result.json`.
+Check: `../tools/runner-build job sisko pocket-gba gba p5cart-header-m10k-s8 424bd12`.
+Expected duration is approximately 25–30 minutes based on the previous fits.
+
+On success, package qualification/staging precedes any card installation.
+The user's earlier instruction was to install a passing build and hand off;
+verify the actual mounted card against the `c0c1040` + short-menu baseline,
+back up, verify writes/protected files and leave mounted. The old prepared
+`install_1e9add1.py` is locked to a failed build and must not be reused as-is.
+On failure, save exact endpoints/results before deciding another experiment;
+do not install a failed fit. No card changes or additional builds queued.
+
 ## 2026-09-09: resumed; parser fixed and exact paths recovered
 
 User resumed the work. Fixed the M10K type-label parser to recognize
