@@ -37,7 +37,13 @@ these readouts, so alignment is unaffected. One fit, seed 1 on sisko, job
 A backup seed 3 on kira, at Kroy's request, **passed**: setup +0.092 ns,
 18,125 ALMs, 2206 s, `ready-to-write`, 13 files staged under
 `build/watch/pocket-gba-gba-p5cart-header-value-nocl-s3-d7ecfaafa386/sd/`.
-Numbers and hashes in `docs/BASELINE.md`. Not installed yet.
+Numbers and hashes in `docs/BASELINE.md`. **Installed at 17:48 UTC and the
+card unmounted.** The card held `a4fe3f4`; its 12 core and platform files
+were backed up and hash-verified to
+`build/card-backups/20260909T174834Z-a4fe3f4-core/`, the staged tree
+merged over them with nothing deleted, all 13 files hash-match,
+`core.json` reads `0.9999.d7ecfaa`, bitstream `764278ad…`, and the menu
+now lists CG, CS, SF and HS with no CL or CD.
 
 On the Pocket after installing it: full shutdown, boot Zero Mission with
 Cartridge Saves Read Only and cheats off, then open the core menu
