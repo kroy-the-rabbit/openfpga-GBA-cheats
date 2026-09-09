@@ -5,6 +5,24 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## Header diagnostic seed 3 failed setup timing; not ready for card
+
+Status check confirmed `195904c` seed 3 completed in **1638 seconds**.
+Setup **-0.416 ns** failed; hold +0.034 ns, recovery +2.963 ns,
+removal +0.325 ns and minimum pulse +0.827 ns passed. Utilization is
+18,052/18,480 ALMs (98%), 25,668 registers, 282 RAM blocks.
+
+Fetched exact setup report: the worst path is inside the existing GBA CPU,
+`execute_Rn_op1[0]` to `Mux416~0_OTERM8135`, at slow 1100mV/0C.
+This establishes the failing endpoint, not the cause of the hardware boot
+corruption or a reason to change CPU behavior. Simulation remains passing.
+
+Watcher completed with **not-ready**, reason `Timing failed: Setup -0.416 ns`;
+desktop notification delivered. Reports and result are under
+`build/watch/pocket-gba-gba-p5cart-header-s3-195904cc0015/`, including
+`setup-critical.txt`. No card write and no replacement build queued.
+Installed card remains the passing `c0c1040` pattern diagnostic.
+
 ## Header diagnostic queued on sisko; watcher active
 
 **Source `195904cc00152b5ba61f39050652dd6d57f313f4`, seed 3**, is running
