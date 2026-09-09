@@ -370,6 +370,21 @@ one M10K, snapshot delays 2.988 / 2.967 / 1.535 / 1.371 ns. Package
 `ac05f7507a13b8a26df74cc32524aafc4d8f9562129875cee02db10e96a442d9`,
 bitstream `764278ad16fcc26f04c9f616825713afc5cf7e681db2060157e9ef6792c419fb`.
 
+### Fast sequential window and the EEPROM hang fix, `eeab971`
+
+| Seed | ALMs | Registers | Setup | Hold | Result |
+|---|---|---|---|---|---|
+| 3 | 17,975 (97 %) | 25,306 | **+0.092** | +0.097 | pass, sisko, 1530 s |
+
+Recovery +2.755, removal +0.277, pulse +0.827, 283 RAM blocks, reference
+ROM in one M10K. Package `kroy.GBA_0.9999.eeab971.zip` SHA-256
+`f827b68313b79fd40258ca7e6eea768da2e34d7068621b3c4ea1951b322fa2b7`,
+bitstream
+`f4c2c0c486c683e1c0a3a4d7a224209f2c69c2d2e314afb9e3a9f4b29845656b`.
+150 ALMs smaller than `d7ecfaa`: the shorter sequential window folds away
+some of the burst counter compare. A seed 1 copy was running on odo as a
+backup and was stopped once this passed.
+
 The failing path is always inside `gba_cpu`, not the diagnostic. The first
 passing checker, `a4fe3f4` seed 1, has hold +0.038, recovery +2.665,
 removal +0.288, pulse +0.827, 25,415 registers, 283 RAM blocks with the
