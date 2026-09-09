@@ -5,6 +5,31 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## Header diagnostic queued on sisko; watcher active
+
+**Source `195904cc00152b5ba61f39050652dd6d57f313f4`, seed 3**, is running
+on sisko. Job `pocket-gba-gba-p5cart-header-s3-195904cc0015`, launcher PID
+`664731`. Verified Quartus reached fitter placement. This is a diagnostic,
+not a claimed fix. Full simulation passed before queueing; no card write.
+
+Persistent user service **`pocket-gba-watch-195904c.service`** is active,
+PID `2332634`. Initial poll returned running; startup desktop notification
+was delivered. It will fetch and qualify timing, retained diagnostic bits,
+snapshot routing and package integrity, stage the package, then issue a
+**desktop notification** for ready-to-write or the failure reason. It does
+not automatically send a chat message or write the card.
+
+Durable status: `build/watch/pocket-gba-gba-p5cart-header-s3-195904cc0015/result.json`.
+Runner check: `../tools/runner-build job sisko pocket-gba gba p5cart-header-s3 195904c`.
+If ready, install against the actual `c0c1040` plus short-menu baseline,
+back up and verify protected files, flush and **leave the card mounted**.
+If timing or retention checks fail, inspect exact reports before changing
+anything. Do not install a failed fit or relax timing gates.
+
+Next hardware capture is **CG/CS/SF/HD/HS** after cold launch of BMXE with
+Read Only and cheats off. `docs/BOOT-DEBUG.md` explains the new encoding.
+No further interactive waiting for this build is needed.
+
 ## BMXE header diagnostic implemented; regression passed, fit next
 
 User asked what is next. Implemented a passive header comparison at the game
