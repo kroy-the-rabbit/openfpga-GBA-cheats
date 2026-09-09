@@ -5,6 +5,34 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## Full pattern verified on hardware; EEPROM abort flag is now one
+
+User explicitly corrected the earlier screenshot interpretation: the Game Boy
+startup screen is **corrupted**, including the graphic beneath GAME BOY.
+Do not describe this as a normal BIOS screen or infer successful boot.
+
+New photo `/tmp/codex-clipboard-ORZwCp.png` shows full values:
+CG `424D5845`, CS `FFFF96E1`, **SF `00000001`**, PL `76A59E14`,
+PH `83E8D32F`. Joined pattern `83E8D32F76A59E14` exactly matches rotation
+**55** of `D1A65EED4B3C2907`. This sample validates coherent pattern capture
+and full menu readback on hardware; it does not validate the CPU or ROM data.
+Archived photo and analysis: `build/hardware-results/c0c1040/pattern-sf1*`.
+
+SF=1 is new evidence: `cart_eeprom_bridge.fault` latched its abort condition
+while a tracked physical serial DMA transfer was open/sent and DMA became
+inactive or bridge reset asserted before its final host completion. This
+flag is EEPROM-specific, not a generic save-corruption or SRAM error flag.
+It survives Reset Core and clears with FPGA configuration. Zero Mission's
+verified ROM uses SRAM_V113, so determine why EEPROM traffic was observed
+rather than assuming the SRAM save failed. Current memorymux unconditionally
+routes the 0x0D region through EEPROM handling; no new root cause is proven.
+
+Asked asynchronously whether this reading followed full power-off/on or a
+Reset Core/earlier test. Answer is pending at this entry. No new build or card
+write. Next step depends on whether SF=1 reproduces from fresh configuration;
+if fresh, investigate how the EEPROM request/DMA abort sequence is reached
+alongside the corrupted cartridge startup. Preserve the save fault guard.
+
 ## Pattern hardware photo received; shorter labels installed
 
 Read `/home/kroy/Downloads/signal-2026-09-08-212350.jpeg` and the newly
