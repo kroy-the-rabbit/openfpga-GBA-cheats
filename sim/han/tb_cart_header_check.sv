@@ -17,11 +17,12 @@ module tb_cart_header_check;
             enable=1;
         end
     endtask
+    integer response_delay=3;
     task pair_read(input [24:0] word_addr, input [31:0] xor_first, xor_second);
         begin
             @(negedge clk);addr=word_addr;req=1;
             @(negedge clk);req=0;addr=25'h1ffffff;
-            repeat(3) @(negedge clk);
+            repeat(response_delay) @(negedge clk);
             first=(word_addr<48 ? header[word_addr] : 32'h87654321)^xor_first;
             // Deliberately wrong on the ready edge: the cache consumes the
             // companion on the NEXT clock, when we present the real value.
@@ -37,6 +38,11 @@ module tb_cart_header_check;
         restart();
         for(i=47;i>=0;i=i-1) pair_read(i,0,0);
         if(hs!==32'h00309a00 || hd!==0) $fatal(1,"FAIL complete header %h %h",hs,hd);
+        restart();
+        response_delay=0; // Ready on the first clock after request acceptance.
+        for(i=0;i<48;i=i+1) pair_read(i,0,0);
+        if(hs!==32'h00309a00 || hd!==0) $fatal(1,"FAIL minimum-latency header %h %h",hs,hd);
+        response_delay=3;
         pair_read(48,32'hffffffff,32'hffffffff);
         pair_read(25'h1000000,32'hffffffff,32'hffffffff);
         if(hs!==32'h00309a00) $fatal(1,"FAIL non-header alias counted");

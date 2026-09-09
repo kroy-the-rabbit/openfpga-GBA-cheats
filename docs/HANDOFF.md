@@ -5,6 +5,30 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## Header checker reduced to synchronous ROM and shared comparison
+
+User requested fixing the failed build. The -0.416 ns path is in existing
+CPU operand selection/address calculation; CPU RTL remains unchanged.
+Reworked only the diagnostic: the resettable 64-bit expected pair and two
+word comparisons become one synchronous 64x32 reference ROM requested in an
+M10K block and one shared 32-bit comparator. The first reference is fetched
+on request acceptance; the companion is fetched on ready, for comparison
+on the following clock. HD/HS behavior and all first-mismatch evidence stay
+unchanged. No timing exceptions were added or relaxed.
+
+The new post-fit guard reads the actual Fitter RAM Summary and rejects a
+reference that did not use M10K memory. It handles the report's Latin-1 degree
+symbols. Verified the guard rejects the previous logic implementation and
+accepts a representative fitted memory row. Existing snapshot retention,
+20 ns bundle routing and all timing-category gates remain mandatory.
+
+Regression log: `build/timing-analysis/header-m10k-regression.log`.
+All ten cartridge benches, actual APF menu integration and snapshot/checker
+benches passed. The checker also exercises all 48 reference words at minimum
+response latency. Next: commit and queue a seed-3 fit
+with its persistent desktop watcher. Timing improvement is unproven until
+that fit finishes. Installed card remains `c0c1040`; no card changes.
+
 ## Header diagnostic seed 3 failed setup timing; not ready for card
 
 Status check confirmed `195904c` seed 3 completed in **1638 seconds**.

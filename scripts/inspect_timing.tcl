@@ -21,6 +21,26 @@ if {[get_collection_size $badword] < 32 || [get_collection_size $offset] < 6 ||
     error "Header diagnostic requires its complete mismatch data/address and 58 variable snapshot bits"
 }
 puts "HEADER_REGISTERS data=[get_collection_size $badword] offset=[get_collection_size $offset] captured=[get_collection_size $captured] published=[get_collection_size $published]"
+# Fail if the area-saving ROM was implemented as logic or disappeared.
+# Read the actual fitted memory table, not an HDL attribute or total RAM count.
+set report_file [open output_files/ap_core.fit.rpt r]
+fconfigure $report_file -encoding iso8859-1
+set m10k_column -1
+set header_m10ks 0
+foreach line [split [read $report_file] "\n"] {
+    set fields {}
+    foreach field [split $line ";"] {lappend fields [string trim $field]}
+    set column [lsearch -exact $fields "M10K blocks"]
+    if {$column >= 0} {set m10k_column $column}
+    if {$m10k_column >= 0 && [string match {*header_check*header_rom*} [lindex $fields 1]] &&
+        [lindex $fields 2] eq "M10K"} {
+        set blocks [lindex $fields $m10k_column]
+        if {[string is integer -strict $blocks]} {incr header_m10ks $blocks}
+    }
+}
+close $report_file
+if {$header_m10ks < 1} {error "Header diagnostic requires the reference ROM in M10K memory"}
+puts "HEADER_REFERENCE_M10K blocks=$header_m10ks"
 foreach corner [get_available_operating_conditions] {
     set_operating_conditions $corner
     update_timing_netlist

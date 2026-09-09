@@ -8,8 +8,8 @@ no save data or game body. Source archive:
 - Full dump SHA256: `fc94f65380b65b870a30b9b04b39cca1dc63d6e46a4a373d3904adc0912ebc37`
 - 192 binary header bytes SHA256: `581e4b24db4b3ac6d0e49d3e74894e15912ddcb6b2158265cd6408e068f4fc60`
 
-The hardware reference in `cart_header_check.sv` groups the same little-endian
-bytes into 24 aligned 64-bit pairs. Simulation uses this separate fixture to
+The hardware reference in `cart_header_check.sv` stores the same little-endian
+bytes as 48 DWORDs in a synchronous reference ROM. Simulation uses this separate fixture to
 check every reference word through both response orders and access widths.
 Other game codes/revisions need their own verified reference; the top-level
 checker is enabled only for the observed CG `424D5845`.

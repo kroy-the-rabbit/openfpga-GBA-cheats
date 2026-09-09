@@ -16,6 +16,13 @@ are unchanged from the installed pattern build. The checker never initiates,
 stalls or changes ROM transfers. Its added observation logic still requires
 a new fit and timing qualification before hardware use.
 
+The revised checker keeps its 48 reference DWORDs in a synchronous M10K
+ROM and shares one 32-bit comparator across the two response clocks. This
+replaces the resettable 64-bit reference register and two separate compares.
+The HD/HS encoding and sampling cycles are unchanged. Actual M10K placement
+is checked after fitting; timing improvement is not assumed from the RTL.
+This follows [Altera's ROM inference guidance](https://docs.altera.com/r/docs/683323/18.1/intel-quartus-prime-standard-edition-user-guide-design-recommendations/inferring-rom-functions-from-hdl-code).
+
 ## Hardware capture
 
 After installing a timing-qualified package, fully power off/on and launch

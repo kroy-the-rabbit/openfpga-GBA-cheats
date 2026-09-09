@@ -15,46 +15,78 @@ module cart_header_check (
     input wire [31:0] rd_data, rd_data_second,
     output wire [63:0] diagnostic
 );
-    function [63:0] reference_pair(input [4:0] line_addr);
-        case (line_addr)
-            5'd0: reference_pair = 64'h51aeff24ea00002e;
-            5'd1: reference_pair = 64'h0a82843d21a29a69;
-            5'd2: reference_pair = 64'h988b2411ad09e484;
-            5'd3: reference_pair = 64'h19be52a3217f81c0;
-            5'd4: reference_pair = 64'h4a4a461020ce0993;
-            5'd5: reference_pair = 64'h33e8c758ec3127f8;
-            5'd6: reference_pair = 64'h94dff485bfcee382;
-            5'd7: reference_pair = 64'hc08a5694c1094bce;
-            5'd8: reference_pair = 64'h734d849ffca77213;
-            5'd9: reference_pair = 64'h27a39758619acaa3;
-            5'd10: reference_pair = 64'h61c71d23769803fc;
-            5'd11: reference_pair = 64'h008438bf56ae0403;
-            5'd12: reference_pair = 64'h03fe52fffd0ea740;
-            5'd13: reference_pair = 64'h85c0fb97f130956f;
-            5'd14: reference_pair = 64'h03be63a92580d660;
-            5'd15: reference_pair = 64'hff34a2f9e2384e01;
-            5'd16: reference_pair = 64'hcb90007844033ebb;
-            5'd17: reference_pair = 64'h637cc065943a1188;
-            5'd18: reference_pair = 64'h8be425d6af3cf087;
-            5'd19: reference_pair = 64'h07f8d42172ac0a38;
-            5'd20: reference_pair = 64'h5353494d4f52455a;
-            5'd21: reference_pair = 64'h45584d42454e4f49;
-            5'd22: reference_pair = 64'h0000000000963130;
-            5'd23: reference_pair = 64'h00001d0000000000;
-            default: reference_pair = 64'd0;
-        endcase
-    endfunction
+    // A synchronous ROM can live in one M10K rather than ALMs. It has no
+    // reset on its read port; validity comes from the request/response FSM.
+    (* romstyle = "M10K" *) reg [31:0] header_rom [0:63];
+    integer i;
+    initial begin
+        for (i = 0; i < 64; i = i + 1) header_rom[i] = 32'd0;
+        header_rom[0] = 32'hea00002e;
+        header_rom[1] = 32'h51aeff24;
+        header_rom[2] = 32'h21a29a69;
+        header_rom[3] = 32'h0a82843d;
+        header_rom[4] = 32'had09e484;
+        header_rom[5] = 32'h988b2411;
+        header_rom[6] = 32'h217f81c0;
+        header_rom[7] = 32'h19be52a3;
+        header_rom[8] = 32'h20ce0993;
+        header_rom[9] = 32'h4a4a4610;
+        header_rom[10] = 32'hec3127f8;
+        header_rom[11] = 32'h33e8c758;
+        header_rom[12] = 32'hbfcee382;
+        header_rom[13] = 32'h94dff485;
+        header_rom[14] = 32'hc1094bce;
+        header_rom[15] = 32'hc08a5694;
+        header_rom[16] = 32'hfca77213;
+        header_rom[17] = 32'h734d849f;
+        header_rom[18] = 32'h619acaa3;
+        header_rom[19] = 32'h27a39758;
+        header_rom[20] = 32'h769803fc;
+        header_rom[21] = 32'h61c71d23;
+        header_rom[22] = 32'h56ae0403;
+        header_rom[23] = 32'h008438bf;
+        header_rom[24] = 32'hfd0ea740;
+        header_rom[25] = 32'h03fe52ff;
+        header_rom[26] = 32'hf130956f;
+        header_rom[27] = 32'h85c0fb97;
+        header_rom[28] = 32'h2580d660;
+        header_rom[29] = 32'h03be63a9;
+        header_rom[30] = 32'he2384e01;
+        header_rom[31] = 32'hff34a2f9;
+        header_rom[32] = 32'h44033ebb;
+        header_rom[33] = 32'hcb900078;
+        header_rom[34] = 32'h943a1188;
+        header_rom[35] = 32'h637cc065;
+        header_rom[36] = 32'haf3cf087;
+        header_rom[37] = 32'h8be425d6;
+        header_rom[38] = 32'h72ac0a38;
+        header_rom[39] = 32'h07f8d421;
+        header_rom[40] = 32'h4f52455a;
+        header_rom[41] = 32'h5353494d;
+        header_rom[42] = 32'h454e4f49;
+        header_rom[43] = 32'h45584d42;
+        header_rom[44] = 32'h00963130;
+        header_rom[45] = 32'h00000000;
+        header_rom[46] = 32'h00000000;
+        header_rom[47] = 32'h00001d00;
+    end
 
     reg pending = 0, in_header = 0, second_due = 0;
     reg [5:0] request_word = 0;
-    reg [63:0] expected_pair = 0;
+    reg [31:0] expected_word;
+    // Request edge fetches word one. Ready edge compares that registered
+    // value while fetching its companion, used by the next clock's compare.
+    wire [5:0] reference_addr = rd_req ? rd_addr[5:0] :
+                                (rd_ready ? request_word ^ 6'd1 : request_word);
+    always @(posedge clk) expected_word <= header_rom[reference_addr];
     reg [23:0] seen_lines = 0;
     reg [15:0] checked_pairs = 0;
     reg mismatch = 0, protocol_error = 0;
     reg [5:0] bad_offset = 0; // DWORD offset, exported as byte offset
     reg [31:0] bad_word = 0;
-    wire [31:0] expected_first = request_word[0] ? expected_pair[63:32] : expected_pair[31:0];
-    wire [31:0] expected_second = request_word[0] ? expected_pair[31:0] : expected_pair[63:32];
+    wire compare_valid = second_due || (rd_ready && pending && in_header);
+    wire [31:0] compare_word = second_due ? rd_data_second : rd_data;
+    wire [5:0] compare_offset = request_word ^ {5'd0, second_due};
     // HS: count[31:16], flags[15:12] = complete/protocol/mismatch/seen,
     // marker A[11:8], first bad byte offset[7:0]. HD: first bad DWORD.
     assign diagnostic = {checked_pairs, &seen_lines, protocol_error,
@@ -67,7 +99,6 @@ module cart_header_check (
             in_header <= 0;
             second_due <= 0;
             request_word <= 0;
-            expected_pair <= 0;
             seen_lines <= 0;
             checked_pairs <= 0;
             mismatch <= 0;
@@ -78,23 +109,18 @@ module cart_header_check (
             if (second_due) begin
                 seen_lines[request_word[5:1]] <= 1'b1;
                 if (checked_pairs != 16'hffff) checked_pairs <= checked_pairs + 1'b1;
-                if (!mismatch && rd_data_second != expected_second) begin
-                    mismatch <= 1;
-                    bad_offset <= request_word ^ 6'd1;
-                    bad_word <= rd_data_second;
-                end
             end
             if (rd_ready) begin
                 if (!pending || second_due) protocol_error <= 1;
                 pending <= 0;
                 if (pending && in_header && !second_due) begin
                     second_due <= 1;
-                    if (!mismatch && rd_data != expected_first) begin
-                        mismatch <= 1;
-                        bad_offset <= request_word;
-                        bad_word <= rd_data;
-                    end
                 end
+            end
+            if (compare_valid && !mismatch && compare_word != expected_word) begin
+                mismatch <= 1;
+                bad_offset <= compare_offset;
+                bad_word <= compare_word;
             end
             if (rd_req) begin
                 if (pending && !rd_ready) protocol_error <= 1;
@@ -104,7 +130,6 @@ module cart_header_check (
                 pending <= 1;
                 in_header <= rd_addr < 25'd48;
                 request_word <= rd_addr[5:0];
-                expected_pair <= reference_pair(rd_addr[5:1]);
             end
         end
     end
