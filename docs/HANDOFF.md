@@ -22,9 +22,11 @@ and `20260909_125259.png` are **this core**: blue "EM" then "EME" on
 black, 18 seconds apart. The cartridge and the slot are therefore fine;
 Analogue reads the ROM and the saves from it without trouble.
 
-So on this core the game boots, renders its opening text at roughly one
-character every nine seconds, shows no saves, then freezes at a different
-point on each boot with looping audio.
+The order, from Kroy: first boot of this core reached the save menu with
+**no saves**; he then booted Analogue's mode to capture what should have
+been there; every reboot of this core after that **froze during boot** at
+a different point, with looping audio. The two blue-text captures are two
+of those frozen boots, not a slow render.
 
 **The ROM path is no longer the suspect. The EEPROM path is.**
 
@@ -38,25 +40,40 @@ point on each boot with looping audio.
   by `417a55f` as a write-safety guard.
 - Empty save menu on this core against two saves under Analogue's is
   exactly what a dead EEPROM read path looks like.
-- The crawl, the looping audio and the varying freeze points are all
-  consistent with the game polling a save chip that never answers, though
-  that is not yet proved.
+- **The freezes have a mechanism, not just a correlation.** With the
+  fault latched, `cart_eeprom_bridge` completes the host handshake from
+  `WAIT_BIT`/`WAIT_PREFIX` only `if (ctl_done)`. `cart_bus_arbiter` gates
+  that as `ee_done = active == EEPROM && ctl_ee_done`, so if arbitration
+  moves on or a reset intervenes first, `ctl_done` never arrives, the
+  bridge never raises `host_done`, and `gba_memorymux` waits in
+  `CART_EEPROM_WAIT` forever. That is a hung emulated memory bus: the CPU
+  stops and the audio DMA keeps replaying its buffer, which is exactly
+  what a frozen boot with looping audio looks like. Where it freezes then
+  depends only on when the game first touches EEPROM.
+- It also explains the one good boot: if the fault landed while the FSM
+  was idle, the handshake completed, the game ran on and simply found no
+  saves.
 
 Two ways to take it, both cheap, neither started:
 
-1. **Find out why the guard fires.** With the header clean the alternating
-   snapshot's second page carries nothing, so give it the EEPROM state at
-   the moment of the fault: the bridge FSM state, `host_count`, and
-   whether `dma3_active` fell or `reset_n` did. No new readout, no new
-   menu entry, about the size of what it replaces.
-2. **Do not latch the guard for reads.** The latch exists so an
-   interrupted *write* cannot corrupt the save chip. A read cannot damage
-   anything, and Cartridge Saves is on Read Only. Faulting only on an
-   interrupted write would let the game read its saves while keeping the
-   protection that matters.
+1. **Never hang the bus.** In the faulted path, complete the host
+   handshake unconditionally instead of waiting on `ctl_done`. The data
+   returned is already forced to 1; the transfer is dead either way, and
+   a dead transfer must still retire or the whole core stops. This is a
+   correctness fix regardless of anything else, and it is small.
+2. **Do not latch the guard for reads.** It exists so an interrupted
+   *write* cannot corrupt the save chip. A read cannot damage anything,
+   and Cartridge Saves is on Read Only. Faulting only on an interrupted
+   write would let the game read its saves while keeping the protection
+   that matters.
+3. **Find out why the guard fires at all.** With the header clean the
+   alternating snapshot's second page carries nothing, so give it the
+   EEPROM state at the fault: bridge FSM state, `host_count`, and whether
+   `dma3_active` fell or `reset_n` did. No new readout or menu entry.
 
-Doing 1 then 2 is the safe order; 2 alone would probably make the game
-work and would leave the reason unknown.
+1 and 3 together in one fit is the honest order: fix the hang, keep the
+guard, and learn why it trips. 2 without 3 would probably make the game
+work and leave the reason unknown.
 
 ## 2026-09-09: value-capture diagnostic fitting at two seeds; watchers active
 
