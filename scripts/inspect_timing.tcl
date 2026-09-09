@@ -12,17 +12,19 @@ set published [get_registers {*boot_debug|host_debug[*]}]
 if {[get_collection_size $captured] == 0 || [get_collection_size $published] == 0} {
     error "Diagnostic snapshot registers were not found"
 }
-# 23 variable payload bits: count8, flags4, offset6, lanes4, beat1.
-# The fixed marker nibble, low two address bits and zero bits fold away.
+# The alternating payload makes every snapshot bit variable; keep the
+# 23-bit floor of the status word as the check so a folded bank still fails.
+set badword [get_registers {*header_check|bad_word[*]}]
 set lanes [get_registers {*header_check|bad_lanes[*]}]
 set offset [get_registers {*header_check|bad_offset[*]}]
 set beat [get_registers {*header_check|bad_second}]
-if {[get_collection_size $lanes] < 4 || [get_collection_size $offset] < 6 ||
+if {[get_collection_size $badword] < 32 ||
+    [get_collection_size $lanes] < 4 || [get_collection_size $offset] < 6 ||
     [get_collection_size $beat] < 1 ||
     [get_collection_size $captured] < 23 || [get_collection_size $published] < 23} {
-    error "Header diagnostic requires its complete mismatch lanes/address/beat and 23 variable snapshot bits"
+    error "Header diagnostic requires its complete mismatch data/lanes/address/beat and 23 variable snapshot bits"
 }
-puts "HEADER_REGISTERS lanes=[get_collection_size $lanes] offset=[get_collection_size $offset] beat=[get_collection_size $beat] captured=[get_collection_size $captured] published=[get_collection_size $published]"
+puts "HEADER_REGISTERS data=[get_collection_size $badword] lanes=[get_collection_size $lanes] offset=[get_collection_size $offset] beat=[get_collection_size $beat] captured=[get_collection_size $captured] published=[get_collection_size $published]"
 # Fail if the area-saving ROM was implemented as logic or disappeared.
 # Read the actual fitted memory table, not an HDL attribute or total RAM count.
 set report_file [open output_files/ap_core.fit.rpt r]

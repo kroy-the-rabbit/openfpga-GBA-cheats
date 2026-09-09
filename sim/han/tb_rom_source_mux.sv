@@ -110,10 +110,10 @@ module tb_rom_source_mux #(parameter VIA_ARBITER = 0, HEADER = 0);
         end
     endtask
 
-    wire [31:0] diagnostic;
+    wire [31:0] diagnostic, bad_word;
     generate if (HEADER) begin : checked
         cart_header_check checker_inst(clk, cart_mode && reset_n, req, addr,
-                                      ready, data1, data2, diagnostic);
+                                      ready, data1, data2, diagnostic, bad_word);
     end else begin
         assign diagnostic = 0;
     end endgenerate

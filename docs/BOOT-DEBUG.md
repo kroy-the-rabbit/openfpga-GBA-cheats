@@ -22,10 +22,14 @@ replaces the resettable 64-bit reference register and two separate compares.
 The sampling cycles are unchanged. Actual M10K placement is checked after
 fitting; timing improvement is not assumed from the RTL.
 
-The shrunk checker (2026-09-09) reports one 32-bit word. The first bad
-DWORD's value is no longer stored; its differing byte lanes and beat are.
-The count is eight bits, the snapshot bundle is 32 bits wide and `HD:` is
-retired (`F4000010` reads zero).
+The shrunk checker (2026-09-09) reports through one 32-bit snapshot.
+The status word carries the first bad DWORD's differing byte lanes and
+beat; the count is eight bits; `HD:` is retired (`F4000010` reads zero).
+Since the same day's follow-up, the value of the first bad DWORD is kept
+again and the snapshot **alternates**: the first menu open after power-on
+captures the status word, the next captures the bad DWORD's value, the
+next the status again. The status is the one with marker `A` in bits
+19:16 and zeros in bits 3:1; the value has no marker.
 This follows [Altera's ROM inference guidance](https://docs.altera.com/r/docs/683323/18.1/intel-quartus-prime-standard-edition-user-guide-design-recommendations/inferring-rom-functions-from-hdl-code).
 
 ## Hardware capture
@@ -36,7 +40,7 @@ corrupted startup, open the core menu and photograph **CG, CS, SF, HS**.
 No repeated pattern captures are needed. Menu entry snapshots HS; the value
 remains stable while it is open. Close/reopen to refresh.
 
-- **HS:** (`F4000014`): comparison count, flags, first bad header byte offset, its differing byte lanes and beat.
+- **HS:** (`F4000014`): on alternate menu opens, the status word below, then the first bad DWORD's value. Close and reopen the menu to switch.
 - **SF:** retains its EEPROM-abort meaning; it is not an SRAM status flag.
 
 HS encoding:
@@ -83,9 +87,8 @@ and memorymux; and actual top-level APF menu snapshots. The reference fixture
 and provenance are in `sim/fixtures/README.md`. These simulations do not
 prove cartridge electrical timing or reproduce a full BIOS boot.
 
-Post-fit checks require the four lane, six DWORD-offset and one beat source
-registers, and at least 23 variable bits in each snapshot bank. The remaining
-nine payload bits are constants. All timing categories must pass; the existing
+Post-fit checks require the 32 value, four lane, six DWORD-offset and one
+beat source registers, and at least 23 variable bits in each snapshot bank. All timing categories must pass; the existing
 20 ns raw snapshot routing budget remains unchanged at all corners.
 
 The previous pattern build is documented in `git show d6a04ff:docs/BOOT-DEBUG.md`.

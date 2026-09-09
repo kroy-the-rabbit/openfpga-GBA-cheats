@@ -9,6 +9,7 @@ module tb_cart_debug_snapshot;
     reg [31:0] epoch = 32'd1;
     wire [63:0] sys_debug = {epoch ^ 32'hA55AF00F, epoch + 32'd12345};
     wire [63:0] host_debug;
+    wire page;
     cart_debug_snapshot dut(.*);
 
     reg [63:0] expected [0:15];

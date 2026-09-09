@@ -13,7 +13,8 @@ module cart_header_check (
     input wire [24:0] rd_addr, // DWORD address, same as rom_source_mux
     input wire rd_ready,
     input wire [31:0] rd_data, rd_data_second,
-    output wire [31:0] diagnostic
+    output wire [31:0] diagnostic,
+    output reg  [31:0] bad_word = 0 // value of the first bad DWORD
 );
     // A synchronous ROM can live in one M10K rather than ALMs. It has no
     // reset on its read port; validity comes from the request/response FSM.
@@ -112,6 +113,7 @@ module cart_header_check (
             bad_offset <= 0;
             bad_lanes <= 0;
             bad_second <= 0;
+            bad_word <= 0;
         end else begin
             if (second_due) begin
                 seen_lines[request_word[5:1]] <= 1'b1;
@@ -129,6 +131,7 @@ module cart_header_check (
                 bad_offset <= compare_offset;
                 bad_lanes <= compare_lanes;
                 bad_second <= second_due;
+                bad_word <= compare_word;
             end
             if (rd_req) begin
                 if (pending && !rd_ready) protocol_error <= 1;

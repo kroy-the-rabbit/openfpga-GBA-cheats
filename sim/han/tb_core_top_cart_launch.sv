@@ -97,7 +97,7 @@ module tb_core_top_cart_launch;
     endtask
     always @(posedge clk) begin
         if (dut.boot_debug.request_sync[1] != dut.boot_debug.ack_toggle) begin
-            captured_header = dut.cart_header_debug;
+            captured_header = dut.boot_debug.sys_debug;
             header_samples = header_samples + 1;
         end
     end
@@ -139,8 +139,11 @@ module tb_core_top_cart_launch;
         if (captured_header !== stable_header) $fatal(1,"FAIL recaptured while menu open");
         command(16'h00b0,0);
         command(16'h00b0,1);
-        expect_debug(32'h023a14f0);
-        if (header_samples != 2) $fatal(1,"FAIL header capture count %0d",header_samples);
+        expect_debug(32'h12345678); // second open: the bad DWORD's value
+        command(16'h00b0,0);
+        command(16'h00b0,1);
+        expect_debug(32'h023a14f0); // third open: status again
+        if (header_samples != 3) $fatal(1,"FAIL header capture count %0d",header_samples);
         $display("PASS core_top cartridge launch: real APF notification, synchronization, reset/probe gating, SD-save isolation and stale-menu immunity");
         $display("PASS core_top debug packing, live header mismatch, retired addresses zero and stable APF menu snapshots during GBA reset");
         $finish;

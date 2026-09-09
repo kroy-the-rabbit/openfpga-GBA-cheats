@@ -13,7 +13,8 @@ module cart_debug_snapshot #(
     input  wire             clk_sys,
     input  wire             host_menu,
     input  wire [WIDTH-1:0] sys_debug,
-    output reg  [WIDTH-1:0] host_debug = {WIDTH{1'b0}}
+    output reg  [WIDTH-1:0] host_debug = {WIDTH{1'b0}},
+    output reg              page = 1'b0 // clk_sys; flips after every capture
 );
     reg menu_previous = 1'b0;
     reg request_toggle = 1'b0;
@@ -35,6 +36,7 @@ module cart_debug_snapshot #(
         if (request_sync[1] != ack_toggle) begin
             captured_debug <= sys_debug;
             ack_toggle <= request_sync[1];
+            page <= !page;
         end
     end
 

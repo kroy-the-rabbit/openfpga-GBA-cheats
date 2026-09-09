@@ -2123,17 +2123,21 @@ gba_cart_controller cart_ctl (
 // ---- Passive BMXE ROM-header diagnostic ----
 // CPU debug outputs remain disconnected. Observe the same pair and cycles
 // delivered to the game ROM cache, independently of the direct header probe.
-wire [31:0] cart_header_debug;
+wire [31:0] cart_header_debug, cart_header_word;
+wire        cart_debug_page;
 cart_header_check header_check (
     .clk(clk_sys), .enable(cart_rom_mode && cart_hdr_id == 32'h424D5845),
     .rd_req(sdram_read_req_gba), .rd_addr(sdram_read_addr_gba),
     .rd_ready(romsrc_gba_rd_ready), .rd_data(romsrc_gba_rd_data),
-    .rd_data_second(romsrc_gba_rd_data_second), .diagnostic(cart_header_debug)
+    .rd_data_second(romsrc_gba_rd_data_second), .diagnostic(cart_header_debug),
+    .bad_word(cart_header_word)
 );
+// One snapshot register, two payloads: the first menu open captures HS,
+// the next captures the first bad DWORD's value, and so on alternately.
 cart_debug_snapshot #(.WIDTH(32)) boot_debug (
     .clk_host(clk_74a), .clk_sys(clk_sys), .host_menu(osnotify_inmenu),
-    .sys_debug(cart_header_debug),
-    .host_debug(cart_debug_host)
+    .sys_debug(cart_debug_page ? cart_header_word : cart_header_debug),
+    .host_debug(cart_debug_host), .page(cart_debug_page)
 );
 
 // ---- Slot pins ----
