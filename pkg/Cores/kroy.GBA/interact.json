@@ -158,21 +158,21 @@
         "address": "0xF4000004"
       },
       {
-        "name": "Save Fault",
+        "name": "SF:",
         "id": 54,
         "type": "number_u32",
         "enabled": true,
         "address": "0xF4000008"
       },
       {
-        "name": "Pattern Lo",
+        "name": "PL:",
         "id": 60,
         "type": "number_u32",
         "enabled": true,
         "address": "0xF4000010"
       },
       {
-        "name": "Pattern Hi",
+        "name": "PH:",
         "id": 61,
         "type": "number_u32",
         "enabled": true,

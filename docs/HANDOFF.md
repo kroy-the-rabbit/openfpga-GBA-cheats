@@ -5,6 +5,32 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## Pattern hardware photo received; shorter labels installed
+
+Read `/home/kroy/Downloads/signal-2026-09-08-212350.jpeg` and the newly
+mounted card's `Memories/Screenshots/20260908_211742.png`. Archived both plus
+hashes/analysis in `build/hardware-results/c0c1040/`. The saved screenshot
+shows the Game Boy startup logo, not a game title. Photo shows
+CG `424D5845`, CS `FFFF96E1`, Save Fault prefix `0000…`, Pattern Lo prefix
+`0FA3…`, Pattern Hi prefix `DA967…`. The visible pair uniquely matches
+rotation 25 of the seed, whose expected full value is `DA9678520FA34CBD`.
+**The hidden suffixes are inferred, not observed**; the photo cannot fully
+qualify the 64-bit snapshot or zero fault. No boot success claimed.
+
+The long readout labels caused the OS to ellipsize the values. Changed only
+menu names: id 54 → **SF:**, id 60 → **PL:**, id 61 → **PH:**. After the user
+confirmed the card mounted, installed the menu-only update with verified
+22-file backup and **21 protected files unchanged**, including bitstream,
+BIOS, saves and settings. Flush and mount verification passed; card left mounted.
+Backup: `build/card-backups/20260909T022736Z-menu`.
+Menu patch manifest: `build/gba/menu-c0c1040/manifest.json`.
+Main installed-file manifest updated with the new interact.json hash.
+
+Installed FPGA/version remains `0.9999.c0c1040`; this menu patch is newer
+than its packaged source. No FPGA rebuild needed or queued. On relaunch,
+read the full PL/PH/SF values (close/reopen OS menu for a second capture) to
+finish the pattern check. The label changes are documented in BOOT-DEBUG.
+
 ## Pattern diagnostic installed and verified; card left mounted
 
 User explicitly requested installation. **Installed version `0.9999.c0c1040`**
