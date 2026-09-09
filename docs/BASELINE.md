@@ -358,6 +358,17 @@ RTL is `417a55f` throughout. Setup is the worst corner.
 | `6c767ca` | plus the bad DWORD's value, alternating payload | 3 | 17,985 (97 %) | **-0.291** | fail, sisko, 1450 s |
 | `6c767ca` | same RTL | 1 | 18,025 (98 %) | **-0.415** | fail, kira, 1977 s |
 | `6c767ca` | same RTL | 2 | 17,860 (97 %) | **-0.602** | fail, sisko, 1442 s; worst path is SDRAM `dram_dq` input |
+| `d7ecfaa` | same, minus the CL:/CD: cheat readouts | 1 | 17,860 (97 %) | **-0.337** | fail, sisko, 1481 s |
+| `d7ecfaa` | same RTL | 3 | 18,125 (98 %) | **+0.092** | pass, kira, 2206 s |
+
+Removing the two cheat readouts took out 149 registers and 125 ALMs at the
+same seed, which bought the draw rather than the fit: seed 1 still missed
+and seed 3 closed at +0.092 with hold +0.099, recovery +1.498, removal
++0.289, pulse +0.827, 25,318 registers, 283 RAM blocks, reference ROM in
+one M10K, snapshot delays 2.988 / 2.967 / 1.535 / 1.371 ns. Package
+`kroy.GBA_0.9999.d7ecfaa.zip` SHA-256
+`ac05f7507a13b8a26df74cc32524aafc4d8f9562129875cee02db10e96a442d9`,
+bitstream `764278ad16fcc26f04c9f616825713afc5cf7e681db2060157e9ef6792c419fb`.
 
 The failing path is always inside `gba_cpu`, not the diagnostic. The first
 passing checker, `a4fe3f4` seed 1, has hold +0.038, recovery +2.665,

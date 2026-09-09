@@ -33,8 +33,18 @@ Enabled is the only cheat control. README, `docs/CHEATS.md` and
 `docs/CARTRIDGE.md` say so. Neither pocket-gbc nor pocket-pcengine has
 these readouts, so alignment is unaffected. One fit, seed 1 on sisko, job
 `pocket-gba-gba-p5cart-header-value-nocl-s1-d7ecfaafa386`, watcher
-`pocket-gba-watch-value-nocl-s1-d7ecfaa.service`. Install only if it
-passes.
+`pocket-gba-watch-value-nocl-s1-d7ecfaa.service`. It failed at -0.337 ns.
+A backup seed 3 on kira, at Kroy's request, **passed**: setup +0.092 ns,
+18,125 ALMs, 2206 s, `ready-to-write`, 13 files staged under
+`build/watch/pocket-gba-gba-p5cart-header-value-nocl-s3-d7ecfaafa386/sd/`.
+Numbers and hashes in `docs/BASELINE.md`. Not installed yet.
+
+On the Pocket after installing it: full shutdown, boot Zero Mission with
+Cartridge Saves Read Only and cheats off, then open the core menu
+**twice** and photograph HS each time. The first open gives the status
+word (expect `18BA9831` again), the second gives the value actually read
+at 0x08000098. The correct value is `72AC0A38`; its low halfword `0A38`
+is the one the cache received wrong.
 
 A third runner exists: odo, container 152, `10.50.1.244`, verified by
 reproducing sisko's seed 3 bit for bit; slowest of the three. `runner-build`
