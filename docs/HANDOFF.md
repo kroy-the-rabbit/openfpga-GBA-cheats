@@ -5,7 +5,7 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
-## 2026-09-09: shrunk diagnostic closes at seed 1 on kira; staged, not installed
+## 2026-09-09: shrunk diagnostic closes at seed 1 on kira; installed, card unmounted
 
 Kroy chose option 1. `a4fe3f4` shrinks the header checker to one 32-bit
 word: the M10K reference and shared comparator stay, the first bad DWORD's
@@ -27,18 +27,23 @@ watchers finished and notified; `tools/watch_gba_build.py` gained
 The seed 1 numbers and hashes are in `docs/BASELINE.md`. Its watcher
 verified the package against the source tree and staged the 13 card files
 under `build/watch/pocket-gba-gba-p5cart-header-lite-s1-a4fe3f48b313/sd/`.
-**Nothing is on the card yet.** The card was not mounted and its last known
-content is the `c0c1040` pattern diagnostic. Installing is Kroy's call.
+**Installed at 15:25 UTC on Kroy's instruction, card unmounted.** The card
+held `c0c1040` (version string and bitstream checked). Its 12 core and
+platform files were backed up and hash-verified to
+`build/card-backups/20260909T152450Z-c0c1040-core/`, the staged tree was
+merged over them with nothing deleted, all 13 files hash-match the
+package, `core.json` reads `0.9999.a4fe3f4`, the bitstream is
+`f72426ab…`, `HD:` is gone from the menu, and `/dev/sda1` was unmounted.
+An aborted first backup attempt left a partial copy of the ROM library at
+`build/card-backups/20260909T152116Z-c0c1040/` (30 files, 119 MB); it is
+not needed and can be deleted.
 
-To install: mount the card, confirm it still holds `c0c1040` (the menu has
-HD and HS), back up `Cores/kroy.GBA`, merge the staged `sd/` tree over it
-without deleting anything, hash-verify, leave it mounted. Then on the
-Pocket: full power cycle, Zero Mission cartridge, Cartridge Saves Read
-Only, cheats off, and at the white screen open the menu and photograph CG,
-CS, SF and HS. `docs/BOOT-DEBUG.md` decodes HS. `309A0000` means the first
-192 bytes reached the cache intact and the fault is downstream of the ROM
-mux; a set bit 21 gives the offset, byte lanes and beat of the first bad
-word.
+On the Pocket: full power cycle, Zero Mission cartridge, Cartridge Saves
+Read Only, cheats off, and at the white screen open the menu and
+photograph CG, CS, SF and HS. `docs/BOOT-DEBUG.md` decodes HS.
+`309A0000` means the first 192 bytes reached the cache intact and the
+fault is downstream of the ROM mux; a set bit 21 gives the offset, byte
+lanes and beat of the first bad word.
 
 ## 2026-09-09: seed 8 of the M10K diagnostic also failed; nothing queued
 
