@@ -355,6 +355,9 @@ RTL is `417a55f` throughout. Setup is the worst corner.
 | `424bd12` | same RTL | 8 | 18,019 (98 %) | **-0.190** | fail, sisko, 1550 s |
 | `a4fe3f4` | 32-bit result: lanes and beat, no bad word | 3 | 17,925 (97 %) | **-0.197** | fail, sisko, 1484 s |
 | `a4fe3f4` | same RTL | 1 | 17,976 (97 %) | **+0.034** | pass, kira, 2236 s |
+| `6c767ca` | plus the bad DWORD's value, alternating payload | 3 | 17,985 (97 %) | **-0.291** | fail, sisko, 1450 s |
+| `6c767ca` | same RTL | 1 | 18,025 (98 %) | **-0.415** | fail, kira, 1977 s |
+| `6c767ca` | same RTL | 2 | 17,860 (97 %) | **-0.602** | fail, sisko, 1442 s; worst path is SDRAM `dram_dq` input |
 
 The failing path is always inside `gba_cpu`, not the diagnostic. The first
 passing checker, `a4fe3f4` seed 1, has hold +0.038, recovery +2.665,

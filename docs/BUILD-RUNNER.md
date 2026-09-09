@@ -157,6 +157,37 @@ core, `NPROC=4` and `NPROC=12` produced **identical** fit results - 16,689
 ALMs, 282 RAM blocks, +0.090 ns setup - so it changes wall clock only, and not
 by much. Pin `FITTER_EFFORT` instead: that one genuinely changes the answer.
 
+## Second run: odo, 2026-09-09
+
+Followed against `odo.lan.kroy.io` (Proxmox 8.4, E5-2640 v4, 40 threads,
+251 GB) from this document alone. What differed from the sisko run:
+
+- **Survey.** Load 8 on 40 threads, 48 GB of 251 available (two large VMs
+  hold the rest), `local-zfs` 70 GB free at 65 % capacity. Sized down from
+  sisko's container to fit: `--cores 16 --memory 16384 --swap 2048
+  --rootfs local-zfs:40`. A fit needs a few GB; the sisko runner's 80 GB
+  disk holds 36 GB after 33 checkouts, 28 GB of it images, only 10.6 GB of
+  which is the one image a runner needs.
+- **VMID 152**, after 150 (sisko) and 151 (kira). Hostname `quartus-build`.
+- **Template.** `debian-12-standard_12.12-1` fetched with `pveam download
+  local ...`; only Debian 13 was cached. Debian 12 keeps podman 4.3.1 in
+  step with the other two runners.
+- **Network.** `vmbr0` on odo is an Open vSwitch bridge; `tag=50` works the
+  same way and DHCP handed out `10.50.1.244`.
+- **Keys.** `--ssh-public-keys` with the reference runner's
+  `/root/.ssh/authorized_keys`, so the same identities reach all three.
+- **Image.** Not rebuilt: the canonical archive from the orchestrator's
+  `backups/images/` was hash-checked, copied straight into the container
+  over scp (4.6 GB, about a minute) and `podman load`ed. Its ID matched
+  `1b2a15f0…` exactly. `util-linux` and `procps` were added to the apt list
+  for `flock` and `pgrep`, which `runner-build` relies on.
+- **Detaching a build.** `systemd-run --unit=<name> bash -c '...'` inside
+  the container instead of `nohup`; the unit survives the ssh session and
+  `systemctl is-active` reports on it.
+
+What this document did not need to say again: the fuse-overlayfs step was
+exactly as described and the error is verbatim.
+
 ## Checklist
 
 - [ ] node surveyed, VMID free, load low, disk sufficient

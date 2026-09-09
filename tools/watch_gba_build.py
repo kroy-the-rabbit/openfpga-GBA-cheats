@@ -16,7 +16,7 @@ import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNNERS = {'sisko': 'root@10.50.1.246', 'kira': 'root@10.50.1.245'}
+RUNNERS = {'sisko': 'root@10.50.1.246', 'kira': 'root@10.50.1.245', 'odo': 'root@10.50.1.244'}
 HOST = RUNNERS['sisko']
 SSH = ['ssh', '-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', HOST]
 SCP = ['scp', '-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
@@ -127,6 +127,13 @@ def main():
     folder = ROOT / 'build/watch' / key
     folder.mkdir(parents=True, exist_ok=True)
     result_path = folder / 'result.json'
+    # The folder is keyed by job name and commit, not runner. Two watchers on
+    # one folder overwrite each other's results, so refuse to join a live one.
+    if result_path.exists():
+        previous = json.loads(result_path.read_text())
+        if previous.get('state') in ('watching', 'checking') and os.path.exists(f"/proc/{previous.get('pid', 0)}"):
+            parser.error(f"a watcher (pid {previous['pid']}, runner {previous.get('runner', 'sisko')}) already owns {folder}; "
+                         'give the job a different name')
     state = dict(state='watching', job=key, commit=args.commit, pid=os.getpid(),
                  runner=args.runner, started=datetime.now(timezone.utc).isoformat(),
                  card_written=False, baseline=args.baseline)

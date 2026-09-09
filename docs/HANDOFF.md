@@ -18,8 +18,13 @@ next the value, then HS again. About 33 registers and a 32-bit mux over
 | kira | 1 | `pocket-gba-gba-p5cart-header-value-s1-6c767ca847af` | `pocket-gba-watch-value-s1-6c767ca.service` |
 
 sisko is the faster runner (1484 s against kira's 2236 s for `a4fe3f4`);
-kira's seed 1 was started first, before Kroy said so. Install only a
-passing fit; if both pass, take the larger setup slack. Card is mounted
+kira's seed 1 was started first, before Kroy said so.
+
+Seeds 3, 1 and 2 all missed setup (-0.291 sisko, -0.415 kira, -0.602
+sisko; rows in `docs/BASELINE.md`), each on a different engine path, one
+of them the SDRAM data input, at 17,860 to 18,025 ALMs. Seed 4 on kira
+and seed 5 on sisko followed. Install only a passing fit; if two pass,
+take the larger setup slack. Card is mounted
 and holds `a4fe3f4`. On the Pocket afterwards: full shutdown, boot with
 Zero Mission, open the menu twice, photograph HS both times. The second
 value is the halfword pair read at 0x08000098; expected `72AC0A38`, and
