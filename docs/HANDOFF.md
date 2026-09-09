@@ -5,6 +5,44 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09: first hardware capture, HS `18BA9831`: one bad halfword at 0x08000098
+
+Kroy booted Zero Mission on the `a4fe3f4` diagnostic after a full card
+backup, firmware 2.7 and a core cleanup (see below). Same corrupted
+Nintendo text under the logo, then the halt. Menu photo: CL `00000000`,
+CD `00000000`, CG `424D5845`, CS `FFFF96E1`, SF `00000001`,
+**HS `18BA9831`**.
+
+| Field | Value | Meaning |
+|---|---|---|
+| count | 0x18 | 24 header pairs checked |
+| flags | 0xB | all 24 lines seen, no protocol error, mismatch |
+| offset | 0x98 | first bad DWORD is ROM address 0x08000098, DWORD 38 |
+| lanes | 0x3 | low two bytes wrong, high two right |
+| beat | 1 | companion DWORD; the cache asked for DWORD 39 first |
+
+So the ROM path delivered a wrong halfword at 0x98, the last two bytes of
+the Nintendo logo, into the cache. The BIOS logo check fails on exactly
+that, which is the garbage under the logo. Every earlier line, 0x00 to
+0x97, compared clean, and so did the other three halfwords of this line.
+
+**Which access it was.** `rom_source_mux` fetches a line from its even
+DWORD, so the controller read 0x98 as the **non-sequential** access
+(address latched on CS# fall, `ROM_WAIT` 24, `ADDR_SETUP` 4) and 0x9A,
+0x9C, 0x9E as the burst. Only the non-sequential halfword is wrong. The
+same access type is right for the 19 lines before it, so it is not every
+non-sequential read; it is marginal, on this cartridge, at this address
+or this data (expected halfword `0A38`). The 32-bit result does not keep
+the value that was read; the 64-bit checker would have.
+
+Firmware finding: the Pocket did not apply 2.7 while `pocket_firmware_2_5.bin`
+was also on the card root. Kroy removed 2.5 and it upgraded. Keep one
+firmware file on the card.
+
+Earlier in the day a menu photo showed the `c0c1040` readouts PL/PH with
+the card already holding `a4fe3f4`; a later launch showed the new menu.
+Probably a sleep-state resume; not investigated.
+
 ## 2026-09-09: shrunk diagnostic closes at seed 1 on kira; installed, card unmounted
 
 Kroy chose option 1. `a4fe3f4` shrinks the header checker to one 32-bit
