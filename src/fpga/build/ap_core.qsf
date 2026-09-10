@@ -860,6 +860,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../core/cheat_titles.sv
 # at the bottom of core_top.sv. Not a feature and not for merging.
 set_global_assignment -name SYSTEMVERILOG_FILE ../han/gba_cart_controller.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../han/rom_source_mux.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../han/rom_patch.sv
 
 # GBA core VHDL — MEM library (SyncRam primitives)
 set_global_assignment -name VHDL_FILE ../gba/SyncFifo.vhd -library MEM

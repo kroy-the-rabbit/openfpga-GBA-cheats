@@ -224,6 +224,7 @@ module cheat_loader #(
   reg [3:0]  d_optype;
   reg [31:0] d_raw;        // value before lane placement
   reg        d_known;      // a type this module understands
+  reg        d_cbwrite;
   reg        d_encrypt;    // the rest of the file is encrypted
 
   always @* begin
@@ -231,6 +232,7 @@ module cheat_loader #(
     d_optype  = OPT_ALWAYS;
     d_raw     = 32'd0;
     d_known   = 1'b0;
+    d_cbwrite = 1'b0;
     d_encrypt = 1'b0;
     if (pair_cb) begin
       // CodeBreaker, from mGBA's enum GBACodeBreakerType.
@@ -239,9 +241,11 @@ module cheat_loader #(
         4'h9: d_encrypt = 1'b1;                         // CB_ENCRYPT
         4'h3: if (pair_b[15:8] == 8'd0) begin           // CB_ASSIGN_1
                 d_known = 1'b1; d_width = 2'd1; d_raw = {24'd0, pair_b[7:0]};
+                d_cbwrite = 1'b1;
               end
         4'h8: begin                                     // CB_ASSIGN_2
                 d_known = 1'b1; d_width = 2'd2; d_raw = {16'd0, pair_b[15:0]};
+                d_cbwrite = 1'b1;
               end
         4'h7, 4'hA, 4'hB, 4'hC: begin                   // IF_EQ, IF_NE, IF_GT, IF_LT
           d_known  = 1'b1; d_width = 2'd2; d_raw = {16'd0, pair_b[15:0]};
@@ -317,7 +321,13 @@ module cheat_loader #(
               | (d_addr >= 28'h3000000 && d_addr <= 28'h3007FFF)   // IWRAM
               | (d_addr >= 28'h4000000 && d_addr <= 28'h40003FE);  // IO
 
-  wire d_add = collecting & pair_v & d_known & d_fits & d_real
+  // ROM is patched on the read side (src/fpga/han/rom_patch.sv), but only an
+  // explicit CodeBreaker write may land there: the 8+8 forms keep the RAM
+  // filter, because a random word hits this 96 MB window too often.
+  wire d_rom  = (d_addr >= 28'h8000000 && d_addr <= 28'hDFFFFFF);
+
+  wire d_add = collecting & pair_v & d_known & d_fits
+             & (d_real | (d_cbwrite & d_rom))
              & ~encrypted & ~d_encrypt;
 
   // ------------------------------------------------------------ the buffer --

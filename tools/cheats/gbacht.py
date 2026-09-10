@@ -141,6 +141,16 @@ REGIONS = (
     (0x4000000, 0x40003FE),   # IO
 )
 
+# ROM. Only an explicit CodeBreaker write may land here: the core patches the
+# bytes on the read side (src/fpga/han/rom_patch.sv). The 8+8 code forms keep
+# the RAM-only filter, because a random word lands in this 96 MB window too
+# often for the junk test to survive.
+ROM = (0x8000000, 0xDFFFFFF)
+
+
+def address_is_rom(addr: int) -> bool:
+    return ROM[0] <= addr <= ROM[1]
+
 
 def address_is_real(addr: int) -> bool:
     return any(lo <= addr <= hi for lo, hi in REGIONS)
@@ -242,7 +252,9 @@ def decode_codebreaker(op1: int, op2: int) -> tuple[Optional[Entry], str]:
         e = _cond(addr, op2, CB_COND[kind])
     else:
         return None, "unsupported"
-    if e is None or not address_is_real(e.address):
+    if e is None:
+        return None, "rejected"
+    if not address_is_real(e.address) and not (kind in (0x3, 0x8) and address_is_rom(e.address)):
         return None, "rejected"
     e.kind = "cb"
     return e, "ok"

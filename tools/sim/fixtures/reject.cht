@@ -12,8 +12,8 @@ cheat2_desc = "master and hook codes"
 cheat2_code = "000084F5+000A+100193C0+0007"
 cheat2_enable = true
 
-cheat3_desc = "ROM, BIOS and save addresses"
-cheat3_code = "38000000+0001+30000100+0002+3E000000+0003"
+cheat3_desc = "BIOS and save addresses, and ROM in a form that is not a CodeBreaker write"
+cheat3_code = "30000100+0002+3E000000+0003+08000000 00000001+78000000+0001"
 cheat3_enable = true
 
 cheat4_desc = "past the end of EWRAM and IWRAM"

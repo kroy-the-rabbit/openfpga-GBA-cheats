@@ -1,0 +1,9 @@
+cheats = 2
+
+cheat0_desc = "ROM byte, applied on the read side"
+cheat0_code = "3800958A+00D0"
+cheat0_enable = true
+
+cheat1_desc = "ROM halfword in the mirror at 0A"
+cheat1_code = "8A00958A+D00D"
+cheat1_enable = true

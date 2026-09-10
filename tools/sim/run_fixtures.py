@@ -50,8 +50,12 @@ CASES = {
     # raw GameShark: three writes and one conditional pair
     "gameshark.cht":  (4, 5, 0),
     # encrypted blobs, types gba_cheats cannot express, master and hook codes,
-    # unwritable regions, addresses past the end of RAM, malformed tokens
+    # unwritable regions, addresses past the end of RAM, malformed tokens,
+    # and ROM addresses in the 8+8 and conditional forms
     "reject.cht":     (0, 0, 0),
+    # CodeBreaker writes to ROM are accepted: rom_patch.sv applies them on
+    # the read side. The engine gets them too and the bus drops the write.
+    "rompatch.cht":   (2, 2, 0),
     # one cheat off, one on, one with no key at all (which means on) and
     # nothing after it in the file, so only end of file can resolve it
     "enable.cht":     (2, 2, 0),

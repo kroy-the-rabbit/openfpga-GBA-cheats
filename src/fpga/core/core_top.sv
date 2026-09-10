@@ -2319,6 +2319,22 @@ synch_3 #(.WIDTH(32)) cart_readout_st_sync(cart_readout_st, cart_readout_st_s, c
 // cart_mode requires Play Cartridge, advertised power and a passing header
 // probe. With it low the mux passes gba_top's reads straight to
 // SDRAM, which is the pre-cartridge behaviour bit for bit.
+// ROM patches ride the fetched line: a Game Genie for both sources.
+wire [31:0] romsrc_gba_rd_data_raw, romsrc_gba_rd_data_second_raw;
+wire [3:0]  rom_patch_count;
+rom_patch rom_patches (
+    .clk        ( clk_sys ),
+    .load_reset ( cheat_reset ),
+    .cheat_on   ( cheat_on ),
+    .cheat_in   ( cheat_in ),
+    .rd_addr    ( sdram_read_addr_gba ),
+    .din_first  ( romsrc_gba_rd_data_raw ),
+    .din_second ( romsrc_gba_rd_data_second_raw ),
+    .dout_first ( romsrc_gba_rd_data ),
+    .dout_second( romsrc_gba_rd_data_second ),
+    .count      ( rom_patch_count )
+);
+
 rom_source_mux romsrc (
     .clk                  ( clk_sys ),
     .cart_mode            ( cart_rom_mode ),
@@ -2326,8 +2342,8 @@ rom_source_mux romsrc (
     .gba_rd_req           ( sdram_read_req_gba ),
     .gba_rd_addr          ( sdram_read_addr_gba ),
     .gba_rd_ready         ( romsrc_gba_rd_ready ),
-    .gba_rd_data          ( romsrc_gba_rd_data ),
-    .gba_rd_data_second   ( romsrc_gba_rd_data_second ),
+    .gba_rd_data          ( romsrc_gba_rd_data_raw ),
+    .gba_rd_data_second   ( romsrc_gba_rd_data_second_raw ),
 
     .sdram_rd_req         ( romsrc_sdram_rd_req ),
     .sdram_rd_addr        ( romsrc_sdram_rd_addr ),
