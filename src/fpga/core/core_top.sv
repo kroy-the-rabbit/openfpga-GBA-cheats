@@ -1555,7 +1555,7 @@ reg       cart_writes = 1'b0;
 // Controller tuning, written at 0x98. Quasi-static: phi_sel and the GPIO
 // timing mode are settings, not per-access data, which is what the multicycle
 // in core_constraints.sdc asserts about them.
-reg [31:0] cart_cfg = 32'd0;
+reg [31:0] cart_cfg = 32'h20;   // ROM Timing defaults to Turnaround, cart_cfg[6:5] = 1
 
 reg [13:0] reset_counter = 0;
 wire       core_reset = (reset_counter != 0);

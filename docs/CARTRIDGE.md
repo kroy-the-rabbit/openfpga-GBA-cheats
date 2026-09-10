@@ -230,7 +230,7 @@ defaults and is bit-identical to the previous controller.
 | Profile | Turnaround, AD released before RD# | First RD# low | Burst halfword, RD# high/period |
 |---|---|---|---|
 | 0 Fast | 0 | 24 clocks, 238 ns | 4/12 clocks, 119 ns |
-| 1 Turnaround | 4 clocks, 40 ns | 24 clocks, 238 ns | 4/12 clocks, 119 ns |
+| 1 Turnaround, **default** | 4 clocks, 40 ns | 24 clocks, 238 ns | 4/12 clocks, 119 ns |
 | 2 GBA Power-On | 4 clocks, 40 ns | 30 clocks, 298 ns | 6/20 clocks, 199 ns |
 | 3 Slow | 8 clocks, 79 ns | 48 clocks, 477 ns | 8/24 clocks, 238 ns |
 

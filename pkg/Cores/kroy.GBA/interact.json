@@ -137,7 +137,7 @@
         "address": "0x98",
         "persist": true,
         "writeonly": true,
-        "defaultval": 0,
+        "defaultval": 32,
         "options": [
           {
             "name": "Fast",

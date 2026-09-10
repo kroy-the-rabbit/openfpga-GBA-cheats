@@ -16,7 +16,7 @@ import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNNERS = {'sisko': 'root@10.50.1.246', 'kira': 'root@10.50.1.245', 'odo': 'root@10.50.1.244'}
+RUNNERS = {'sisko': 'root@10.50.1.246', 'sisko2': 'root@10.50.1.243', 'kira': 'root@10.50.1.245', 'odo': 'root@10.50.1.244'}
 HOST = RUNNERS['sisko']
 SSH = ['ssh', '-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', HOST]
 SCP = ['scp', '-F', '/dev/null', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
