@@ -54,7 +54,29 @@ smoke bench (`tools/sim/run_osd.py`) and is untested on hardware. Kroy's
 next step after that is `.cht` text loading, which fills the title RAM;
 the table below says what comes from where.
 
-**Not tested yet.** The overlay on hardware; cheats on Zero Mission (three codes are now on the card);
+**2026-09-10 morning.** The overlay drew but repeated at the right edge:
+`clk_vid` is twice the dot clock and the overlay counted every clock;
+`b1c1e2f` gates it on `vid_ce`. Zero Mission's saves show with the gate
+gone. Its cheats did nothing at first because the converter read the
+Action Replay v3 address field as an EWRAM offset; it is a region nibble
+plus a 20-bit offset, so `0030153A` is IWRAM `0x0300153A` (`8abab89`,
+confirmed by the MiSTer cheat archive in
+`~/Desktop/pocket-library/cheats/Metroid - Zero Mission (USA).zip`, whose
+`.gg` records are 16-byte `gba_cheats` words, a ready-made second source
+of decoded cheats). And ROM codes now work on cartridges: `rom_patch.sv`
+(`02d0527`) substitutes plain writes to `08000000..0DFFFFFF` into the
+fetched line, eight slots, a Game Genie. Zero Mission's "Jump In Midair"
+is six Thumb halfword patches at `0x0800958A..0x080093D4`, checked against
+the cart dump (`D10D` bne becomes `D00D` beq), and is in
+`build/cheats/Metroid - Zero Mission (USA).gba.cht` as CodeBreaker writes.
+The v3 ROM-patch pair `00000000 1x00hhhh / 0000vvvv 00000000` patches
+halfword `vvvv` at `0x08000000 + (hhhh << 1)`; the `x` nibble is not
+address. Encrypted v3 codes are still refused by the converter; the TEA
+decrypt with the default seeds is 12 lines of Python (see the `.cht.txt`)
+and would let `.cht` files carry the original codes, at the cost of the
+byte-for-byte parity with the RTL parser. Kroy's call.
+
+**Not tested yet.** The overlay fix, the ROM patch and the IWRAM cheats on hardware;
 physical SRAM/Flash writes on a Flash cart; the abort latch on hardware;
 GPIO/RTC in cart mode (still `gpio_req(1'b0)`).
 
