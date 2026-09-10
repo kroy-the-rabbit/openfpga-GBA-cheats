@@ -416,6 +416,21 @@ roughly one pass in three across seeds, so a fit at 97 % occupancy is a
 lottery ticket. At 135 ALMs per 0.1 ns, closing -0.121 ns by construction
 needs about 165 ALMs of headroom, not another seed.
 
+### Link cable stripped, `a8fcc1c`
+
+| Seed | ALMs | Setup | Result |
+|---|---|---|---|
+| 3 | 17,671 (96 %) | **-0.085** | fail, sisko |
+| 1 | 17,650 (96 %) | **+0.082** | pass, kira; **installed** 2026-09-09 |
+
+Same seed 3 with the link was -0.121 at 17,933: the strip gained 0.036 ns
+for 262 ALMs at STANDARD FIT on this design, against the 0.26 ns it lost on
+the P2 design in August (HANDOFF finding 8). EEPROM bridge real in both.
+Package `kroy.GBA_0.9999.a8fcc1c.zip` SHA-256
+`f2347121f2807d0e5e77bf3c69b2847fad4fc54d0207eb2b68e1cfc1438f9a15`,
+bitstream `d8815f9462f5d4a5`. First fit on the card with a save bridge
+that survives synthesis.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on
