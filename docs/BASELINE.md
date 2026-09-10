@@ -472,6 +472,16 @@ it was always this close.
 The overlay costs about 390 ALMs. Package `kroy.GBA_0.9999.326d602.zip`
 SHA-256 `2a5898dbf51ba120a8aa3262dce421a3c05d043b164886475c212149339add6c`, bitstream `29515e6b39af323e`.
 
+### Overlay pixel enable and read-side ROM patch, `b1c1e2f` and `6c8fd96`
+
+| Commit | Seed | ALMs | Setup | Result |
+|---|---|---|---|---|
+| `b1c1e2f` | 3 | 14,516 (79 %) | +0.103 | pass, sisko; superseded |
+| `6c8fd96` | 3 | 14,833 (80 %) | **+0.101** | pass, sisko; **installed** 2026-09-10 |
+
+`rom_patch` costs about 320 ALMs for eight slots. Package
+`kroy.GBA_0.9999.6c8fd96.zip` SHA-256 `483ca6523b74ab74232f237fb48899835846bc8fbba0a50d0bdf952c41d0747e`, bitstream `dbeb1d8dd1ac2503`.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on
