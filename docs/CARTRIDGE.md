@@ -220,6 +220,20 @@ byte-exact against No-Intro. That is evidence for its complete
 implementation, not proof that either window makes this controller work on
 hardware.
 
+**ROM Timing menu, 2026-09-09.** Zero Mission corrupts the BIOS banner
+differently on every boot while Minish Cap never does, and every captured
+error sat in the first halfword after the address latch. The non-sequential
+read is now selectable from the menu (`ROM Timing`, `cart_cfg[6:5]`) so the
+window can be tested on hardware without a refit. Profile 0 is the parameter
+defaults and is bit-identical to the previous controller.
+
+| Profile | Turnaround, AD released before RD# | First RD# low | Burst halfword, RD# high/period |
+|---|---|---|---|
+| 0 Fast | 0 | 24 clocks, 238 ns | 4/12 clocks, 119 ns |
+| 1 Turnaround | 4 clocks, 40 ns | 24 clocks, 238 ns | 4/12 clocks, 119 ns |
+| 2 GBA Power-On | 4 clocks, 40 ns | 30 clocks, 298 ns | 6/20 clocks, 199 ns |
+| 3 Slow | 8 clocks, 79 ns | 48 clocks, 477 ns | 8/24 clocks, 238 ns |
+
 The following counts were checked by simulating both controllers, not by
 measuring connector pins. At `clk_sys=100.663296 MHz`:
 

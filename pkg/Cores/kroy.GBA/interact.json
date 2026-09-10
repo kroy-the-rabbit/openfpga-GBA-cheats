@@ -130,6 +130,34 @@
         ]
       },
       {
+        "name": "ROM Timing",
+        "id": 55,
+        "type": "list",
+        "enabled": true,
+        "address": "0x98",
+        "persist": true,
+        "writeonly": true,
+        "defaultval": 0,
+        "options": [
+          {
+            "name": "Fast",
+            "value": 0
+          },
+          {
+            "name": "Turnaround",
+            "value": 32
+          },
+          {
+            "name": "GBA Power-On",
+            "value": 64
+          },
+          {
+            "name": "Slow",
+            "value": 96
+          }
+        ]
+      },
+      {
         "name": "CG:",
         "id": 51,
         "type": "number_u32",

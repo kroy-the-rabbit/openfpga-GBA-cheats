@@ -56,6 +56,7 @@ module tb_rom_source_mux #(parameter VIA_ARBITER = 0, HEADER = 0);
     wire b2dir, b3dir;
     wire redrive, no_cs, while_out;
     gba_cart_controller controller (
+        .rom_profile(2'd0),
         .clk(clk), .reset_n(reset_n), .phi_sel(2'd0),
         .cart_tran_bank1(b1), .cart_tran_bank2(b2), .cart_tran_bank3(b3),
         .cart_tran_bank0(b0),

@@ -120,6 +120,10 @@ module gba_cart_controller #(
     // running with WAITCNT=45B7h (PHI=Off). (The "9853/9854" part numbers
     // are 4K/64K EEPROM chips, not GPIO/RTC.)
     input  wire [1:0]  phi_sel,
+    // Non-sequential ROM read profile, from the menu. 0 keeps the parameter
+    // defaults. Higher values add a turnaround between releasing AD and
+    // RD# falling, lengthen the first read, and slow the burst halfwords.
+    input  wire [1:0]  rom_profile,
 
     // ---- Pocket cartridge slot (from core_top) ----
     inout  wire [7:0]  cart_tran_bank2,    // GBA AD[15:8]
@@ -246,6 +250,20 @@ module gba_cart_controller #(
     // ------------------------------------------------------------------
     // Main access state machine
     // ------------------------------------------------------------------
+    reg [3:0] rom_turn;      // clk_sys cycles AD released, RD# high
+    reg [5:0] rom_wait_sel;  // RD# low on the first halfword
+    reg [4:0] seq_wait_sel;  // burst halfword period
+    reg [3:0] seq_high_sel;  // of which RD# is high
+    always @(*) begin
+        case (rom_profile)
+        2'd1:    {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} = {4'd4, 6'd24, 5'd12, 4'd4};
+        2'd2:    {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} = {4'd4, 6'd30, 5'd20, 4'd6};
+        2'd3:    {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} = {4'd8, 6'd48, 5'd24, 4'd8};
+        default: {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} =
+                     {4'd0, ROM_WAIT[5:0], ROM_SEQ_WAIT[4:0], ROM_SEQ_RD_HIGH[3:0]};
+        endcase
+    end
+
     localparam S_IDLE      = 4'd0;
     localparam S_ROM_CS    = 4'd1;   // drive address, then assert CS1#
     localparam S_ROM_DATA  = 4'd2;   // release AD, strobe RD#, sample 16-bit
@@ -504,14 +522,21 @@ module gba_cart_controller #(
                         // latch hold time before releasing it to data.
                         rd_n <= 1'b1;
                         acc_cnt <= acc_cnt + 1'b1;
-                    end else if (acc_cnt == ADDR_SETUP) begin
+                    end else if (acc_cnt < ADDR_SETUP + rom_turn) begin
+                        // Turnaround: AD released, RD# still high, so the
+                        // cart sees a quiet bus before the strobe.
+                        out_bank2_dir <= 1'b0;
+                        out_bank3_dir <= 1'b0;
+                        rd_n          <= 1'b1;
+                        acc_cnt       <= acc_cnt + 1'b1;
+                    end else if (acc_cnt == ADDR_SETUP + rom_turn) begin
                         // Release AD bus (data comes from cart on AD[15:0])
                         // and start the read strobe.
                         out_bank2_dir <= 1'b0;
                         out_bank3_dir <= 1'b0;
                         rd_n          <= 1'b0;   // ~RD falling edge fetches data
                         acc_cnt       <= acc_cnt + 1'b1;
-                    end else if (acc_cnt < ADDR_SETUP + ROM_WAIT - 1) begin
+                    end else if (acc_cnt < ADDR_SETUP + rom_turn + rom_wait_sel - 1) begin
                         rd_n <= 1'b0;
                         acc_cnt <= acc_cnt + 1'b1;
                     end else begin
@@ -548,10 +573,10 @@ module gba_cart_controller #(
                 S_ROM_SEQ: begin
                     cs_n <= 1'b0;                  // held low for the burst
                     wr_n <= 1'b1;
-                    if (acc_cnt < ROM_SEQ_RD_HIGH - 1) begin
+                    if (acc_cnt < seq_high_sel - 1) begin
                         rd_n    <= 1'b1;
                         acc_cnt <= acc_cnt + 1'b1;
-                    end else if (acc_cnt < ROM_SEQ_WAIT - 1) begin
+                    end else if (acc_cnt < seq_wait_sel - 1) begin
                         rd_n    <= 1'b0;           // ~RD falling: cart drives
                         acc_cnt <= acc_cnt + 1'b1;
                     end else begin

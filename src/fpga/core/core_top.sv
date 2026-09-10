@@ -1605,8 +1605,8 @@ synch_3 cart_eeprom_fault_sync(cart_eeprom_fault, cart_eeprom_fault_s, clk_74a);
 // Only the bits with a consumer are carried across. gpio_recover_set is left
 // at the controller's own hardware-proven constant because nothing drives the
 // GPIO port here, and a constant lets the fitter fold its 14-bit compare away.
-wire [4:0] cart_cfg_s;
-synch_3 #(.WIDTH(5)) cart_cfg_sync(cart_cfg[4:0], cart_cfg_s, clk_sys);
+wire [6:0] cart_cfg_s;
+synch_3 #(.WIDTH(7)) cart_cfg_sync(cart_cfg[6:0], cart_cfg_s, clk_sys);
 
 
 // ============================================================
@@ -1989,6 +1989,7 @@ gba_cart_controller cart_ctl (
     .clk                    ( clk_sys ),
     .reset_n                ( cart_ctl_reset_n ),
     .phi_sel                ( cart_cfg_s[1:0] ),
+    .rom_profile            ( cart_cfg_s[6:5] ),
 
     .cart_tran_bank2        ( cart_tran_bank2 ),
     .cart_tran_bank2_dir    ( cart_tran_bank2_dir ),

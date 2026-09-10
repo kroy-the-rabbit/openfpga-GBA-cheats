@@ -157,6 +157,7 @@ module tb_gba_cart_controller;
     wire [7:0]  err_count;
 
     gba_cart_controller dut (
+        .rom_profile(2'd0),
         .clk                    (clk),
         .reset_n                (reset_n),
         .cart_tran_bank2        (cart_tran_bank2),
