@@ -71,11 +71,15 @@ A third dialect, and how it is told apart
 Lists exported for GameShark SP and Action Replay v3 write an 8+8 code whose
 top nibble is 0 but which is not a v1/v2 8-bit assign:
 
-    0WAAAAAA VVVVVVVV    W = 0 one byte, 2 two bytes, 4 four bytes
-                         AAAAAA is an offset into EWRAM, not a bus address
+    0WRAAAAA VVVVVVVV    W = 0 one byte, 2 two bytes, 4 four bytes
+                         R = 2 EWRAM, 3 IWRAM; AAAAA a 20-bit offset
 
-The width is in the second nibble rather than the type, and the address is 24
-bits of EWRAM offset that the hardware's 256 KB mirroring folds down. Nothing
+The width is in the second nibble rather than the type, and the address is a
+region nibble and a 20-bit offset, EWRAM folded by the hardware's 256 KB
+mirroring. Until 2026-09-10 the 24 bits were read as an EWRAM offset, which
+gives the same answer for region 2 and put every IWRAM code 16 MB away:
+Zero Mission's `0030153A 000000C7` is `0x0300153A`, confirmed by the
+MiSTer cheat archive's word for the same cheat. Nothing
 in the file says which dialect a code is in, and the two overlap: `02002AEA
 00000050` is a valid v1/v2 8-bit assign *and* a valid halfword assign here.
 
@@ -301,7 +305,7 @@ def decode_gameshark(op1: int, op2: int) -> tuple[Optional[Entry], str]:
 
 # ------------------------------------------------ GameShark SP / AR v3 --
 # The width lives in the second nibble instead of the type, and the address is
-# an EWRAM offset rather than a bus address. See "A third dialect" in the module
+# a region nibble and an offset rather than a bus address. See "A third dialect" in the module
 # docstring for why this is only ever tried after the v1/v2 reading has failed.
 ARV3_WIDTH = {0x0: 1, 0x2: 2, 0x4: 4}
 
@@ -324,7 +328,15 @@ def decode_arv3(op1: int, op2: int) -> tuple[Optional[Entry], str]:
     # operand wider than the code claims is the cheapest tell of a random word.
     if op2 >> (8 * width):
         return None, "rejected"
-    e = _lane((op1 & 0xFFFFFF & EWRAM_MASK) + EWRAM_BASE, width, op2)
+    region = (op1 >> 20) & 0xF
+    offset = op1 & 0xFFFFF
+    if region == 0x2:
+        addr = EWRAM_BASE + (offset & EWRAM_MASK)
+    elif region == 0x3:
+        addr = 0x3000000 + offset
+    else:
+        return None, "rejected"
+    e = _lane(addr, width, op2)
     if e is None or not address_is_real(e.address):
         return None, "rejected"
     e.kind = "ar"
