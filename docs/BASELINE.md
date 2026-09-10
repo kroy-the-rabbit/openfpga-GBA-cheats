@@ -394,6 +394,24 @@ SHA-256 `1fb8a62e4b464db928de0437438b4b2fa33bfea2434d1f0e91b886d4af82c378`;
 bitstream SHA-256
 `f72426ab1865f8065578573501f793cac82eb75e231681ad7e60b17aea41c3d6`.
 
+### Header checker retired, `32e4c61`
+
+| Seed | ALMs | Setup | Result |
+|---|---|---|---|
+| 3 | 17,933 (97 %) | **-0.121** | fail, sisko, 1490 s |
+
+First fit in which the EEPROM bridge provably survives synthesis:
+`path-analysis.log` reports `EEPROM_BRIDGE transfer_open=1 ctl_req=1
+command_active=1 state=2` and `SNAPSHOT_BITS captured=28 published=28`.
+Two violated paths of twenty, both `gba_cpu|new_cycles_valid` to a
+`gba_cpu` mux; nothing on the cartridge path.
+
+Area is not the lever in this range. `a4fe3f4` failed at 17,925 and passed
+at 17,976; `d7ecfaa` passed at 18,125 and failed at 17,860. Each RTL draws
+roughly one pass in three across seeds, so a fit at 97 % occupancy is a
+lottery ticket. At 135 ALMs per 0.1 ns, closing -0.121 ns by construction
+needs about 165 ALMs of headroom, not another seed.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on
