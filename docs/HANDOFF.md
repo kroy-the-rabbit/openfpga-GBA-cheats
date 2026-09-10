@@ -5,6 +5,70 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-09 night: Zero Mission boots and saves; the fit ceiling is gone
+
+Card holds `5ce25d0` or later (see `docs/BASELINE.md` for the installed
+bitstream). Branch `p5-cartridge`, not pushed.
+
+**What was wrong, in the order it was found.**
+
+1. **The white screen was the ROM read window.** The controller released
+   the address bus and asserted RD# on the same clock. Every captured header
+   error was in the first halfword after the address latch. `ROM Timing` in
+   the menu (`cart_cfg[6:5]`, four profiles, `ec3947b`) settled it on
+   hardware in one evening: Fast freezes white, every profile with a
+   turnaround boots clean every time. Default is now Turnaround (`a315dec`).
+   The dirty-slot theory was wrong; Minish Cap's ROM chip simply tolerates
+   the missing turnaround and Zero Mission's does not.
+2. **No saves was the Read Only gate.** With Cartridge Saves on Writes
+   Enabled, Zero Mission read its saves, wrote a new one, and Analogue's own
+   cartridge mode read that write back. The read-only classifier in
+   `cart_eeprom_bridge` forwarded only 9/17-bit DMA3 requests with a `11`
+   prefix; Zero Mission's request is not that shape, so every read came back
+   as ones. Kroy chose to remove the mode entirely (`5ce25d0`): the bridge
+   forwards every bit raw, the abort latch stays and fires on any
+   interrupted transfer, Cartridge Saves left the menu. `EE:` now shows
+   request counts and the chip's last 16 answer bits when no abort fired
+   (`aaa573a`, `docs/BOOT-DEBUG.md`).
+3. **The fit ceiling was savestates.** Link strip (`a8fcc1c`): 262 ALMs,
+   0.036 ns, one pass in two. Savestate removal (`a68aba1`): about 3,300
+   ALMs, because the save/load muxes in every `eProcReg` folded once the
+   bus went constant. **78 %**, every seed since has closed first time.
+   `gba_top` keeps the reset the savestate module used to generate on
+   `GBA_on` falling. `core.json` drops `sleep_supported` and `link_port`.
+
+**Runners.** `sisko2` (CT 153, `root@10.50.1.243`, NUMA node 1) is in
+`runner-build` and `tools/watch_gba_build.py`. Pinned, sisko and sisko2 fit
+this design in 1013 and 1022 s at once; sisko alone used to take 1450 to
+1530 s. `docs/BUILD-RUNNER.md`.
+
+**Not tested yet.** Cheats on Zero Mission (no codes were on the card);
+physical SRAM/Flash writes on a Flash cart; the abort latch on hardware;
+GPIO/RTC in cart mode (still `gpio_req(1'b0)`).
+
+**Parked, Kroy's call, in this order.**
+
+- **The cheat popup, and with it `.cht` text loading.** `.chtbin` existed
+  only because the text parser did not fit at 97 %; at 78 % that reason is
+  gone. What comes over from the other cores, measured against
+  `../pocket-gbc/src/gb/` (pce's `rtl/pce/` copies are the same modules with
+  a different grid):
+
+  | Piece | From | Work |
+  |---|---|---|
+  | `cheat_font.sv` (595 lines, generated) | gbc | verbatim |
+  | `cheat_titles.sv` (71) | gbc | verbatim |
+  | `cheat_osd.sv` (300) | gbc | regrid 26x18 to 40x20 for 240x160; mux onto `video_adapter`'s output on `clk_vid`; `show` from menu-open, `cart_mode` from `osnotify_cart_play` |
+  | text parser | **ours**, `src/fpga/core/cheat_loader.sv`, in the tree, not in the qsf, cross-checked over 513 libretro files by `tools/sim/run.py`, already recognises `_desc` and `_enable` | add the `desc_wr/group/col/char/end` output block from gbc's parser (~40 lines); qsf line; swap `cheat_binloader` for it in `core_top`; data slot extension `.cht` |
+  | code tokenising, `gba_cheats` 128-bit word | ours | unchanged |
+  | per-cheat enable mask for the overlay | | `gba_cheats` has no per-entry enable; the parser drops disabled cheats, so the overlay's mask is "every pushed group" unless the parser also exposes one |
+
+  Cost: the parser's 441 ALMs plus the overlay's ~360, with 4,000 free.
+  About an evening. `.chtbin` and `cht2bin.py` can stay as an alternative
+  slot or go; that is a format decision.
+- **GPIO/RTC in cart mode.** Ports exist on the controller, nothing drives
+  `gpio_req`.
+
 ## 2026-09-09 evening: the EEPROM bridge was never built into the hardware
 
 **The most important finding on this branch.** Every cartridge build so far,
