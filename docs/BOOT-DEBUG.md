@@ -41,16 +41,15 @@ The abort form:
 | 24 | `reset_n` had dropped |
 | 23 | A bit had been sent |
 | 22 | A request was being accepted on that clock |
-| 21 | A command was active |
+| 21 | Reserved, always 0 |
 | 20 | The access was a read |
 | 19 | A transfer was open |
-| 18 | That transfer was opened with writes enabled |
+| 18 | Reserved, always 0 |
 | 17 | The access was part of a DMA |
 | 16 | A host request was present |
 | 15:0 | The host's bit index |
 
-It is recorded whether or not the guard latched, so a Read Only session
-still explains itself. `SF:` says whether the guard is latched.
+Any abort latches the guard, and `SF:` says whether it is latched.
 
 ## Hardware capture
 

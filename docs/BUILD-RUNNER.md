@@ -213,3 +213,16 @@ before it can drive odo; until then the manual form above works.
 - [ ] `quartus_sh --version` prints the version the repo expects
 - [ ] build script handles root podman
 - [ ] a build completes and its report matches a known-good result
+
+## Third run: sisko2, 2026-09-09
+
+`sisko2` is CT 153 on sisko, pinned to NUMA node 1; `sisko` was re-pinned to
+node 0 at the same time. Same commit `a315dec`, same 78 % design, run at once:
+
+| Runner | Seed | Elapsed | ALMs | Setup |
+|---|---|---|---|---|
+| sisko | 3 | 1013 s | 14,361 | +0.103 |
+| sisko2 | 1 | 1022 s | 14,386 | +0.093 |
+
+Two fits in the time one used to take; the earlier sisko runs on this design
+family were 1450 to 1530 s, so the NUMA pinning alone is worth about 30 %.

@@ -107,8 +107,7 @@ hardware or supply your own copy.
 ## Usage
 
 ROMs go in `/Assets/gba/common/`. Choose **Play Cartridge** in the asset
-browser to use the inserted cartridge. Cartridge saves default to Read Only;
-physical writes require the explicit test setting. This automatic launch path
+browser to use the inserted cartridge. Cartridge saves are live, reads and writes. This automatic launch path
 is installed in `417a55f` and awaiting hardware qualification. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) covers
 the current hardware results and diagnostic readouts.
 

@@ -249,7 +249,6 @@ reg        cart_detect = 1'b0;  // header probe passed, driven at the bottom
 reg        cprobe_done = 1'b0;  // header probe has finished, pass or fail
 reg [31:0] cart_hdr_id = 32'd0; // header 0xAC..0xAF, the game code
 wire       cart_rom_mode = cart_rom_select_s & cart_hw_enable_s & cart_detect;
-wire       cart_writes_s;
 wire       cart_save_req, cart_save_rnw, cart_save_done;
 wire [16:0] cart_save_addr;
 wire [7:0] cart_save_din, cart_save_dout;
@@ -1550,7 +1549,6 @@ reg ff_video_stable = 1'b1; // 0 = Classic FF, 1 = wait for complete rendered li
 
 // Read-only at every launch. EEPROM read-address commands still need WR#;
 // cart_eeprom_bridge validates their opcode before any pin activity.
-reg       cart_writes = 1'b0;
 
 // Controller tuning, written at 0x98. Quasi-static: phi_sel and the GPIO
 // timing mode are settings, not per-access data, which is what the multicycle
@@ -1574,7 +1572,6 @@ always @(posedge clk_74a) begin
         32'hF3000008: cheats_master <= bridge_wr_data[0];
         // Former Cartridge mode address 0x90 is ignored, including stale
         // persisted Boot values from older packages. APF selects the source.
-        32'h94: cart_writes <= bridge_wr_data[0];
         32'h98: cart_cfg <= bridge_wr_data;           // controller tuning
         endcase
     end
@@ -1599,7 +1596,6 @@ synch_3 ff_video_stable_sync(ff_video_stable, ff_video_stable_s, clk_sys);
 wire cart_hw_requested_74a = osnotify_cart_play & osnotify_cart_power;
 synch_3 cart_hw_sync(cart_hw_requested_74a, cart_hw_enable_s, clk_sys);
 synch_3 cart_play_sync(osnotify_cart_play, cart_rom_select_s, clk_sys);
-synch_3 cart_writes_sync(cart_writes, cart_writes_s, clk_sys);
 synch_3 cart_eeprom_fault_sync(cart_eeprom_fault, cart_eeprom_fault_s, clk_74a);
 
 // Only the bits with a consumer are carried across. gpio_recover_set is left
@@ -1944,21 +1940,11 @@ wire        ctl_ee_req, ctl_ee_rnw, ctl_ee_din, ctl_ee_dma;
 wire        ctl_ee_done, ctl_ee_dout;
 wire        ee_bridge_req, ee_bridge_rnw, ee_bridge_din, ee_bridge_dma, ee_bridge_done;
 wire        arb_save_done;
-reg         save_denied_done = 1'b0;
 
-// SRAM/Flash commands are byte writes too: read-only mode suppresses all
-// of them. The game may require Writes Enabled for Flash ID/bank commands.
-// Latch the deny response at request time, rather than changing an in-flight
-// request when the menu setting changes.
-always @(posedge clk_sys) begin
-    save_denied_done <= cart_ctl_reset_n && cart_rom_mode && cart_save_req &&
-                        !cart_save_rnw && !cart_writes_s;
-end
-assign cart_save_done = arb_save_done | save_denied_done;
+assign cart_save_done = arb_save_done;
 
 cart_eeprom_bridge ee_bridge (
     .clk(clk_sys), .reset_n(cart_ctl_reset_n && !core_reset_s),
-    .write_enable(cart_writes_s),
     .host_req(cart_eeprom_req && cart_rom_mode), .host_rnw(cart_eeprom_rnw),
     .host_din(cart_eeprom_din), .host_dma(cart_eeprom_dma),
     .host_dma_active(cart_eeprom_dma_active), .fault(cart_eeprom_fault),
@@ -1973,7 +1959,7 @@ cart_bus_arbiter cart_arb (
     .clk(clk_sys), .reset_n(cart_ctl_reset_n),
     .probe_req(cprobe_req), .probe_addr({19'd0, cprobe_idx}), .probe_done(cart_rd_ready),
     .rom_req(romsrc_cart_rd_req), .rom_addr(romsrc_cart_rd_addr), .rom_done(cart_rom_ready),
-    .save_req(cart_save_req && cart_rom_mode && (cart_save_rnw || cart_writes_s)),
+    .save_req(cart_save_req && cart_rom_mode),
     .save_addr(cart_save_addr), .save_rnw(cart_save_rnw), .save_din(cart_save_din),
     .save_done(arb_save_done),
     .ee_req(ee_bridge_req), .ee_rnw(ee_bridge_rnw), .ee_din(ee_bridge_din),

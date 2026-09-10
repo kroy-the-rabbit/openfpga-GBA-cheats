@@ -3,7 +3,7 @@
 // serial-chip reset behavior is assumed or used to recover an abort.
 `timescale 1ns/1ps
 module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
-    reg clk=0, reset_n=0, write_enable=0;
+    reg clk=0, reset_n=0;
     always #5 clk=~clk;
     reg host_req=0, host_rnw=0, host_din=0, host_dma=1, host_last=0;
     reg host_dma_active=1;
@@ -78,15 +78,14 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
         integer previous;
         begin
             previous=accepted;
-            host_dma_active=1;write_enable=0;host_count=73;
-            bit_access(1,0);bit_access(0,0);
-            write_enable=1;bit_access(1,0);
+            host_dma_active=1;host_count=73;
+            bit_access(1,0);bit_access(0,0);bit_access(1,0);
             host_rnw=1;host_dma=0;bit_access(0,1);
             if (host_dout!==1 || accepted!=previous || fault!==1)
                 $fatal(1,"case%0d fault did not block subsequent traffic",CASE_ID);
             @(negedge clk);reset_n=0;
             repeat(4) @(negedge clk);reset_n=1;
-            host_rnw=0;host_dma=1;write_enable=1;bit_access(1,0);
+            host_rnw=0;host_dma=1;bit_access(1,0);
             if (fault!==1 || accepted!=previous)
                 $fatal(1,"case%0d soft reset cleared fault or forwarded traffic",CASE_ID);
         end
@@ -96,27 +95,24 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
         repeat(4) @(negedge clk);reset_n=1;
         case (CASE_ID)
             0: begin
-                // A locally buffered prefix or denied program never touched
-                // the chip: abort clears policy without latching a fault.
-                host_count=17;bit_access(1,0);host_dma_active=0;
+                // DMA dropped before any bit was forwarded: nothing physical
+                // is in flight, so no fault, and fresh traffic still works.
+                host_count=17;host_dma_active=0;
                 repeat(4) @(negedge clk);
-                if (fault!==0 || accepted!=0) $fatal(1,"buffered abort faulted");
+                if (fault!==0 || accepted!=0) $fatal(1,"idle abort faulted");
                 host_dma_active=1;host_count=9;
                 for(i=0;i<9;i=i+1) bit_access(i<2,i==8);
                 host_dma_active=0;repeat(4) @(negedge clk);
-                if (fault!==0 || accepted!=9) $fatal(1,"fresh read after buffered abort failed");
+                if (fault!==0 || accepted!=9) $fatal(1,"fresh read after idle abort failed");
                 host_dma_active=1;host_count=81;
-                bit_access(1,0);bit_access(0,0);host_dma_active=0;
-                repeat(4) @(negedge clk);
-                host_dma_active=1;write_enable=1;
                 for(i=0;i<81;i=i+1) bit_access(i==0,i==80);
-                if (fault!==0 || accepted!=90) $fatal(1,"denied abort retained old policy");
+                if (fault!==0 || accepted!=90) $fatal(1,"completed program after idle abort faulted");
             end
             1: begin
                 // Original bug: aborted enabled command authorized a later
                 // disabled DMA, even when its transfer count was different.
-                write_enable=1;bit_access(1,0);bit_access(0,0);
-                host_dma_active=0;write_enable=0;repeat(4) @(negedge clk);
+                bit_access(1,0);bit_access(0,0);
+                host_dma_active=0;repeat(4) @(negedge clk);
                 if (fault!==1) $fatal(1,"physical abort did not latch fault");
                 check_fault_why();
                 retire_without_completion();
@@ -125,7 +121,7 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
             2: begin
                 // Preemption leaves DMA3 active. Permission stays fixed until
                 // the final bit; final completion and DMA drop may coincide.
-                write_enable=1;bit_access(1,0);bit_access(0,0);write_enable=0;
+                bit_access(1,0);bit_access(0,0);
                 repeat(150) @(negedge clk);
                 for(i=2;i<80;i=i+1) bit_access(0,0);
                 launch(0,1);wait(host_done);host_dma_active=0;
@@ -133,31 +129,9 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
                 if (fault!==0 || accepted!=81 || completed!=81)
                     $fatal(1,"normal last completion plus DMA drop faulted");
             end
-            4: begin
-                // Read-only abort while physically pending. Writes were
-                // disabled when the transfer opened, so nothing forwarded
-                // could alter the chip: record the reason, retire the bit,
-                // and leave the save path usable for the rest of the session.
-                write_enable=0;host_count=17;bit_access(1,0);
-                launch(1,0);wait(accepted==1);
-                @(negedge clk);host_dma_active=0;retire();
-                if (fault!==0)
-                    $fatal(1,"read-only abort latched the guard");
-                check_fault_why();
-                wait(completed==1);
-                repeat(8) @(negedge clk);
-                if (accepted!=1 || completed!=1)
-                    $fatal(1,"case4 failed to drain exactly one accepted bit");
-                // The path must still work afterwards.
-                host_dma_active=1;host_count=9;
-                for(i=0;i<9;i=i+1) bit_access(i<2,i==8);
-                if (fault!==0 || accepted!=10)
-                    $fatal(1,"read-only abort blocked later traffic");
-            end
             3: begin
-                // Abort while physically pending, writes enabled: the guard
-                // latches, because a write may have been in flight.
-                write_enable=1;
+                // Abort while physically pending: the guard latches, because
+                // a write may have been in flight.
                 launch(1,0);wait(accepted==1);
                 @(negedge clk);host_dma_active=0;retire();
                 // The host retires on the fault rather than on the drain, so
@@ -172,18 +146,18 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
                     $fatal(1,"case3 failed to drain exactly one accepted bit");
                 reject_after_fault();
             end
-            5: begin
+            4: begin
                 // Soft reset itself must capture the physical parser hazard.
-                write_enable=1;bit_access(1,0);bit_access(0,0);
+                bit_access(1,0);bit_access(0,0);
                 @(negedge clk);reset_n=0;
                 repeat(4) @(negedge clk);reset_n=1;
                 if (fault!==1) $fatal(1,"soft reset of partial command did not fault");
                 reject_after_fault();
             end
-            6: begin
+            5: begin
                 // A new host request may arrive on the clock retiring the
                 // previous final completion. It must open a fresh monitor.
-                write_enable=1;host_rnw=1;host_count=1;
+                host_rnw=1;host_count=1;
                 launch(0,1);wait(host_done);
                 @(negedge clk);host_req=1;host_rnw=0;host_din=1;host_last=0;host_count=81;
                 @(negedge clk);host_req=0;retire();
@@ -197,9 +171,9 @@ module eeprom_abort_case #(parameter CASE_ID=0)(output reg finished=0);
     end
 endmodule
 module tb_cart_eeprom_abort;
-    wire [6:0] finished;
+    wire [5:0] finished;
     genvar i;
-    generate for(i=0;i<7;i=i+1) begin: cases
+    generate for(i=0;i<6;i=i+1) begin: cases
         eeprom_abort_case #(.CASE_ID(i)) test_case(finished[i]);
     end endgenerate
     initial begin wait(&finished);$finish;end

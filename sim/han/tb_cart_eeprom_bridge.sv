@@ -3,7 +3,7 @@
 module eeprom_bridge_case #(parameter ADDR_BITS=14, parameter PROGRAM_BUSY_POLLS=0, parameter DMA_FALL_ON_DONE=0)(output reg finished=0);
     localparam [ADDR_BITS-1:0] BLOCK37=37, BLOCK39=39;
     localparam READ_BITS=ADDR_BITS+3, WRITE_BITS=ADDR_BITS+67;
-    reg clk=0, reset_n=0, write_enable=0;
+    reg clk=0, reset_n=0;
     always #5 clk=~clk;
     reg host_req=0, host_rnw=1, host_din=0, host_dma=1, host_last=1;
     // DMA3 remains active across individual request/response gaps.
@@ -18,7 +18,7 @@ module eeprom_bridge_case #(parameter ADDR_BITS=14, parameter PROGRAM_BUSY_POLLS
     always @(posedge clk) if(ctl_req) transfers=transfers+1;
     always @(negedge bank0[6]) if(reset_n) write_edges=write_edges+1;
     cart_eeprom_bridge bridge (
-        .clk(clk), .reset_n(reset_n), .write_enable(write_enable), .fault(fault),
+        .clk(clk), .reset_n(reset_n), .fault(fault),
         .host_req(host_req), .host_rnw(host_rnw), .host_din(host_din),
         .host_dma(host_dma), .host_dma_active(host_dma_active),
         .host_last(host_last), .host_count(host_count),
@@ -67,7 +67,6 @@ module eeprom_bridge_case #(parameter ADDR_BITS=14, parameter PROGRAM_BUSY_POLLS
         begin
             for(i=count-1;i>=0;i=i-1) begin
                 bit_access(0,value[i],1,i==0,count,ignored);
-                if(count-1-i==toggle_after) write_enable=~write_enable;
             end
         end
     endtask
@@ -105,27 +104,14 @@ module eeprom_bridge_case #(parameter ADDR_BITS=14, parameter PROGRAM_BUSY_POLLS
         repeat(5) @(negedge clk); reset_n=1; repeat(20) @(negedge clk);
         original=cart.mem[37];neighbor=cart.mem[38];
         before_transfers=transfers;before_edges=write_edges;
-        send_command({2'b10,BLOCK37,64'h0123_4567_89ab_cdef,1'b0},WRITE_BITS,-1);
-        send_command({2'b10,BLOCK37,1'b0},READ_BITS,-1);
-        send_command({2'b01,BLOCK37,1'b0},READ_BITS,-1);
-        bit_access(0,1,0,1,0,ignored);
-        if(transfers!=before_transfers || write_edges!=before_edges || cart.writes!=0)
-            $fatal(1,"FAIL: disabled/malformed EEPROM writes reached physical bus");
+        // An existing save reads back untouched, then programs.
         read_block(37,original);
-        if(cart.writes!=0) $fatal(1,"FAIL: read-only existing save read programmed EEPROM");
-        // Permission changes cannot allow the tail of a rejected command.
-        before_transfers=transfers;before_edges=write_edges;
-        send_command({2'b10,BLOCK37,64'h0123_4567_89ab_cdef,1'b0},WRITE_BITS,1);
-        if(transfers!=before_transfers || write_edges!=before_edges)
-            $fatal(1,"FAIL: enabling writes midway forwarded rejected command tail");
-        // Permission now on: complete a write even if switched off after
-        // the first two bits. Truncating a physical command is not safe.
-        send_command({2'b10,BLOCK37,64'h0123_4567_89ab_cdef,1'b0},WRITE_BITS,1);
+        if(cart.writes!=0) $fatal(1,"FAIL: existing save read programmed EEPROM");
+        send_command({2'b10,BLOCK37,64'h0123_4567_89ab_cdef,1'b0},WRITE_BITS,-1);
         if(cart.writes!=1 || cart.mem[37]!==64'h0123_4567_89ab_cdef || bank0[4]!==1)
-            $fatal(1,"FAIL: enabled write completion or explicit final-bit boundary");
+            $fatal(1,"FAIL: write completion or explicit final-bit boundary");
         if(PROGRAM_BUSY_POLLS>0) poll_program();
         read_block(37,64'h0123_4567_89ab_cdef);
-        write_enable=1;
         // Same-direction DMA commands back to back must remain separate.
         send_command({2'b10,BLOCK37,64'hfeca_ba98_7654_3210,1'b0},WRITE_BITS,-1);
         if(PROGRAM_BUSY_POLLS>0) poll_program();
@@ -144,14 +130,14 @@ module eeprom_bridge_case #(parameter ADDR_BITS=14, parameter PROGRAM_BUSY_POLLS
         @(negedge clk); reset_n=0;
         repeat(5) @(negedge clk); reset_n=1;
         repeat(20) @(negedge clk);
-        write_enable=0;host_dma_active=1;
+        host_dma_active=1;
         read_block(37,64'hfeca_ba98_7654_3210);
         read_block(39,64'hc35a_e718_049b_d26f);
         if(cart.writes!=3 || cart.mem[38]!==neighbor)
             $fatal(1,"FAIL: programmed saves changed across FPGA reset");
         if(fault !== 0) $fatal(1,"FAIL: normal completed EEPROM traffic latched abort fault");
         $display("PASS: %0d-bit EEPROM busy polls=%0d, DMA fall at done=%0d and readback after FPGA reset",ADDR_BITS,PROGRAM_BUSY_POLLS,DMA_FALL_ON_DONE);
-        $display("PASS: %0d-bit EEPROM bridge read-only preservation, permission latching, existing saves and physical program/readback", ADDR_BITS);
+        $display("PASS: %0d-bit EEPROM bridge existing saves and physical program/readback", ADDR_BITS);
         finished=1;
     end
 endmodule

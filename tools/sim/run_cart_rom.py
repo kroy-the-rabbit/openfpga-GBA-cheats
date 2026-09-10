@@ -39,7 +39,7 @@ Ten passes.
 
 9. sim/han/tb_cart_sram_integration.sv runs the real top-level save-write
    policy, arbiter and cartridge controller with concurrent ROM traffic and
-   thousands of SRAM reads, copy writes, verification reads and denied writes.
+   thousands of SRAM reads, copy writes and verification reads.
 
 10. The header variant of the mux/arbiter bench reads the verified BMXE
     header from the cartridge pin model and checks the passive diagnostic.
@@ -139,7 +139,7 @@ def main() -> int:
                   os.path.join(BUILD, "tb_cart_eeprom_abort"),
                   [os.path.join(ROOT, "sim", "han", "tb_cart_eeprom_abort.sv"), EEPROM_BRIDGE],
                   top="tb_cart_eeprom_abort")
-    passes += run("Physical SRAM and ROM integration, copy verification and denied writes",
+    passes += run("Physical SRAM and ROM integration and copy verification",
                   os.path.join(BUILD, "tb_cart_sram_integration"),
                   [os.path.join(ROOT, "sim", "han", "tb_cart_sram_integration.sv"),
                    os.path.join(ROOT, "src", "fpga", "core", "core_top.sv"),

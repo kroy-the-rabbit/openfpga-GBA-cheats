@@ -24,7 +24,6 @@ module tb_cart_sram_integration;
         force top.cart_ctl_reset_n=reset_n;
         force top.cart_hw_enable_s=1;
         force top.cart_rom_mode=1;
-        force top.cart_writes_s=writes_enabled;
         force top.cprobe_req=0;
         force top.ee_bridge_req=0;
         force top.cart_cfg_s=0;
@@ -95,8 +94,7 @@ module tb_cart_sram_integration;
             if(!top.cart_save_done) $fatal(1,"FAIL SRAM request timeout at %h",addr);
             result=top.cart_save_dout;
             if(rnw) host_reads=host_reads+1;
-            else if(writes_enabled) host_writes=host_writes+1;
-            else denied_writes=denied_writes+1;
+            else host_writes=host_writes+1;
             @(negedge clk);
         end
     endtask
@@ -145,11 +143,6 @@ module tb_cart_sram_integration;
                 check_byte(17'h0000,seed_byte(0));
                 check_byte(17'h7ff0,seed_byte(16'h7ff0));
                 check_byte(17'h7fff,seed_byte(16'h7fff));
-                for(i=0;i<4096;i=i+1) begin
-                    byte_access(0,i[16:0],8'h00,ignored);
-                    check_byte(i[16:0],seed_byte(i));
-                end
-                if(physical_writes!=0) $fatal(1,"FAIL denied write reached cartridge pins");
                 writes_enabled=1;
                 // Copy 4KiB through host reads/writes, including 7FF0/7FFF.
                 for(i=0;i<4096;i=i+1) begin
@@ -158,18 +151,13 @@ module tb_cart_sram_integration;
                 end
                 for(i=0;i<4096;i=i+1) check_byte(17'h7000+i[16:0],seed_byte(i));
                 check_byte(17'h6fff,seed_byte(16'h6fff));
-                writes_enabled=0;
-                byte_access(0,17'h7ff0,8'hff,ignored);
-                byte_access(0,17'h7fff,8'hff,ignored);
-                check_byte(17'h7ff0,seed_byte(16'hff0));
-                check_byte(17'h7fff,seed_byte(16'hfff));
                 if(physical_writes!=4096 || physical_reads!=host_reads)
                     $fatal(1,"FAIL SRAM duplicate/lost pin transaction reads=%0d/%0d writes=%0d",physical_reads,host_reads,physical_writes);
                 stress_done=1;
             end
         join
         if(top.cart_arb.busy || rom_reads<1000) $fatal(1,"FAIL queue did not drain or ROM not exercised");
-        $display("PASS SRAM integration: %0d byte reads, %0d copy writes, %0d denied writes, %0d concurrent ROM reads",host_reads,host_writes,denied_writes,rom_reads);
+        $display("PASS SRAM integration: %0d byte reads, %0d copy writes, %0d concurrent ROM reads",host_reads,host_writes,rom_reads);
         $finish;
     end
     initial begin #100000000; $fatal(1,"FAIL SRAM integration watchdog");end

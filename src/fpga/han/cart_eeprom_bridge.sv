@@ -1,16 +1,26 @@
 `default_nettype none
 
-// Serial cartridge EEPROM policy and request buffer.
-// Reading the EEPROM starts with WR# pulses carrying 11 + address + 0.
-// Read-only mode therefore cannot simply disable WR#. Only DMA3 read-command
-// lengths (9/17 bits) with a verified 11 prefix are forwarded. Both prefix
-// bits are buffered before either reaches the chip: rejecting 10 after its
-// first bit would leave the physical serial parser part-way into a command.
-// The memory bus supplies actual DMA3 ownership and an explicit last bit.
+// Serial cartridge EEPROM request buffer.
+// Every host bit is forwarded to the bus controller as it arrives; the
+// bridge adds nothing to the protocol. What it keeps is the transfer
+// lifetime: an interrupted physical WRITE cannot safely be restarted by
+// pulsing CS#, so an abort in the middle of a transfer sets a fail-closed
+// latch that blocks further EEPROM traffic until a controller reset.
+//
+// 2026-09-09: the read-only policy, which forwarded only DMA3 read commands
+// of 9 or 17 bits with a verified 11 prefix, was removed. Zero Mission's
+// save request does not fit that shape, so every read came back as ones and
+// the game showed no saves. With raw forwarding it reads and writes, and
+// Analogue's own cartridge mode reads the write back.
+//
+// The fault latch once had no clear at all, and that killed the whole save
+// path: `fault` fed the condition that clears `transfer_open`, which feeds
+// the abort, which sets `fault`. Quartus resolved that cycle to a constant
+// and the fitted bridge was one ALM. `scripts/inspect_timing.tcl` fails a
+// build where these registers do not survive.
 module cart_eeprom_bridge (
     input  wire        clk,
     input  wire        reset_n,
-    input  wire        write_enable,
 
     input  wire        host_req,
     input  wire        host_rnw,
@@ -29,159 +39,87 @@ module cart_eeprom_bridge (
     output reg         ctl_dma,
     input  wire        ctl_dout,
     input  wire        ctl_done,
-    // An interrupted physical serial WRITE cannot safely be restarted by
-    // pulsing CS#, so this is a fail-closed latch. It is cleared by a
-    // controller reset, which has already ended any physical transfer.
-    //
-    // 2026-09-09: it used to have no clear at all, and that killed the whole
-    // save path. `fault` fed the condition that clears `transfer_open`, which
-    // feeds `abort_fault`, which sets `fault`. With no reset to anchor it,
-    // Quartus resolved that cycle to the degenerate fixed point and reported
-    // `fault` "Stuck at VCC", `transfer_open`, `ctl_req` and `command_active`
-    // "Stuck at GND", and `host_dout` "Stuck at VCC". The fitted bridge was
-    // one ALM and two registers: no EEPROM access was ever issued to a
-    // cartridge, every read returned ones, and `SF` reported a fault that
-    // was a constant. `scripts/inspect_timing.tcl` now fails a build where
-    // these registers do not survive.
-    // With write_enable low the bridge cannot alter the chip, so the latch
-    // is not armed; `fault_why` still records the first abort condition.
+
     output wire        fault,
-    // Why the latch fired, sampled on the clock it fired and held. Marker
-    // E in 31:28, FSM state 27:26, then dma_active dropped, reset_n
-    // dropped, transfer_sent, ctl_req, command_active, host_rnw,
-    // transfer_open, transfer_writable, host_dma, host_req, and the host's bit
-    // index in 15:0. Recorded on the first abort condition whether or not
-    // it latched the guard, so a read-only session still explains itself.
+    // Why the latch fired, sampled on that clock and held. Marker E in
+    // 31:28, FSM state 27:26, then dma_active dropped, reset_n dropped,
+    // transfer_sent, ctl_req, reserved, host_rnw, transfer_open, reserved,
+    // host_dma, host_req, and the host's bit index in 15:0.
     output wire [31:0] fault_why
 );
-
-    // These carry their power-up values on internal registers and are driven
-    // out through wires. An initialiser written on a port declaration is not
-    // reliably honoured: with `fault` declared `output reg fault = 1'b0` the
-    // fitter treated it as having no defined power-up state and resolved the
-    // cycle through `transfer_open` to the degenerate answer, reporting
-    // `fault` "Stuck at VCC" and the rest of the bridge "Stuck at GND".
-    reg        fault_r = 1'b0;
+    // Power-up values live on internal registers driven out through wires;
+    // an initialiser on a port declaration is not reliably honoured.
+    reg        fault_r     = 1'b0;
     reg [31:0] fault_why_r = 32'd0;
-    assign fault = fault_r;
+    assign fault     = fault_r;
     assign fault_why = fault_why_r;
 
-    localparam [1:0] IDLE = 2'd0, WAIT_BIT = 2'd1,
-                     WAIT_PREFIX = 2'd2, ISSUE_SECOND = 2'd3;
-    reg [1:0] state;
-    reg command_active;
-    reg command_raw;
-    reg command_allowed;
-    reg prefix_pending;
-    reg second_dma;
-    reg host_last_r;
-    reg transfer_open = 1'b0;
-    reg transfer_sent = 1'b0;
-    // Whether writes were enabled when this physical transfer was opened.
-    // The instantaneous write_enable is the wrong gate: a write can be in
-    // flight when the switch is turned off.
-    reg transfer_writable = 1'b0;
+    localparam IDLE     = 2'd0;
+    localparam WAIT_BIT = 2'd1;
+    reg [1:0] state = IDLE;
+    reg       host_last_r = 1'b1;
+    reg       transfer_open = 1'b0;
+    reg       transfer_sent = 1'b0;
 
     // ctl_req is the request accepted by the outer queue on this edge. Count
     // it even if DMA/reset changes simultaneously: the accepted bit may drain.
     wire abort_condition = transfer_open && (transfer_sent || ctl_req) &&
                            (!host_dma_active || !reset_n) &&
                            !(host_done && host_last_r);
-    // The latch protects the chip from a half-finished WRITE. With writes
-    // disabled the bridge forwards only verified read commands, so nothing
-    // it sends can alter what the chip stores; an interrupted read leaves
-    // the serial parser confused, which costs reads, not data. Record the
-    // condition either way; latch only when the interrupted transfer was
-    // opened with writes enabled. 2026-09-09: on hardware the guard latched
-    // with Cartridge Saves on Read Only, and its own recorded reason showed
-    // no interrupted transfer at all.
-    wire abort_fault = abort_condition && transfer_writable;
-    // `fault_r` is deliberately absent from the transfer-tracking clear
-    // below; it closed the cycle that let the whole module fold away.
 
-    wire read_command_length = host_count == 17'd9 || host_count == 17'd17;
-
-    // This reset is synchronous so the first reset clock can record a live
-    // physical transfer before clearing policy/FSM state. The bus controller
-    // owns the electrical pulse; a bridge-only soft reset does not truncate
-    // it. APF reset or loss of cartridge power can also reset that controller
-    // and is not a promise of electrically safe write interruption.
+    // The reset is synchronous so the first reset clock can record a live
+    // physical transfer before clearing the FSM. The bus controller owns the
+    // electrical pulse and finishes it on its own.
     always @(posedge clk) begin
         if (abort_condition && fault_why_r == 32'd0) begin
             fault_why_r <= {4'hE, state, !host_dma_active, !reset_n,
-                          transfer_sent, ctl_req, command_active, host_rnw,
-                          transfer_open, transfer_writable, host_dma, host_req,
-                          host_count[15:0]};
+                            transfer_sent, ctl_req, 1'b0, host_rnw,
+                            transfer_open, 1'b0, host_dma, host_req,
+                            host_count[15:0]};
         end
-        if (abort_fault) fault_r <= 1'b1;
+        if (abort_condition) fault_r <= 1'b1;
 
-        // `fault` deliberately does not appear here. It gated this clear
-        // until 2026-09-09, closing the cycle described above.
-        if (!reset_n || !host_dma_active || abort_fault) begin
+        // `fault` deliberately does not appear here; see the header.
+        if (!reset_n || !host_dma_active || abort_condition) begin
             transfer_open <= 1'b0;
             transfer_sent <= 1'b0;
-            transfer_writable <= 1'b0;
         end else begin
             if (host_done && host_last_r) begin
                 // The last physical bit has completed, not merely queued.
                 transfer_open <= 1'b0;
                 transfer_sent <= 1'b0;
-                transfer_writable <= 1'b0;
             end
             if (state == IDLE && host_req && host_dma &&
                 (!transfer_open || (host_done && host_last_r))) begin
                 transfer_open <= 1'b1;
                 transfer_sent <= 1'b0;
-                transfer_writable <= write_enable;
             end
             if (ctl_req) transfer_sent <= 1'b1;
         end
 
         if (!reset_n) begin
-            state           <= IDLE;
-            command_active  <= 1'b0;
-            command_raw     <= 1'b0;
-            command_allowed <= 1'b0;
-            prefix_pending  <= 1'b0;
-            second_dma      <= 1'b0;
-            host_last_r     <= 1'b1;
-            host_dout       <= 1'b1;
-            host_done       <= 1'b0;
-            ctl_req         <= 1'b0;
-            ctl_rnw         <= 1'b1;
-            ctl_din         <= 1'b0;
-            ctl_dma         <= 1'b0;
+            state       <= IDLE;
+            host_last_r <= 1'b1;
+            host_dout   <= 1'b1;
+            host_done   <= 1'b0;
+            ctl_req     <= 1'b0;
+            ctl_rnw     <= 1'b1;
+            ctl_din     <= 1'b0;
+            ctl_dma     <= 1'b0;
         end else begin
             host_done <= 1'b0;
             ctl_req   <= 1'b0;
-            if (!host_dma_active) begin
-                command_active  <= 1'b0;
-                command_raw     <= 1'b0;
-                command_allowed <= 1'b0;
-                prefix_pending  <= 1'b0;
-            end
-            // Any abort condition retires the accepted bit and drops the
-            // policy, latched or not: the retirement path must not depend on
-            // the permanent latch, or a read-only abort would hang the
-            // emulated memory bus exactly as a faulted one used to.
             if (fault_r || abort_condition) begin
-                command_active  <= 1'b0;
-                command_raw     <= 1'b0;
-                command_allowed <= 1'b0;
-                prefix_pending  <= 1'b0;
+                // Retire the accepted bit immediately instead of waiting on
+                // ctl_done: cart_bus_arbiter only forwards that done while
+                // EEPROM is the active master, so waiting can hang
+                // gba_memorymux's CART_EEPROM_WAIT forever. No new ctl_req
+                // is issued once faulted; the host reads ones.
                 host_dout <= 1'b1;
                 case (state)
-                    // Retire the accepted bit immediately instead of waiting
-                    // on ctl_done. The transfer is already dead, and
-                    // cart_bus_arbiter only forwards that done while EEPROM
-                    // is the active master, so waiting on it can hang
-                    // gba_memorymux's CART_EEPROM_WAIT forever: a stopped CPU
-                    // with the audio DMA still looping its buffer. The bus
-                    // controller owns the electrical pulse and finishes it on
-                    // its own; no new ctl_req is issued once faulted.
-                    WAIT_BIT, WAIT_PREFIX, ISSUE_SECOND: begin
+                    WAIT_BIT: begin
                         host_done <= 1'b1;
-                        state <= IDLE;
+                        state     <= IDLE;
                     end
                     default: if (host_req) host_done <= 1'b1;
                 endcase
@@ -192,88 +130,13 @@ module cart_eeprom_bridge (
                         // The memory bus may retire a bit after DMA aborts.
                         host_dout <= 1'b1;
                         host_done <= 1'b1;
-                    end else if (host_rnw) begin
-                        // Reads include DMA data bursts and individual CPU
-                        // ready polls. Each CPU access closes its selection.
-                        command_active <= 1'b0;
-                        prefix_pending <= 1'b0;
-                        ctl_req  <= 1'b1;
-                        ctl_rnw  <= 1'b1;
-                        ctl_din  <= 1'b0;
-                        ctl_dma  <= host_dma && !host_last;
-                        state    <= WAIT_BIT;
-                    end else if (!command_active || !host_dma || !host_dma_active) begin
-                        command_active  <= host_dma && !host_last;
-                        command_raw     <= write_enable;
-                        command_allowed <= host_dma && read_command_length &&
-                                           host_din && !host_last;
-                        prefix_pending  <= !write_enable && host_dma &&
-                                           read_command_length && host_din && !host_last;
-                        if (write_enable) begin
-                            ctl_req <= 1'b1;
-                            ctl_rnw <= 1'b0;
-                            ctl_din <= host_din;
-                            ctl_dma <= host_dma && !host_last;
-                            state   <= WAIT_BIT;
-                        end else begin
-                            // Either a locally buffered first read-command
-                            // bit, or denied traffic. Neither clocks the cart.
-                            host_dout <= 1'b1;
-                            host_done <= 1'b1;
-                        end
                     end else begin
-                        if (host_last || !host_dma)
-                            command_active <= 1'b0;
-
-                        if (command_raw) begin
-                            // Permission is fixed at the start of a command.
-                            // Toggling the menu must not cut a program burst.
-                            ctl_req <= 1'b1;
-                            ctl_rnw <= 1'b0;
-                            ctl_din <= host_din;
-                            ctl_dma <= host_dma && !host_last;
-                            state   <= WAIT_BIT;
-                        end else if (prefix_pending) begin
-                            prefix_pending <= 1'b0;
-                            if (host_dma && host_din && !host_last && read_command_length) begin
-                                // Prefix 11 is now known. Replay the first
-                                // bit, then this host bit, before acknowledging.
-                                ctl_req    <= 1'b1;
-                                ctl_rnw    <= 1'b0;
-                                ctl_din    <= 1'b1;
-                                ctl_dma    <= 1'b1;
-                                second_dma <= host_dma && !host_last;
-                                state      <= WAIT_PREFIX;
-                            end else begin
-                                command_allowed <= 1'b0;
-                                host_dout <= 1'b1;
-                                host_done <= 1'b1;
-                            end
-                        end else if (command_allowed && host_dma && read_command_length) begin
-                            ctl_req <= 1'b1;
-                            ctl_rnw <= 1'b0;
-                            ctl_din <= host_din;
-                            ctl_dma <= host_dma && !host_last;
-                            state   <= WAIT_BIT;
-                        end else begin
-                            host_dout <= 1'b1;
-                            host_done <= 1'b1;
-                        end
+                        ctl_req <= 1'b1;
+                        ctl_rnw <= host_rnw;
+                        ctl_din <= host_rnw ? 1'b0 : host_din;
+                        ctl_dma <= host_dma && !host_last;
+                        state   <= WAIT_BIT;
                     end
-                end
-
-                WAIT_PREFIX: if (ctl_done) begin
-                    // Insert an idle request cycle after completion so the
-                    // controller cannot accept the replay while retiring bit1.
-                    state <= ISSUE_SECOND;
-                end
-
-                ISSUE_SECOND: begin
-                    ctl_req <= 1'b1;
-                    ctl_rnw <= 1'b0;
-                    ctl_din <= 1'b1;
-                    ctl_dma <= second_dma;
-                    state   <= WAIT_BIT;
                 end
 
                 WAIT_BIT: if (ctl_done) begin

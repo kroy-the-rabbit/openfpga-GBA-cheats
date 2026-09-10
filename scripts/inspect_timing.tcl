@@ -25,7 +25,7 @@ puts "SNAPSHOT_BITS captured=[get_collection_size $captured] published=[get_coll
 # module to one ALM and two registers: no cartridge EEPROM access was ever
 # issued and every read returned ones, while simulation passed throughout.
 # These are the registers that must exist for the bridge to do anything.
-foreach reg {transfer_open ctl_req command_active state} {
+foreach reg {transfer_open ctl_req state} {
     set found [get_registers "*ee_bridge|$reg*"]
     if {[get_collection_size $found] == 0} {
         error "EEPROM bridge register '$reg' did not survive synthesis; the save path is not built"

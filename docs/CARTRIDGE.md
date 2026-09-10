@@ -1,23 +1,22 @@
 # Cartridges on the Pocket GBA core
 
 Build `99293a3` boots Minish Cap, loads a working physical
-cartridge save in Read Only mode, and plays with cheats, confirmed by the user. Physical write support passes
+cartridge save, and plays with cheats, confirmed by the user. Physical write support passes
 simulation but still needs a hardware persistence test. See `docs/HANDOFF.md`
 for the latest results. The installed build is now **`417a55f`**, which uses
 **Play Cartridge** directly; hardware confirmation of the new launch path
 is pending.
 
-**Cartridge Saves** defaults to **Read Only** at each launch. With Play Cartridge,
-SRAM/Flash reads and EEPROM read commands reach the physical save chip.
-Selecting **Writes Enabled** permits physical SRAM/Flash writes and EEPROM
-program commands. EEPROM permission is latched for a whole command. Progress
-made with writes disabled will not persist. Flash identification and bank
-selection require byte writes too, so some Flash games need Writes Enabled
-before they can recognize their save chip.
+**Cartridge saves are live.** SRAM/Flash reads and writes and every EEPROM
+command reach the physical chip as the game issues them. The Read Only mode
+and its **Cartridge Saves** menu entry were removed on 2026-09-09: its
+command classifier forwarded only 9 or 17 bit DMA3 read requests, Zero
+Mission's request does not fit that shape, and the game showed no saves
+until writes were enabled.
 
 No SD save file is loaded or written back for cartridge games. Physical writes
-are not hardware-qualified yet. GPIO/RTC remains disconnected. Savestates are removed from the core. Minish Cap's existing slots have now been read successfully with Cartridge
-Saves left at Read Only.
+are not hardware-qualified yet. GPIO/RTC remains disconnected. Savestates are removed from the core. Minish Cap's and Zero Mission's existing slots read on hardware, and a new
+Zero Mission save written here was read back by Analogue's own cartridge mode.
 
 **This core requires Pocket firmware 1.2 or newer.** Declaring the cartridge
 adapter raises `version_required`, and an older firmware will refuse to load the
@@ -54,12 +53,8 @@ power-up values now live on internal registers, `fault` no longer gates the
 transfer-tracking clear, and `scripts/inspect_timing.tcl` fails any build
 where the bridge's registers do not survive.
 
-The abort guard is armed by the write switch, not by the abort. Since
-2026-09-09 the fail-closed latch is set only when the interrupted physical
-transfer was **opened with writes enabled**. With Cartridge Saves on Read
-Only the bridge forwards nothing that can alter what the chip stores, so an
-interrupted read leaves the serial parser confused rather than the save
-damaged, and the save path stays usable for the rest of the session. The
+The abort guard latches on any interrupted physical transfer, since every
+transfer may be a write. The
 abort still retires its accepted bit and drops the command policy either
 way; only the permanent latch is conditional.
 
@@ -102,8 +97,6 @@ once the controller does. It is `cfd4264`, built and timing-met at seed 1 on
 1. Insert the cartridge before launching the core.
 2. Choose **Play Cartridge** in the GBA core's asset browser. The core probes
    and boots the cartridge automatically, including existing physical saves.
-3. Select **Writes Enabled** only when testing save persistence. Every launch
-   starts in Read Only, so progress otherwise will not persist.
 
 There is no separate Off/Detect/Boot switch. Choosing an SD ROM uses the SD
 path. Old persisted mode values at `0x90` are ignored. The `417a55f`
