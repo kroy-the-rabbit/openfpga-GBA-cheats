@@ -5,6 +5,36 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## 2026-09-10: the jump cheat and the overlay's missing first letter
+
+Two bugs, neither in the cartridge path.
+
+1. **Jump In Midair was the wrong cheat.** It had been six CodeBreaker
+   writes into `0800xxxx`, derived by TEA-decrypting the Action Replay v3
+   codes. GameHacking's own version of the same cheat, in
+   `~/Desktop/pocket-library/cheats/Metroid - Zero Mission (USA).zip`, is
+   four EWRAM entries: two condition/write pairs at `0x02038D10` and
+   `0x02039030`. The five Zero Mission cheats are now decoded from that
+   archive and re-encoded as CodeBreaker text, word for word identical.
+   Infinite Power Bombs was missing and is back.
+2. **Every overlay title lost its first character.** `cheat_osd` delayed the
+   fill column by three register stages, but `cheat_titles` answers in one
+   and `cheat_font` is combinational, so each cell drew the next column's
+   glyph: `INFINITE HEALTH` rendered as `NFINITE HEALTH`. Fixed by dropping
+   a stage. `sim/core/tb_cheat_osd_titles.sv` reads a rendered row back
+   against the font; the smoke bench only counted ink and could not see it.
+
+**pocket-gbc has the same overlay bug.** `cheat_osd.sv` and `cheat_titles.sv`
+are byte-identical there apart from the grid, so its titles lose their first
+character too. Fix belongs in that repo's own session.
+
+**`rom_patch.sv` is still unproven on hardware.** No cheat in use touches
+ROM. `build/cheats/ZM-ROMPATCH-TEST.gba.cht` patches Zero Mission's entry
+word `EA00002E` to `EAFFFFFE`, a branch to itself, so with it loaded and
+Reset Core pressed the BIOS logo plays and then nothing. Loading the cheat
+slot deliberately does not reset the GBA (`core_top.sv:1051`), so the reset
+is required or the entry point is never re-executed.
+
 ## 2026-09-09 night: Zero Mission boots and saves; the fit ceiling is gone
 
 Card holds `65fd93d`, bitstream `41a05851a7e817be`, installed 2026-09-10.

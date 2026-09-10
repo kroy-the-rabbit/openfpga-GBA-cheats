@@ -198,6 +198,11 @@ to 40 columns by 20 rows for 240x160 and composited in `video_adapter` on
 A `.cht` file's `cheatN_desc` strings are the row titles, uppercased and cut
 at 26 characters. A `.chtbin` carries none, so its rows read `CHEAT nn`.
 
+The line buffer's address delay has to match the title RAM's read latency
+exactly: one stage too many and every title loses its first character.
+`sim/core/tb_cheat_osd_titles.sv` reads a rendered row back against the font
+and fails if it slips.
+
 ## The readout, removed 2026-09-09
 
 `CL:` and `CD:` were two numbers in the core menu for when a file did not do

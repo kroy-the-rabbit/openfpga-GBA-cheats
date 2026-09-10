@@ -252,13 +252,20 @@ module cheat_osd #(
 	reg [7:0] line_bits [0:COLS-1];
 	reg [5:0] fill;                  // 0..COLS+1, two past the end to drain
 	reg       filling;
-	// Three stages, because the address is registered here and again inside
-	// cheat_titles before its data comes back. The header takes the same three
-	// so both halves of a line agree on which column they are drawing.
-	reg [5:0] fill_col_d1, fill_col_d2, fill_col_d3;
-	reg       fill_hdr_d1, fill_hdr_d2, fill_hdr_d3;
-	reg [5:0] hdr_char_d1, hdr_char_d2, hdr_char_d3;
-	reg [4:0] fill_grp_d1, fill_grp_d2, fill_grp_d3;
+	// Two stages. title_col is a register, so cheat_titles sees column `fill`
+	// one clock after it is issued and answers on that same clock; cheat_font
+	// is combinational on top of that. So the glyph for column `fill` is on
+	// font_bits two clocks after the address stage, and the column it belongs
+	// to has to arrive with it. The header takes the same two so both halves
+	// of a line agree on which column they are drawing.
+	//
+	// A third stage here is what drew every title one column to the left, so
+	// INFINITE HEALTH lost its I. sim/core/tb_cheat_osd_titles.sv reads the
+	// picture back against the font and fails if this ever slips again.
+	reg [5:0] fill_col_d1, fill_col_d2;
+	reg       fill_hdr_d1, fill_hdr_d2;
+	reg [5:0] hdr_char_d1, hdr_char_d2;
+	reg [4:0] fill_grp_d1, fill_grp_d2;
 
 	wire in_header = (text_row < HDR_ROWS[4:0]);
 	wire [4:0] row_index = text_row - HDR_ROWS[4:0];
@@ -289,19 +296,15 @@ module cheat_osd #(
 		fill_hdr_d2 <= fill_hdr_d1;
 		hdr_char_d2 <= hdr_char_d1;
 		fill_grp_d2 <= fill_grp_d1;
-		fill_col_d3 <= fill_col_d2;
-		fill_hdr_d3 <= fill_hdr_d2;
-		hdr_char_d3 <= hdr_char_d2;
-		fill_grp_d3 <= fill_grp_d2;
 
 		// Write stage: the glyph row is out.
-		if (filling && fill >= 6'd3 && fill_col_d3 < COLS[5:0])
-			line_bits[fill_col_d3] <= row_used ? font_bits : 8'd0;
+		if (filling && fill >= 6'd2 && fill_col_d2 < COLS[5:0])
+			line_bits[fill_col_d2] <= row_used ? font_bits : 8'd0;
 	end
 
-	// The title RAM answers two cycles after being asked, so the header has to
-	// be delayed by the same two or the two halves of a line disagree about
-	// which column they are drawing.
+	// The title RAM answers one cycle after being asked and the font is
+	// combinational, so the header is delayed by the same two register stages
+	// or the two halves of a line disagree about which column they are drawing.
 	// A cheat with no title (the .chtbin format carries none) is named
 	// "CHEAT nn", counting from one, so the list still says how many are on.
 	function automatic [5:0] placeholder_char(input [4:0] group, input [5:0] col);
@@ -319,10 +322,10 @@ module cheat_osd #(
 		end
 	endfunction
 
-	wire untitled = !fill_hdr_d3 && (title_len == 5'd0);
-	wire beyond   = !fill_hdr_d3 && (fill_col_d3 >= {1'b0, title_len});
-	assign font_ch  = fill_hdr_d3 ? hdr_char_d3
-	                : untitled    ? placeholder_char(fill_grp_d3, fill_col_d3)
+	wire untitled = !fill_hdr_d2 && (title_len == 5'd0);
+	wire beyond   = !fill_hdr_d2 && (fill_col_d2 >= {1'b0, title_len});
+	assign font_ch  = fill_hdr_d2 ? hdr_char_d2
+	                : untitled    ? placeholder_char(fill_grp_d2, fill_col_d2)
 	                : beyond      ? SP : title_char;
 	assign font_row = glyph_row;
 
