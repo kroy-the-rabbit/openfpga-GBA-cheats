@@ -195,6 +195,7 @@ cartridge, 2026-09-10, on `fc6b82e`:
 |---|---|
 | Plain writes | the four Zero Mission counter cheats |
 | Conditional pairs | `IF missiles != 0xDEAD THEN missiles = 999` pins the HUD at 999, and the same test inverted never fires |
+| Reads of every region the bus covers | one guarded write per region, each gated on `!= 0xDEAD` at an EWRAM, IWRAM and IO address, each pointed at a different HUD counter |
 | ROM patches | the entry word rewritten to a branch to itself halts the game after the BIOS logo |
 | `.cht` titles in the overlay | the cheat names draw instead of `CHEAT nn` |
 

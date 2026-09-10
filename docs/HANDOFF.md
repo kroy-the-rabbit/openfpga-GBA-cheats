@@ -30,15 +30,25 @@ Two bugs, neither in the cartridge path.
    a stage. `sim/core/tb_cheat_osd_titles.sv` reads a rendered row back
    against the font; the smoke bench only counted ink and could not see it.
 
-**Conditional pairs work, and Jump In Midair is a dud cheat.** After the
+**The cheat engine is fully proven and Jump In Midair is a dud cheat.** After the
 archive rewrite it still did nothing while the four plain cheats worked, so
 the engine was suspect. `build/cheats/ZM-COND-TEST.gba.cht` settled it:
 `IF missiles != 0xDEAD THEN missiles = 999` pins the HUD at 999 and the
 inverted form never fires, so `gba_cheats`'s `skip_next` path is correct.
 Its condition, halfword `0x04F0` at EWRAM `0x02038D10`, simply never holds
-on this cart. `build/cheats/ZM-JUMP-PROBE.gba.cht` guards a visible missile
-write with each of the two conditions to find out whether either ever
-matches; not yet run.
+on this cart: `ZM-JUMP-PROBE.gba.cht` guarded a visible missile write with
+each of the two conditions and neither ever fired. `ZM-BUS-PROBE.gba.cht`
+then cleared the bus itself, one guarded write per region, and both EWRAM
+and IO reads land. Nothing in the core is at fault.
+
+Zero Mission's own **Space Jump** is midair jumping, so the cheat is now
+`8300153E+FFFF+83001542+0001`: all suits and misc items, then the unknown
+items enable at `0x03001542`. Space Jump is bit `0x04` of the misc byte at
+`0x0300153E`, read off the archive's `Have All Items Without Unknown Items`
+(`0xDBDB` against a full `0xFFFF`) and confirmed against `Have Screw Attack`
+(`0x08`) and `Have Speed Booster` (`0x02`). The engine cannot OR a bit, so
+the whole byte goes to `0xFF`, which grants every other suit and misc item
+as a side effect.
 
 **pocket-gbc has the same overlay bug.** `cheat_osd.sv` and `cheat_titles.sv`
 are byte-identical there apart from the grid, so its titles lose their first
