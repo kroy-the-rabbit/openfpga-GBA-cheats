@@ -30,6 +30,16 @@ Two bugs, neither in the cartridge path.
    a stage. `sim/core/tb_cheat_osd_titles.sv` reads a rendered row back
    against the font; the smoke bench only counted ink and could not see it.
 
+**Conditional pairs work, and Jump In Midair is a dud cheat.** After the
+archive rewrite it still did nothing while the four plain cheats worked, so
+the engine was suspect. `build/cheats/ZM-COND-TEST.gba.cht` settled it:
+`IF missiles != 0xDEAD THEN missiles = 999` pins the HUD at 999 and the
+inverted form never fires, so `gba_cheats`'s `skip_next` path is correct.
+Its condition, halfword `0x04F0` at EWRAM `0x02038D10`, simply never holds
+on this cart. `build/cheats/ZM-JUMP-PROBE.gba.cht` guards a visible missile
+write with each of the two conditions to find out whether either ever
+matches; not yet run.
+
 **pocket-gbc has the same overlay bug.** `cheat_osd.sv` and `cheat_titles.sv`
 are byte-identical there apart from the grid, so its titles lose their first
 character too. Fix belongs in that repo's own session.

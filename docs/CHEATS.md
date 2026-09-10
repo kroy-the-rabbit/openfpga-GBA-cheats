@@ -186,6 +186,23 @@ has 32 slots in it.
   cheat it is skipped and counted, and a later, smaller cheat can still fit.
 * 1 MB of file.
 
+## What is confirmed on hardware
+
+Every path through the engine has now been exercised on a real Zero Mission
+cartridge, 2026-09-10, on `fc6b82e`:
+
+| Path | How |
+|---|---|
+| Plain writes | the four Zero Mission counter cheats |
+| Conditional pairs | `IF missiles != 0xDEAD THEN missiles = 999` pins the HUD at 999, and the same test inverted never fires |
+| ROM patches | the entry word rewritten to a branch to itself halts the game after the BIOS logo |
+| `.cht` titles in the overlay | the cheat names draw instead of `CHEAT nn` |
+
+A cheat that still does nothing after all four pass is a cheat whose own
+condition does not hold on that cart, not a core fault. The way to tell is a
+probe: guard an obvious write, a counter the HUD shows, with the suspect
+condition and see whether it ever fires.
+
 ## The overlay
 
 **Cheat Overlay** in the core menu draws the loaded cheats over the game
