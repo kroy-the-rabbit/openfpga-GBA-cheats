@@ -20,6 +20,7 @@ entity gba_memorymux is
    (
       clk100               : in     std_logic; 
       gb_on                : in     std_logic;
+      cache_invalidate     : in     std_logic := '0';
       reset                : in     std_logic;
       
       savestate_bus        : inout  proc_bus_gb_type;
@@ -352,6 +353,7 @@ begin
    (
       clk               => clk100,
       gb_on             => gb_on,
+      invalidate        => cache_invalidate,
                        
       read_enable       => cache_read_enable,
       read_addr         => cache_read_addr,  

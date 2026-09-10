@@ -11,6 +11,7 @@ architecture test of tb_gba_cart_memorymux is
    signal clk : std_logic := '0';
    signal reset : std_logic := '0';
    signal gb_on : std_logic := '0';
+   signal inval : std_logic := '0';
    signal rom_req, rom_done : std_logic := '0';
    signal rom_addr : std_logic_vector(24 downto 0);
    signal rom_first, rom_second : std_logic_vector(31 downto 0) := (others => '0');
@@ -61,6 +62,7 @@ begin
       port map (
       clk100 => clk,
       gb_on => gb_on,
+      cache_invalidate => inval,
       reset => reset,
       savestate_bus => ss_bus,
       sdram_read_ena => rom_req,
@@ -201,7 +203,9 @@ begin
          wait until falling_edge(clk);
          mem_bus_adr <= a; mem_bus_rnw <= rnw; mem_bus_dout <= d; mem_bus_acc <= acc; mem_bus_ena <= '1';
          wait until falling_edge(clk); mem_bus_ena <= '0';
-         for i in 0 to 100 loop
+         -- A request that lands during a cache invalidate waits out the
+         -- 1024-entry tag clear before it is served.
+         for i in 0 to 1300 loop
             wait until falling_edge(clk);
             if mem_bus_done = '1' then completed := true; exit; end if;
          end loop;
@@ -235,6 +239,22 @@ begin
          assert mem_bus_din = header(2*i) report "Cold even-DWORD ROM fill mismatch" severity failure;
       end loop;
       assert rom_requests = 48 report "Unexpected even header cache fill count" severity failure;
+      -- rom_patch invalidates the cache when its table changes. A request
+      -- that lands while the tags are being cleared must be held and served,
+      -- and the line it asks for must be fetched again rather than served
+      -- from the dropped tags.
+      inval <= '1'; wait until falling_edge(clk); inval <= '0';
+      wait until falling_edge(clk);
+      access_bus(std_logic_vector(to_unsigned(16#08000010#,32)), '1', x"00000000", ACCESS_32BIT);
+      assert mem_bus_din = header(4) report "Read during cache invalidate returned wrong data" severity failure;
+      assert rom_requests = 49 report "Invalidated line was served from stale tags" severity failure;
+      access_bus(std_logic_vector(to_unsigned(16#08000010#,32)), '1', x"00000000", ACCESS_32BIT);
+      assert rom_requests = 49 report "Refetched line did not cache" severity failure;
+      for i in 0 to 1030 loop wait until falling_edge(clk); end loop;
+      -- The rest of the header is cold again: refill it for the lane sweep.
+      for i in 0 to 23 loop
+         access_bus(std_logic_vector(to_unsigned(16#08000000# + 8*i,32)), '1', x"00000000", ACCESS_32BIT);
+      end loop;
       for size in access_sizes'range loop
          for offset in 0 to 191 loop
             access_bus(std_logic_vector(to_unsigned(16#08000000# + offset,32)),
@@ -254,7 +274,8 @@ begin
                severity failure;
          end loop;
       end loop;
-      assert rom_requests = 48 report "Header cache hits unexpectedly fetched ROM again" severity failure;
+      -- 48 cold fills, one refetch during the invalidate, 23 refills after it.
+      assert rom_requests = 72 report "Header cache hits unexpectedly fetched ROM again" severity failure;
       report "PASS BMXE ROM header: 48 cold odd/even fills, 576 lane/width reads through actual cache and memorymux";
       -- An unreadable I/O reply must never leak its speculative data. Check
       -- every lane/width, then immediately follow it with a readable reply.

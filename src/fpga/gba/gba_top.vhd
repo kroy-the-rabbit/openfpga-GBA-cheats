@@ -55,6 +55,7 @@ entity gba_top is
       cheats_enabled        : in     std_logic;
       cheat_on              : in     std_logic;
       cheat_in              : in     std_logic_vector(127 downto 0);
+      cache_invalidate      : in     std_logic := '0';    -- rom_patch table changed
       cheats_active         : out    std_logic := '0';
       -- sdram interface
       sdram_read_ena        : out    std_logic;                     -- triggered once for read request 
@@ -572,6 +573,7 @@ begin
    (
       clk100               => clk100,
       gb_on                => gbaon, 
+      cache_invalidate     => cache_invalidate,
       reset                => reset,
                            
       savestate_bus        => savestate_bus,

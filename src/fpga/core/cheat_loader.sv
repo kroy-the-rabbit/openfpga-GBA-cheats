@@ -125,7 +125,18 @@ module cheat_loader #(
     output reg  [5:0]   group_count,  // cheats pushed
     output reg  [19:0]  byte_count,   // bytes received, parsed or not
     output reg  [5:0]   reject_count, // enabled cheats the table had no room for
-    output reg          overrun       // a push request arrived with one queued
+    output reg          overrun,      // a push request arrived with one queued
+
+    // The text of `cheatN_desc`, for the on screen list. Streamed a character
+    // at a time to cheat_titles as it is parsed, into the slot the next pushed
+    // cheat will take; a cheat that is dropped or disabled does not advance
+    // the slot, so the next description overwrites it. Same contract as the
+    // GB core's loader.
+    output reg          desc_wr,
+    output reg  [4:0]   desc_group,
+    output reg  [4:0]   desc_col,
+    output reg  [5:0]   desc_char,    // ASCII - 32, uppercased
+    output reg          desc_end      // desc_col is now the length
 );
 
   localparam AW = $clog2(MAX_ENTRIES);      // 5 for 32
@@ -152,7 +163,18 @@ module cheat_loader #(
   reg        pend_code, pend_desc, pend_enable;
   reg        armed_code, armed_desc, armed_enable;
   reg        in_str;        // skipping an uninteresting quoted string
+  reg        capturing;     // inside the quoted value of a _desc key
+  reg [4:0]  desc_n;        // characters captured so far
   reg        collecting;    // inside the quoted value of a _code key
+  localparam TITLE_W = 26;  // cheat_titles is 26 characters wide
+
+  function automatic [5:0] font_index(input [7:0] c);
+    reg [7:0] up;
+    begin
+      up = (c >= "a" && c <= "z") ? (c - 8'd32) : c;
+      font_index = (up >= 8'd32 && up <= 8'd95) ? (up - 8'd32) : 6'd0;
+    end
+  endfunction
 
   wire [7:0] ch       = data;
   wire       is_quote = (ch == 8'h22);
@@ -423,7 +445,9 @@ module cheat_loader #(
       hist         <= 56'd0;
       pend_code    <= 1'b0;  pend_desc  <= 1'b0;  pend_enable  <= 1'b0;
       armed_code   <= 1'b0;  armed_desc <= 1'b0;  armed_enable <= 1'b0;
-      in_str       <= 1'b0;  collecting <= 1'b0;
+      in_str       <= 1'b0;  collecting <= 1'b0;  capturing    <= 1'b0;
+      desc_wr      <= 1'b0;  desc_end   <= 1'b0;  desc_group   <= 5'd0;
+      desc_col     <= 5'd0;  desc_char  <= 6'd0;  desc_n       <= 5'd0;
       tok          <= 64'd0; tok_len    <= 5'd0;  tok_ovf      <= 1'b0;
       have_op1     <= 1'b0;  op1        <= 32'd0; encrypted    <= 1'b0;
       bank         <= 1'b0;  buf_len    <= 0;     cond_at      <= 0;
@@ -443,6 +467,9 @@ module cheat_loader #(
       push_bank = 1'b0;
       push_len  = 0;
       push_bad  = 1'b0;
+      // one cycle strobes into cheat_titles
+      desc_wr   <= 1'b0;
+      desc_end  <= 1'b0;
 
       // ----------------------------------------------------- push sequencer --
       // gba_cheats registers cheat_on and cheat_in and writes cheat_in_1 into
@@ -547,7 +574,21 @@ module cheat_loader #(
             end
           end
         end else if (in_str) begin
-          if (is_quote) in_str <= 1'b0;
+          if (is_quote) begin
+            in_str    <= 1'b0;
+            capturing <= 1'b0;
+            if (capturing) begin
+              desc_end <= 1'b1;
+              desc_col <= desc_n;               // the length
+            end
+          end else if (capturing && desc_n < TITLE_W[4:0]) begin
+            // desc_col names the column of this character, on the same clock
+            // as the strobe; the running count is kept apart from it.
+            desc_wr   <= 1'b1;
+            desc_char <= font_index(ch);
+            desc_col  <= desc_n;
+            desc_n    <= desc_n + 5'd1;
+          end
         end else if (armed_enable && is_alnum) begin
           // The value of a cheatN_enable key: the first word after it. "true"
           // and "1" mean on; anything else means off and the cheat is dropped.
@@ -588,6 +629,11 @@ module cheat_loader #(
             group_bad  <= 1'b0;
           end else begin
             in_str <= 1'b1;
+            if (armed_desc) begin
+              capturing  <= 1'b1;
+              desc_group <= group_count[4:0];
+              desc_n     <= 5'd0;
+            end
           end
         end else begin
           hist <= {hist[47:0], ch};

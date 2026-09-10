@@ -14,6 +14,14 @@ has the measurements and `docs/CHEATBIN.md` has the format.
 
 ## Quick start
 
+**Since 2026-09-10 the core reads libretro `.cht` text directly.** Drop the
+`.cht` beside the ROM as `<rom filename>.gba.cht` and it loads: the text
+parser (`src/fpga/core/cheat_loader.sv`) runs on the FPGA again now that
+the design has the room, and the cheat names in it are what the overlay
+shows. `.chtbin` still works and is picked by its magic bytes; its rows read
+`CHEAT nn` because the format carries no names. The converter is no longer
+required, only convenient for the picker below.
+
 There are two ways to get a `.chtbin` onto the card. The desktop picker is the
 one to use if you have it:
 
@@ -77,7 +85,8 @@ table as garbage.
 The picker leaves both `Game.gba.chtbin` and `Game.gba.cht` beside the ROM.
 That is not the mistake above and nothing is wrong.
 
-The core reads the `.chtbin` and only the `.chtbin`: data slot 7 accepts that
+Data slot 7 accepts `.cht` and `.chtbin`, and with the picker's two files the
+Pocket offers both; either loads. Before 2026-09-10 the slot accepted
 extension and no other, so the `.cht` is invisible to the hardware. It is there
 for the picker, which needs somewhere to keep the descriptions and the enable
 flags that the packed format has no room for and the core has no use for. It is
@@ -186,8 +195,8 @@ from the SD card or the cartridge slot, then one row per cheat. It is the
 to 40 columns by 20 rows for 240x160 and composited in `video_adapter` on
 `clk_vid`. Off by default, not persisted.
 
-The `.chtbin` format carries no titles, so every row reads `CHEAT nn` for
-now. The title RAM is wired and empty; the `.cht` text loader will fill it.
+A `.cht` file's `cheatN_desc` strings are the row titles, uppercased and cut
+at 26 characters. A `.chtbin` carries none, so its rows read `CHEAT nn`.
 
 ## The readout, removed 2026-09-09
 

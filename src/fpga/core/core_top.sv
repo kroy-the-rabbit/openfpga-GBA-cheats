@@ -1426,21 +1426,74 @@ always @(posedge clk_vid) begin
     osd_cart_ss   <= osnotify_cart_play;  osd_cart_s   <= osd_cart_ss;
 end
 
+// Two loaders share the slot. A file that opens with the "GBAC" magic is a
+// packed .chtbin and the binloader frames it; anything else is libretro
+// text and cheat_loader parses it, titles included. Both watch every byte;
+// the magic is known by the fourth, long before either could push, and
+// the one that does not own the file produces nothing from it.
+wire [127:0] bin_cheat_in, txt_cheat_in;
+wire         bin_cheat_on, txt_cheat_on;
+wire [5:0]   bin_entries, bin_groups, txt_entries, txt_groups;
+reg  [2:0]   cheat_hdr_pos = 3'd0;
+reg          cheat_is_bin  = 1'b0;
+always @(posedge clk_sys) begin
+    if (cheat_reset) begin
+        cheat_hdr_pos <= 3'd0;
+        cheat_is_bin  <= 1'b0;
+    end else if (cheat_wr && cheat_hdr_pos != 3'd4) begin
+        cheat_hdr_pos <= cheat_hdr_pos + 3'd1;
+        case (cheat_hdr_pos)
+            3'd0: cheat_is_bin <= cheat_dout == "G";
+            3'd1: cheat_is_bin <= cheat_is_bin && cheat_dout == "B";
+            3'd2: cheat_is_bin <= cheat_is_bin && cheat_dout == "A";
+            3'd3: cheat_is_bin <= cheat_is_bin && cheat_dout == "C";
+            default: ;
+        endcase
+    end
+end
+assign cheat_in      = cheat_is_bin ? bin_cheat_in : txt_cheat_in;
+assign cheat_on      = cheat_is_bin ? bin_cheat_on : txt_cheat_on;
+assign cheat_entries = cheat_is_bin ? bin_entries  : txt_entries;
+assign cheat_groups  = cheat_is_bin ? bin_groups   : txt_groups;
+
 cheat_binloader #(
     .MAX_ENTRIES ( 32 )             // must match gba_cheats' CHEATCOUNT
-) cheats_parser (
+) cheats_binloader (
     .clk          ( clk_sys ),
     .reset        ( cheat_reset ),
     .wr           ( cheat_wr ),
     .data         ( cheat_dout ),
     .eof          ( cheat_eof ),
-    .cheat_in     ( cheat_in ),
-    .cheat_on     ( cheat_on ),
-    .entry_count  ( cheat_entries ),
-    .group_count  ( cheat_groups ),
+    .cheat_in     ( bin_cheat_in ),
+    .cheat_on     ( bin_cheat_on ),
+    .entry_count  ( bin_entries ),
+    .group_count  ( bin_groups ),
     .byte_count   (  ),
     .reject_count (  ),
     .overrun      (  )
+);
+
+wire        desc_wr, desc_end;
+wire [4:0]  desc_group, desc_col;
+wire [5:0]  desc_char;
+cheat_loader cheats_parser (
+    .clk          ( clk_sys ),
+    .reset        ( cheat_reset ),
+    .wr           ( cheat_wr ),
+    .data         ( cheat_dout ),
+    .eof          ( cheat_eof ),
+    .cheat_in     ( txt_cheat_in ),
+    .cheat_on     ( txt_cheat_on ),
+    .entry_count  ( txt_entries ),
+    .group_count  ( txt_groups ),
+    .byte_count   (  ),
+    .reject_count (  ),
+    .overrun      (  ),
+    .desc_wr      ( desc_wr ),
+    .desc_group   ( desc_group ),
+    .desc_col     ( desc_col ),
+    .desc_char    ( desc_char ),
+    .desc_end     ( desc_end )
 );
 
 // These feed the cheat ports restored on gba_top in P1: cheat_clear,
@@ -1652,15 +1705,15 @@ video_adapter video_out (
     .osd_mask    ( osd_mask_s ),
     .osd_groups  ( osd_groups_s ),
     .osd_codes   ( osd_codes_s ),
-    // No title source yet: .chtbin carries none, so every row reads
-    // "CHEAT nn". The .cht text loader will stream titles in here.
+    // Titles come from cheat_loader as a .cht is parsed. A .chtbin carries
+    // none, so its rows read "CHEAT nn".
     .title_clk   ( clk_sys ),
     .title_reset ( cheat_reset ),
-    .title_wr    ( 1'b0 ),
-    .title_group ( 5'd0 ),
-    .title_col   ( 5'd0 ),
-    .title_char  ( 6'd0 ),
-    .title_end   ( 1'b0 ),
+    .title_wr    ( desc_wr ),
+    .title_group ( desc_group ),
+    .title_col   ( desc_col ),
+    .title_char  ( desc_char ),
+    .title_end   ( desc_end ),
 
     .pixel_addr ( pixel_out_addr ),
     .pixel_data ( pixel_out_data ),
@@ -1862,6 +1915,7 @@ gba_top #(
     .cheat_clear         ( cheat_clear ),
     .cheats_enabled      ( cheats_enabled ),
     .cheat_on            ( cheat_on ),
+    .cache_invalidate    ( rom_patch_changed ),
     .cheat_in            ( cheat_in ),
     .cheats_active       (),
     // SDRAM (ROM reads — muxed with staging in sdram_pocket section)
@@ -2322,17 +2376,20 @@ synch_3 #(.WIDTH(32)) cart_readout_st_sync(cart_readout_st, cart_readout_st_s, c
 // ROM patches ride the fetched line: a Game Genie for both sources.
 wire [31:0] romsrc_gba_rd_data_raw, romsrc_gba_rd_data_second_raw;
 wire [3:0]  rom_patch_count;
+wire        rom_patch_changed;
 rom_patch rom_patches (
     .clk        ( clk_sys ),
     .load_reset ( cheat_reset ),
     .cheat_on   ( cheat_on ),
     .cheat_in   ( cheat_in ),
+    .rd_req     ( sdram_read_req_gba ),
     .rd_addr    ( sdram_read_addr_gba ),
     .din_first  ( romsrc_gba_rd_data_raw ),
     .din_second ( romsrc_gba_rd_data_second_raw ),
     .dout_first ( romsrc_gba_rd_data ),
     .dout_second( romsrc_gba_rd_data_second ),
-    .count      ( rom_patch_count )
+    .count      ( rom_patch_count ),
+    .changed    ( rom_patch_changed )
 );
 
 rom_source_mux romsrc (

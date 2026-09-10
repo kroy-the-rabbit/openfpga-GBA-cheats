@@ -15,10 +15,10 @@
 // change to the program, not a per-frame poke.
 //
 // cache.vhd fetches an aligned 8-byte line and rom_source_mux presents it as
-// the requested DWORD first and its partner (address ^ 1) second. Hit flags
-// are registered from the live read address every clock; the address is held
-// from request to ready, which is never fewer than two clocks away, so the
-// flags are settled before the data is.
+// the requested DWORD first and its partner (address ^ 1) second. The
+// address is latched on the request, as rom_source_mux latches its word
+// order, because the cache is free to move on to its next address before
+// the data comes back; the hit flags are registered from that latch.
 `default_nettype none
 module rom_patch #(
     parameter integer SLOTS = 8
@@ -31,13 +31,15 @@ module rom_patch #(
     input  wire [127:0] cheat_in,
 
     // the ROM read stream, DWORD addresses
+    input  wire         rd_req,
     input  wire [24:0]  rd_addr,
     input  wire [31:0]  din_first,
     input  wire [31:0]  din_second,
     output wire [31:0]  dout_first,
     output wire [31:0]  dout_second,
 
-    output reg  [3:0]   count        // slots in use
+    output reg  [3:0]   count,       // slots in use
+    output reg          changed      // one clock per table write: invalidate the cache
 );
     reg [22:0] slot_addr [0:SLOTS-1];   // ROM DWORD index, 32 MB
     reg [31:0] slot_val  [0:SLOTS-1];
@@ -60,9 +62,11 @@ module rom_patch #(
         end
     end
 
+    initial changed = 1'b0;
     always @(posedge clk) begin
         cheat_on_1 <= cheat_on;
         cheat_in_1 <= cheat_in;
+        changed    <= 1'b0;
         if (load_reset) begin
             valid <= {SLOTS{1'b0}};
             count <= 4'd0;
@@ -73,14 +77,18 @@ module rom_patch #(
             slot_be[count[2:0]]   <= cheat_in_1[103:100];
             valid[count[2:0]]     <= 1'b1;
             count                 <= count + 4'd1;
+            changed               <= 1'b1;
         end
     end
 
-    reg [SLOTS-1:0] hit_first, hit_second;
+    reg [24:0] req_addr = 25'd0;
+    always @(posedge clk) if (rd_req) req_addr <= rd_addr;
+
+    reg [SLOTS-1:0] hit_first = {SLOTS{1'b0}}, hit_second = {SLOTS{1'b0}};
     always @(posedge clk) begin
         for (i = 0; i < SLOTS; i = i + 1) begin
-            hit_first[i]  <= valid[i] && rd_addr == {2'b00, slot_addr[i]};
-            hit_second[i] <= valid[i] && (rd_addr ^ 25'd1) == {2'b00, slot_addr[i]};
+            hit_first[i]  <= valid[i] && req_addr == {2'b00, slot_addr[i]};
+            hit_second[i] <= valid[i] && (req_addr ^ 25'd1) == {2'b00, slot_addr[i]};
         end
     end
 

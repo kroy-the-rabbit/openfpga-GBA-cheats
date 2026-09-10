@@ -42,8 +42,8 @@ effect off and back on live.
 
 | | |
 |---|---|
-| Cheats, CodeBreaker and GameShark v1/v2, from libretro `.cht` files | **works on hardware** |
-| Cheat overlay, the loaded cheats drawn over the picture | **new**, untested on hardware; rows read `CHEAT nn` until `.cht` text loading lands |
+| Cheats, CodeBreaker and GameShark v1/v2, from libretro `.cht` files, read directly or as a converted `.chtbin` | **works on hardware** |
+| Cheat overlay, the loaded cheats drawn over the picture by name | **works on hardware** since `6c8fd96`; names need a `.cht` file, a `.chtbin` shows `CHEAT nn` |
 | ROM patches, applied as the ROM is read, so they work on cartridges | **new**, untested on hardware; eight slots |
 | **Cheats Enabled** switch, live | **works on hardware** |
 | Everything upstream's core does | **works**, unchanged. Nothing was cut to make room |

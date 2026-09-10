@@ -65,6 +65,7 @@ test:
 	$(SIMRUN) python3 tools/sim/run_cart_debug.py
 	$(SIMRUN) python3 tools/sim/run_osd.py
 	$(SIMRUN) python3 tools/sim/run_rom_patch.py
+	$(SIMRUN) python3 tools/sim/run_titles.py
 	$(SIMRUN) python3 tools/sim/run.py $(ARGS)
 
 sim-shell: PODMAN_TTY = -it
