@@ -289,7 +289,7 @@ The cheat engine writes RAM through the internal bus rather than patching ROM
 reads, so codes that write EWRAM, IWRAM or IO work the same whether the ROM came
 from the SD card or from a cartridge. Codes that patch the ROM itself, a
 plain write to `08000000`..`0DFFFFFF`, are applied on the read side instead:
-`src/fpga/han/rom_patch.sv` holds eight of them and substitutes the bytes as
+`src/fpga/han/rom_patch.sv` holds thirty-two of them and substitutes the bytes as
 the cache line is fetched, so the CPU sees the patched program whether the
 ROM came from the card or the slot. Conditional codes on ROM addresses are
 ignored. Action Replay's encrypted "ROM patch" pairs must be decrypted and

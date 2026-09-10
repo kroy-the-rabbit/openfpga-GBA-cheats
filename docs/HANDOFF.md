@@ -124,7 +124,7 @@ confirmed by the MiSTer cheat archive in
 `.gg` records are 16-byte `gba_cheats` words, a ready-made second source
 of decoded cheats). And ROM codes now work on cartridges: `rom_patch.sv`
 (`02d0527`) substitutes plain writes to `08000000..0DFFFFFF` into the
-fetched line, eight slots, a Game Genie. Zero Mission's "Jump In Midair"
+fetched line, thirty-two slots, a Game Genie. Zero Mission's "Jump In Midair"
 is six Thumb halfword patches at `0x0800958A..0x080093D4`, checked against
 the cart dump (`D10D` bne becomes `D00D` beq), and is in
 `build/cheats/Metroid - Zero Mission (USA).gba.cht` as CodeBreaker writes.

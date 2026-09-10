@@ -6,7 +6,7 @@ module tb_rom_patch;
     reg clk=0; always #5 clk=~clk;
     reg load_reset=1, cheat_on=0; reg [127:0] cheat_in=0;
     reg rd_req=0; reg [24:0] rd_addr=0; reg [31:0] din_first=32'h11223344, din_second=32'h55667788;
-    wire [31:0] dout_first, dout_second; wire [3:0] count; wire changed; integer changes=0;
+    wire [31:0] dout_first, dout_second; wire [5:0] count; wire changed; integer changes=0, n=0;
     always @(posedge clk) if (changed) changes=changes+1;
     rom_patch dut(.clk(clk),.load_reset(load_reset),.cheat_on(cheat_on),.cheat_in(cheat_in),
         .rd_req(rd_req),.rd_addr(rd_addr),.din_first(din_first),.din_second(din_second),
@@ -52,7 +52,23 @@ module tb_rom_patch;
         load_reset=1; @(negedge clk); load_reset=0;
         read(25'h2562);
         if (count!==0 || dout_first!==32'h11223344) $fatal(1,"FAIL reset did not clear the table");
-        $display("PASS rom_patch: fill from the push, both words, byte lanes, RAM and conditional entries ignored, reset");
+
+        // A whole table, then one too many. A ROM cheat is a run of patches,
+        // not one, so the boundary is worth pinning: the last slot lands and
+        // the entry after it is dropped rather than wrapping onto slot zero.
+        for (n = 0; n < 32; n = n + 1)
+            push(28'h8001000 + (n << 2), 32'h000000A0 + n, 4'h1, 4'd0);
+        if (count!==32) $fatal(1,"FAIL full table count %0d, expected 32", count);
+        read(25'h403);                          // 0x0800100C, slot 3
+        if (dout_first!==32'h112233A3) $fatal(1,"FAIL slot 3 %h", dout_first);
+        read(25'h41F);                          // 0x0800107C, slot 31
+        if (dout_first!==32'h112233BF) $fatal(1,"FAIL slot 31 %h", dout_first);
+        push(28'h8002000, 32'h000000FF, 4'h1, 4'd0);
+        if (count!==32) $fatal(1,"FAIL table overran to %0d", count);
+        read(25'h800);
+        if (dout_first!==32'h11223344) $fatal(1,"FAIL thirty-third entry landed %h", dout_first);
+
+        $display("PASS rom_patch: fill from the push, both words, byte lanes, RAM and conditional entries ignored, reset, 32 slots and no overrun");
         $finish;
     end
     initial begin #200000; $fatal(1,"rom_patch watchdog"); end

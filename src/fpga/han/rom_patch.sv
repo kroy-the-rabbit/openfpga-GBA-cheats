@@ -21,7 +21,13 @@
 // the data comes back; the hit flags are registered from that latch.
 `default_nettype none
 module rom_patch #(
-    parameter integer SLOTS = 8
+    // A real GBA ROM hack is a run of consecutive halfword writes, not one
+    // poke: Zero Mission's two midair-jump cheats are six patches each, and
+    // eight slots could not hold both. Thirty-two is the whole cheat table,
+    // so the read side can no longer be the thing that runs out first.
+    // count is one bit wider than the index, so a full table is
+    // distinguishable from an empty one; raising SLOTS again needs both.
+    parameter integer SLOTS = 32
 ) (
     input  wire         clk,
 
@@ -38,7 +44,7 @@ module rom_patch #(
     output wire [31:0]  dout_first,
     output wire [31:0]  dout_second,
 
-    output reg  [3:0]   count,       // slots in use
+    output reg  [5:0]   count,       // slots in use
     output reg          changed      // one clock per table write: invalidate the cache
 );
     reg [22:0] slot_addr [0:SLOTS-1];   // ROM DWORD index, 32 MB
@@ -56,7 +62,7 @@ module rom_patch #(
 
     integer i;
     initial begin
-        count = 4'd0;
+        count = 6'd0;
         for (i = 0; i < SLOTS; i = i + 1) begin
             slot_addr[i] = 23'd0; slot_val[i] = 32'd0; slot_be[i] = 4'd0;
         end
@@ -69,14 +75,14 @@ module rom_patch #(
         changed    <= 1'b0;
         if (load_reset) begin
             valid <= {SLOTS{1'b0}};
-            count <= 4'd0;
+            count <= 6'd0;
         end else if (cheat_on && !cheat_on_1 && entry_rom && entry_plain &&
-                     count < SLOTS[3:0]) begin
-            slot_addr[count[2:0]] <= entry_addr[24:2];
-            slot_val[count[2:0]]  <= cheat_in_1[31:0];
-            slot_be[count[2:0]]   <= cheat_in_1[103:100];
-            valid[count[2:0]]     <= 1'b1;
-            count                 <= count + 4'd1;
+                     count < SLOTS[5:0]) begin
+            slot_addr[count[4:0]] <= entry_addr[24:2];
+            slot_val[count[4:0]]  <= cheat_in_1[31:0];
+            slot_be[count[4:0]]   <= cheat_in_1[103:100];
+            valid[count[4:0]]     <= 1'b1;
+            count                 <= count + 6'd1;
             changed               <= 1'b1;
         end
     end
