@@ -21,7 +21,7 @@
         "analog_output": false
       },
       "hardware": {
-        "link_port": true,
+        "link_port": false,
         "cartridge_adapter": "0x01000000"
       }
     },

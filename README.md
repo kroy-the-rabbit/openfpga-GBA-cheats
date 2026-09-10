@@ -30,6 +30,10 @@ See [docs/CHEATS.md](docs/CHEATS.md).
 > overwrites whatever is there, and the damage is written into your save at the
 > next save point. Back up anything you care about first.
 
+> **No link cable.** Upstream's partial 2p multiplayer is stripped to buy the
+> ALMs cartridge support needs. The SIO registers still read and write, so a
+> game looking for a cable finds none.
+
 ## What works
 
 Confirmed on a real Pocket with v0.6.4: the core boots, a `.chtbin` beside the
@@ -46,7 +50,7 @@ effect off and back on live.
 | Fast forward, on Y | **works**, upstream's |
 | Button turbo, on X | **works**, upstream's |
 | Display filters | **works**, upstream's |
-| Link cable | **partial**, upstream's: two-player multiplayer only |
+| Link cable | **removed** here, to buy the ALMs cartridge support needs; SIO registers still answer with no cable present |
 | A stray `.cht` loading zero rather than garbage | correct in simulation, **unconfirmed on hardware** |
 | Closing the lid with the engine running | **unconfirmed on hardware** |
 | Encrypted codes: GameShark v3, Action Replay v3, CodeBreaker after a `9` line | refused, and cannot be made to work |

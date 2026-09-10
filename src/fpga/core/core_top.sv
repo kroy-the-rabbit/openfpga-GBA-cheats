@@ -265,33 +265,20 @@ wire [31:0] cart_debug_host;
 wire [31:0] cart_readout_id_s;
 wire [31:0] cart_readout_st_s;
 
-// ---- Link Cable ----
-// Supported: 2-player multi-player mode on SD/SC with SO/SI terminal detect.
-// Unsupported normal serial modes remain stubbed inside gba_serial.
-wire serial_data_out;   // SO terminal-chain output
-wire serial_clk_out;    // SC/SCK idle level
-wire serial_int_clock;  // kept low while normal serial is unsupported
-wire serial_sd_out;     // SD data output
-wire serial_sd_dir;     // SD direction
-wire serial_sc_out;     // SC handshake output
-wire serial_sc_dir;     // SC direction
-
-// SO pin: terminal-chain output for multi-player mode
-assign port_tran_so     = serial_data_out;
-assign port_tran_so_dir = 1'b1;
-
-// SI pin: always input
-assign port_tran_si     = 1'bz;
-assign port_tran_si_dir = 1'b0;
-
-// SCK/SC pin: driven only by supported multi-player handshaking
-assign port_tran_sck     = serial_sc_dir  ? serial_sc_out  :
-                           serial_int_clock ? serial_clk_out : 1'bz;
-assign port_tran_sck_dir = serial_sc_dir | serial_int_clock;
-
-// SD pin: driven by multi-player mode UART
-assign port_tran_sd     = serial_sd_dir ? serial_sd_out : 1'bz;
-assign port_tran_sd_dir = serial_sd_dir;
+// ---- Link port ----
+// Not supported. The partial 2-player multi-player link mincer-ray added in
+// v0.5.0 was stripped here: it cost about 420 ALMs, and at 97 % occupancy the
+// cheat loader and it could not both close timing. gba_serial keeps its
+// register stubs, so a game can read and write SIO without hanging; it simply
+// never sees a cable. Pins are left as inputs.
+assign port_tran_so      = 1'bz;
+assign port_tran_so_dir  = 1'b0;
+assign port_tran_si      = 1'bz;
+assign port_tran_si_dir  = 1'b0;
+assign port_tran_sck     = 1'bz;
+assign port_tran_sck_dir = 1'b0;
+assign port_tran_sd      = 1'bz;
+assign port_tran_sd_dir  = 1'b0;
 
 // ---- PSRAM Controller (EWRAM die 0 + Cart Saves die 1) ----
 // Memory map on cram0:
@@ -1919,19 +1906,6 @@ gba_top #(
     .KeyR                ( key_r ),
     .KeyL                ( key_l ),
     // AnalogTiltX/Y and Rumble removed (solar/gyro/tilt/rumble stripped)
-    // Link cable pins; normal serial is stubbed, 2-player multi-player is supported
-    .serial_data_out     ( serial_data_out ),
-    .serial_data_in      ( port_tran_si ),
-    .serial_clk_out      ( serial_clk_out ),
-    .serial_clk_in       ( port_tran_sck ),
-    .serial_int_clock    ( serial_int_clock ),
-    // Link cable — Multi-player mode
-    .serial_sd_out       ( serial_sd_out ),
-    .serial_sd_in        ( port_tran_sd ),
-    .serial_sd_dir       ( serial_sd_dir ),
-    .serial_sc_out       ( serial_sc_out ),
-    .serial_sc_in        ( port_tran_sck ),
-    .serial_sc_dir       ( serial_sc_dir ),
     // Debug (unused)
     .GBA_BusAddr         ( 28'd0 ),
     .GBA_BusRnW          ( 1'b0 ),
