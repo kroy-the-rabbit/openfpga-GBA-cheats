@@ -7,6 +7,12 @@ from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
 ## 2026-09-10: the jump cheat and the overlay's missing first letter
 
+Card holds `fc6b82e`, seed 1 from sisko2, bitstream SHA-256
+`cfac814c624d085ffaf6ed96588b10556d03fa84555b77ece8af47f2079f02b5`,
+installed 2026-09-10. Beside their ROMs in `Assets/gba/common/`: the Minish
+Cap and Zero Mission `.cht` files, Zero Mission's `.chtbin`, and
+`ZM-ROMPATCH-TEST.gba.cht`. Untested on hardware.
+
 Two bugs, neither in the cartridge path.
 
 1. **Jump In Midair was the wrong cheat.** It had been six CodeBreaker
