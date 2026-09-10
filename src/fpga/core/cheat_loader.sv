@@ -409,6 +409,20 @@ module cheat_loader #(
   reg [CW-1:0] pend_len;
   reg          pend_bad;
 
+  // The end-of-file flush, held one cycle. Every other push takes its length
+  // from pend_len, a register; this one alone took cg_len, and that dragged
+  // the whole token decode (d_optype, nx_len, cg_len) through the adder into
+  // entry_count. At 84 % occupancy that was the worst path in the design,
+  // -0.138 ns at the 0 C corner on 2026-09-10. The values cannot be read
+  // from the collector's registers instead, because a token left half read
+  // when the file ends still counts and only the live nx_* say so. So the
+  // flush latches them and pushes on the next clock; no more bytes are
+  // coming, so the extra cycle costs nothing.
+  reg          eof_flush;
+  reg          eof_bank;
+  reg [CW-1:0] eof_len;
+  reg          eof_bad;
+
   // Room left in gba_cheats' table.
   wire [CW-1:0] room = MAX_ENTRIES[CW-1:0] - entry_count[CW-1:0];
 
@@ -454,6 +468,8 @@ module cheat_loader #(
       has_cond     <= 1'b0;  group_done <= 1'b0;  group_bad    <= 1'b0;
       pend_valid   <= 1'b0;  pend_bank  <= 1'b0;  pend_len     <= 0;
       pend_bad     <= 1'b0;
+      eof_flush    <= 1'b0;  eof_bank   <= 1'b0;  eof_len      <= 0;
+      eof_bad      <= 1'b0;
       req_valid    <= 1'b0;  req_bank   <= 1'b0;  req_len      <= 0;
       fl_idx       <= 0;     fl_len     <= 0;     fl_bank      <= 1'b0;
       fl_state     <= 2'd0;  fl_q       <= 0;     eof_seen     <= 1'b0;
@@ -677,18 +693,25 @@ module cheat_loader #(
         if (nx_wr) gbuf[{bank, buf_len[AW-1:0]}] <= {d_mask, d_optype, d_addr, d_val};
         if (pend_valid) begin
           pend_valid <= 1'b0;
-          push_go    = 1'b1;
-          push_bank  = pend_bank;
-          push_len   = pend_len;
-          push_bad   = pend_bad;
+          eof_flush  <= 1'b1;
+          eof_bank   <= pend_bank;
+          eof_len    <= pend_len;
+          eof_bad    <= pend_bad;
         end else if (cg_len != 0) begin
           // collecting, with a cheat in the buffer and no closing quote
           bank      <= ~bank;
-          push_go   = 1'b1;
-          push_bank = bank;
-          push_len  = cg_len;
-          push_bad  = nx_bad;
+          eof_flush <= 1'b1;
+          eof_bank  <= bank;
+          eof_len   <= cg_len;
+          eof_bad   <= nx_bad;
         end
+      end else if (eof_flush) begin
+        // The cycle after: everything the push needs is now a register.
+        eof_flush <= 1'b0;
+        push_go   = 1'b1;
+        push_bank = eof_bank;
+        push_len  = eof_len;
+        push_bad  = eof_bad;
       end
 
       // ------------------------------------------------- hand over a cheat --
