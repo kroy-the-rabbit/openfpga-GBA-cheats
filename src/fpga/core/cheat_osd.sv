@@ -44,6 +44,11 @@ module cheat_osd #(
 ) (
 	input  wire        clk,          // video clock
 	input  wire        reset,
+	// The GBA adapter runs clk_vid at twice the dot clock and holds de for
+	// two clocks per pixel; ce marks the clock on which the pixel advances.
+	// Without it the column counters ran twice per pixel and wrapped at
+	// real pixel 192, drawing the header a second time at the right edge.
+	input  wire        ce,
 
 	input  wire        show,         // menu toggle, already on this clock
 	input  wire        cart_mode,    // playing a physical cartridge
@@ -82,9 +87,11 @@ module cheat_osd #(
 			px <= 8'd0;
 			py <= 8'd0;
 		end else begin
-			px <= de ? px + 8'd1 : 8'd0;
+			if (!de)     px <= 8'd0;
+			else if (ce) px <= px + 8'd1;
 			// py names the line about to be drawn, so the line buffer can be
-			// filled during the blanking that precedes it.
+			// filled during the blanking that precedes it. line_end is one
+			// clock wide and not aligned to ce, so it is not gated.
 			if (line_end) py <= py + 8'd1;
 		end
 	end
@@ -101,6 +108,8 @@ module cheat_osd #(
 		if (reset || !de) begin
 			text_col  <= 6'd0;
 			pixel_col <= 3'd0;
+		end else if (!ce) begin
+			// hold
 		end else if (pixel_col == CELL[2:0] - 3'd1) begin
 			pixel_col <= 3'd0;
 			text_col  <= text_col + 6'd1;

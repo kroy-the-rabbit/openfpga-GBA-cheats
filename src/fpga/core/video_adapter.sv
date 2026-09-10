@@ -174,6 +174,7 @@ module video_adapter (
     cheat_osd osd (
         .clk         ( clk_vid ),
         .reset       ( reset ),
+        .ce          ( vid_ce ),
         .show        ( osd_show ),
         .cart_mode   ( osd_cart ),
         .de          ( active_d1 ),
