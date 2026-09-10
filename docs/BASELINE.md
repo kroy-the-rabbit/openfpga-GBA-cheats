@@ -497,6 +497,19 @@ over two clocks (no more bytes are coming, so the extra cycle is free)
 closed both seeds on the first try. Package
 `kroy.GBA_0.9999.65fd93d.zip` SHA-256 `d539e29f3f879a770b479897abe5c780b577451e01b33e1bff37f0af16d1196e`, bitstream `41a05851a7e817be`.
 
+### Overlay column pipeline corrected, `fc6b82e`
+
+| Seed | Runner | ALMs | Setup | Hold | Result |
+|---|---|---|---|---|---|
+| 3 | sisko | 15,615 (84 %) | +0.092 | +0.044 | pass, first seed |
+| 1 | sisko2 | 15,612 (84 %) | +0.086 | +0.105 | pass, first seed |
+
+One register stage removed from `cheat_osd`'s line buffer, so it is four
+ALMs smaller and neither seed moved. Seed 1 is the better build: its worst
+slack across every analysis type is +0.086 ns against seed 3's +0.044 ns,
+and its snapshot delay is 0.6 ns shorter. Bitstream SHA-256
+`cfac814c624d085ffaf6ed96588b10556d03fa84555b77ece8af47f2079f02b5`.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on
