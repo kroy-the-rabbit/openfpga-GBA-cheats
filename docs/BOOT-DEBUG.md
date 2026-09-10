@@ -1,12 +1,12 @@
 # Cartridge boot diagnostics
 
 The BMXE ROM-header checker was **retired from the fitted design on
-2026-09-09**, having answered its question: the header arrives byte-exact,
-and the corruption that motivated it was a dirty cartridge slot. Two bus
-lines, AD0 and AD8, were reading high where both the driven address and the
-expected data were low; after Kroy cleaned the connector the banner drew
-correctly and the checker reported 24 pairs with no mismatch. Removing the
-instance returns about 88 ALMs and one M10K.
+2026-09-09**, having answered its question: every error it caught was in
+the first halfword after the address latch, the non-sequential read. The
+cause was the read window, not the slot: with a turnaround between
+releasing the address bus and RD# falling (menu `ROM Timing`, any profile
+but Fast) Zero Mission boots clean every time. Removing the instance
+returned about 88 ALMs and one M10K.
 
 `src/fpga/han/cart_header_check.sv`, its testbench and the ROM-path
 integration bench are all still in the tree and still run under `make test`.
@@ -18,8 +18,20 @@ diagnostic, plus `CG:`, `CS:` and `SF:`.
 
 ## The `EE:` word
 
-Why the EEPROM abort condition first fired, snapshotted coherently when the
-core menu opens. Zero if it never fired.
+Snapshotted coherently when the core menu opens. If the EEPROM abort
+condition ever fired, this is why it first fired, marker `E` in the top
+nibble. Otherwise it is the EEPROM traffic so far:
+
+| Bits | Meaning |
+|---|---|
+| 31:24 | Requests from the game that reached the bridge, modulo 256 |
+| 23:16 | Requests the bridge forwarded to the slot, modulo 256 |
+| 15:0 | The last sixteen bits the chip answered, newest in bit 0 |
+
+A game at its save menu with `00000000` here never asked for its save. One
+with requests and `FFFF` in the low half asked a chip that did not answer.
+
+The abort form:
 
 | Bits | Meaning |
 |---|---|

@@ -2047,9 +2047,31 @@ gba_cart_controller cart_ctl (
 // instance is gone, which returns about 88 ALMs and one M10K.
 // The snapshot now carries one payload: why the EEPROM abort condition
 // first fired. See docs/BOOT-DEBUG.md for the field layout.
+// EE: shows the abort word when one was recorded. Otherwise it shows the
+// EEPROM traffic itself: requests from the game, requests forwarded to the
+// slot, and the last sixteen bits the chip answered, newest in bit 0. A game
+// that reaches its save menu with zero requests never asked; one with
+// requests and all-ones answers asked a chip that did not respond.
+reg  [7:0]  ee_host_cnt = 8'd0;
+reg  [7:0]  ee_ctl_cnt  = 8'd0;
+reg  [15:0] ee_last     = 16'd0;
+always @(posedge clk_sys) begin
+    if (!cart_ctl_reset_n) begin
+        ee_host_cnt <= 8'd0;
+        ee_ctl_cnt  <= 8'd0;
+        ee_last     <= 16'd0;
+    end else begin
+        if (cart_eeprom_req && cart_rom_mode) ee_host_cnt <= ee_host_cnt + 8'd1;
+        if (ee_bridge_req)                    ee_ctl_cnt  <= ee_ctl_cnt + 8'd1;
+        if (cart_eeprom_done && cart_eeprom_rnw) ee_last <= {ee_last[14:0], cart_eeprom_dout};
+    end
+end
+wire [31:0] ee_debug = (cart_eeprom_fault_why != 32'd0) ? cart_eeprom_fault_why
+                                                        : {ee_host_cnt, ee_ctl_cnt, ee_last};
+
 cart_debug_snapshot #(.WIDTH(32)) boot_debug (
     .clk_host(clk_74a), .clk_sys(clk_sys), .host_menu(osnotify_inmenu),
-    .sys_debug(cart_eeprom_fault_why),
+    .sys_debug(ee_debug),
     .host_debug(cart_debug_host), .page()
 );
 
