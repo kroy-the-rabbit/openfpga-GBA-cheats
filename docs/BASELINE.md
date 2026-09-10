@@ -482,6 +482,21 @@ SHA-256 `2a5898dbf51ba120a8aa3262dce421a3c05d043b164886475c212149339add6c`, bits
 `rom_patch` costs about 320 ALMs for eight slots. Package
 `kroy.GBA_0.9999.6c8fd96.zip` SHA-256 `483ca6523b74ab74232f237fb48899835846bc8fbba0a50d0bdf952c41d0747e`, bitstream `dbeb1d8dd1ac2503`.
 
+### Text parser restored, EOF flush split, `65fd93d`
+
+| Seed | Runner | ALMs | Setup | Result |
+|---|---|---|---|---|
+| 3 | sisko | 15,619 (85 %) | +0.103 | pass, first seed |
+| 1 | sisko2 | 15,620 (85 %) | +0.093 | pass, first seed |
+
+`1b5eaaa` (cheat_loader back in the fit, no split) missed at -0.138 ns:
+the end-of-file push alone read its length from cg_len, the live token
+decode, dragging entry_count's adder through the whole combinational
+chain. Every other push already read a register. Splitting the EOF flush
+over two clocks (no more bytes are coming, so the extra cycle is free)
+closed both seeds on the first try. Package
+`kroy.GBA_0.9999.65fd93d.zip` SHA-256 `d539e29f3f879a770b479897abe5c780b577451e01b33e1bff37f0af16d1196e`, bitstream `41a05851a7e817be`.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on
