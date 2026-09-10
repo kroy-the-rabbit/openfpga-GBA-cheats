@@ -463,6 +463,15 @@ nowhere near the CPU. `326d602` constrains it as a two-cycle path. The
 multiplier shows up in the top twenty paths of every passing build too;
 it was always this close.
 
+### Multiplier constrained, overlay added, `326d602`
+
+| Seed | Runner | ALMs | Setup | Result |
+|---|---|---|---|---|
+| 3 | sisko | 14,616 (79 %) | **+0.101** | pass, 1063 s; **installed** 2026-09-10 |
+
+The overlay costs about 390 ALMs. Package `kroy.GBA_0.9999.326d602.zip`
+SHA-256 `2a5898dbf51ba120a8aa3262dce421a3c05d043b164886475c212149339add6c`, bitstream `29515e6b39af323e`.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on

@@ -7,8 +7,9 @@ from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
 ## 2026-09-09 night: Zero Mission boots and saves; the fit ceiling is gone
 
-Card holds `5ce25d0` or later (see `docs/BASELINE.md` for the installed
-bitstream). Branch `p5-cartridge`, not pushed.
+Card holds `326d602`, bitstream `29515e6b39af323e`, installed 2026-09-10
+00:40. Beside it, `Metroid - Zero Mission (USA).gba.chtbin` with three
+decrypted Action Replay v3 cheats (`build/cheats/`, sources and notes there). Branch `p5-cartridge`, not pushed.
 
 **What was wrong, in the order it was found.**
 
@@ -53,7 +54,7 @@ smoke bench (`tools/sim/run_osd.py`) and is untested on hardware. Kroy's
 next step after that is `.cht` text loading, which fills the title RAM;
 the table below says what comes from where.
 
-**Not tested yet.** The overlay on hardware; cheats on Zero Mission (no codes were on the card);
+**Not tested yet.** The overlay on hardware; cheats on Zero Mission (three codes are now on the card);
 physical SRAM/Flash writes on a Flash cart; the abort latch on hardware;
 GPIO/RTC in cart mode (still `gpio_req(1'b0)`).
 
