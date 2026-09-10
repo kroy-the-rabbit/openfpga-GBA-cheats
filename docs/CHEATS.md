@@ -177,6 +177,18 @@ has 32 slots in it.
   cheat it is skipped and counted, and a later, smaller cheat can still fit.
 * 1 MB of file.
 
+## The overlay
+
+**Cheat Overlay** in the core menu draws the loaded cheats over the game
+picture: a header row with the counts, a row saying whether the game came
+from the SD card or the cartridge slot, then one row per cheat. It is the
+`cheat_osd` / `cheat_font` / `cheat_titles` trio from pocket-gbc, regridded
+to 40 columns by 20 rows for 240x160 and composited in `video_adapter` on
+`clk_vid`. Off by default, not persisted.
+
+The `.chtbin` format carries no titles, so every row reads `CHEAT nn` for
+now. The title RAM is wired and empty; the `.cht` text loader will fill it.
+
 ## The readout, removed 2026-09-09
 
 `CL:` and `CD:` were two numbers in the core menu for when a file did not do

@@ -43,6 +43,7 @@ effect off and back on live.
 | | |
 |---|---|
 | Cheats, CodeBreaker and GameShark v1/v2, from libretro `.cht` files | **works on hardware** |
+| Cheat overlay, the loaded cheats drawn over the picture | **new**, untested on hardware; rows read `CHEAT nn` until `.cht` text loading lands |
 | **Cheats Enabled** switch, live | **works on hardware** |
 | Everything upstream's core does | **works**, unchanged. Nothing was cut to make room |
 | Save states and sleep | **removed** here; a core built for cheats does not need them, and the ALMs went to cartridge support |

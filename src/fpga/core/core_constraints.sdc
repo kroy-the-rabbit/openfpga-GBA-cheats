@@ -142,34 +142,24 @@ set_multicycle_path -hold -from [get_clocks {sdram_clk}] \
   -to [get_clocks {ic|mp1|mf_pllbase_inst|sys_pll_i|general[0].gpll~PLL_OUTPUT_COUNTER|divclk}] 1
 
 # Savestate internal bus pipeline:
-# The address fan-out from gba_savestates to hundreds of eProcReg_gba
-# instances takes ~10.7 ns (combinational decode MUX), exceeding the
-# 9.93 ns clock period.  The RTL gates done_r/dout_r capture with
-# bus_wait, ensuring Adr is stable for a full extra cycle before
-# sampling.  On the write side, a settle state separates the Adr
-# change from the ena pulse.  Both give the decode 2 full clock
-# periods (~20 ns) to resolve.
-#
-# Read path: Adr → combinational decode → done_r / dout_r
+# gba_savestates and its bus multicycles were removed on 2026-09-09; the
+# savestate bus is now held constant in gba_top.
+
+# ---------------------------------------------------------------------------
+# CPU multiplier. gba_cpu loads mul_op1/mul_op2 in MULSTART, then sits in
+# MULCALCMUL for mul_wait+1 = 4 clocks recomputing mul_product every clock
+# and copying it to mul_result; nothing reads mul_result until the state
+# after that. The 32x32 product is therefore a genuine multicycle path, but
+# it was constrained single-cycle and closed only when register retiming
+# happened to pipeline it into the DSP: 2026-09-09, an unrelated 24-line
+# change dropped retiming's estimate from 3363 to 1477 ps and the path
+# missed by 1.8 to 2.4 ns on two runners.
 set_multicycle_path -setup 2 \
-  -from [get_registers {*igba_savestates|internal_bus_out.Adr*}] \
-  -to   [get_registers {*igba_savestates|done_r}]
+  -from [get_registers {*igba_cpu|mul_op1[*] *igba_cpu|mul_op2[*]}] \
+  -to   [get_registers {*igba_cpu|mul_product[*]}]
 set_multicycle_path -hold 1 \
-  -from [get_registers {*igba_savestates|internal_bus_out.Adr*}] \
-  -to   [get_registers {*igba_savestates|done_r}]
-set_multicycle_path -setup 2 \
-  -from [get_registers {*igba_savestates|internal_bus_out.Adr*}] \
-  -to   [get_registers {*igba_savestates|dout_r[*]}]
-set_multicycle_path -hold 1 \
-  -from [get_registers {*igba_savestates|internal_bus_out.Adr*}] \
-  -to   [get_registers {*igba_savestates|dout_r[*]}]
-# Write path: Adr → address compare in eProcReg_gba → Dout_buffer
-set_multicycle_path -setup 2 \
-  -from [get_registers {*igba_savestates|internal_bus_out.Adr*}] \
-  -to   [get_registers {*eProcReg_gba*Dout_buffer*}]
-set_multicycle_path -hold 1 \
-  -from [get_registers {*igba_savestates|internal_bus_out.Adr*}] \
-  -to   [get_registers {*eProcReg_gba*Dout_buffer*}]
+  -from [get_registers {*igba_cpu|mul_op1[*] *igba_cpu|mul_op2[*]}] \
+  -to   [get_registers {*igba_cpu|mul_product[*]}]
 
 # ---------------------------------------------------------------------------
 # Cartridge bus controller configuration.

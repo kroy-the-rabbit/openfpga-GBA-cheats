@@ -22,6 +22,20 @@ module video_adapter (
     input  wire        reset,         // Active high - hold until PLL locked
 
     // GBA GPU framebuffer write interface (clk_sys domain)
+    // Cheat overlay, all on clk_vid except the title write port.
+    input  wire        osd_show,
+    input  wire        osd_cart,
+    input  wire [31:0] osd_mask,
+    input  wire [5:0]  osd_groups,
+    input  wire [5:0]  osd_codes,
+    input  wire        title_clk,
+    input  wire        title_reset,
+    input  wire        title_wr,
+    input  wire [4:0]  title_group,
+    input  wire [4:0]  title_col,
+    input  wire [5:0]  title_char,
+    input  wire        title_end,
+
     input  wire [15:0] pixel_addr,    // 0-38399 (linear: row*240 + col)
     input  wire [17:0] pixel_data,    // {R[5:0], G[5:0], B[5:0]}
     input  wire        pixel_we,
@@ -131,6 +145,55 @@ module video_adapter (
         end
     end
 
+    // === Cheat overlay ===
+    // Runs off the same de as the pixel it covers (active_d1) and treats the
+    // vsync region as vertical blanking. Where it draws, the game shows at a
+    // quarter brightness under white text.
+    wire [4:0] osd_t_group, osd_t_col, osd_t_len;
+    wire [5:0] osd_t_char, osd_font_ch;
+    wire [2:0] osd_font_row;
+    wire [7:0] osd_font_bits;
+    wire       osd_active, osd_ink;
+
+    cheat_titles osd_titles (
+        .wr_clk   ( title_clk ),   .wr_reset ( title_reset ),
+        .wr_en    ( title_wr ),    .wr_group ( title_group ),
+        .wr_col   ( title_col ),   .wr_char  ( title_char ),
+        .wr_end   ( title_end ),
+        .rd_clk   ( clk_vid ),     .rd_group ( osd_t_group ),
+        .rd_col   ( osd_t_col ),   .rd_char  ( osd_t_char ),
+        .rd_len   ( osd_t_len )
+    );
+
+    cheat_font osd_font (
+        .ch   ( osd_font_ch ),
+        .row  ( osd_font_row ),
+        .bits ( osd_font_bits )
+    );
+
+    cheat_osd osd (
+        .clk         ( clk_vid ),
+        .reset       ( reset ),
+        .show        ( osd_show ),
+        .cart_mode   ( osd_cart ),
+        .de          ( active_d1 ),
+        .v_blank     ( vs_pipe[0] ),
+        .enable_mask ( osd_mask ),
+        .group_count ( osd_groups ),
+        .code_count  ( osd_codes ),
+        .title_group ( osd_t_group ),
+        .title_col   ( osd_t_col ),
+        .title_char  ( osd_t_char ),
+        .title_len   ( osd_t_len ),
+        .font_ch     ( osd_font_ch ),
+        .font_row    ( osd_font_row ),
+        .font_bits   ( osd_font_bits ),
+        .active      ( osd_active ),
+        .ink         ( osd_ink )
+    );
+
+    wire [23:0] osd_dim = {2'b0, r8[7:2], 2'b0, g8[7:2], 2'b0, b8[7:2]};
+
     // Stage 2: output registers with sync edge detection
     always @(posedge clk_vid) begin
         if (reset) begin
@@ -140,7 +203,9 @@ module video_adapter (
             video_vs   <= 1'b0;
             video_skip <= 1'b0;
         end else begin
-            video_rgb  <= active_d1 ? {r8, g8, b8} : 24'd0;
+            video_rgb  <= !active_d1 ? 24'd0
+                        : osd_active ? (osd_ink ? 24'hFFFFFF : osd_dim)
+                        : {r8, g8, b8};
             video_de   <= active_d1;
             video_hs   <= hs_pipe[0] & ~hs_pipe[1];
             video_vs   <= vs_pipe[0] & ~vs_pipe[1];

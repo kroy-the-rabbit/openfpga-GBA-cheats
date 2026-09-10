@@ -1334,6 +1334,7 @@ core_bridge_cmd icb (
 // deliberately not persisted: a forgotten cheat left on across sessions is
 // indistinguishable from a broken game.
 reg cheats_master = 1'b0;
+reg cheats_osd    = 1'b0;   // draw the enabled cheats over the picture
 
 // Synchronised rather than used raw: cheats_master is written in clk_74a by the
 // menu decode below and read by the cheat engine in clk_sys.
@@ -1406,6 +1407,25 @@ wire         cheat_on;
 // The loader's five counters used to feed the CL:/CD: menu readouts. Those
 // went on 2026-09-09 to give the fitter room; Cheats Enabled is the only
 // control. The ports are left open and the fitter removes the counters.
+wire [5:0] cheat_entries, cheat_groups;
+
+// The overlay reads these on clk_vid. They change only while a file loads
+// and the overlay is cosmetic, so two flops each rather than a synchroniser
+// per bit: the worst a torn sample does is one frame with a stale count.
+// Every group the file carried is on (the host resolved the enable keys),
+// so the mask is the master switch spread over the loaded groups.
+reg [31:0] osd_mask_ss, osd_mask_s;
+reg [5:0]  osd_groups_ss, osd_groups_s, osd_codes_ss, osd_codes_s;
+reg        osd_show_ss, osd_show_s, osd_cart_ss, osd_cart_s;
+wire [31:0] osd_mask_sys = cheats_on ? ((32'd1 << cheat_groups) - 32'd1) : 32'd0;
+always @(posedge clk_vid) begin
+    osd_mask_ss   <= osd_mask_sys;        osd_mask_s   <= osd_mask_ss;
+    osd_groups_ss <= cheat_groups;        osd_groups_s <= osd_groups_ss;
+    osd_codes_ss  <= cheat_entries;       osd_codes_s  <= osd_codes_ss;
+    osd_show_ss   <= cheats_osd;          osd_show_s   <= osd_show_ss;
+    osd_cart_ss   <= osnotify_cart_play;  osd_cart_s   <= osd_cart_ss;
+end
+
 cheat_binloader #(
     .MAX_ENTRIES ( 32 )             // must match gba_cheats' CHEATCOUNT
 ) cheats_parser (
@@ -1416,8 +1436,8 @@ cheat_binloader #(
     .eof          ( cheat_eof ),
     .cheat_in     ( cheat_in ),
     .cheat_on     ( cheat_on ),
-    .entry_count  (  ),
-    .group_count  (  ),
+    .entry_count  ( cheat_entries ),
+    .group_count  ( cheat_groups ),
     .byte_count   (  ),
     .reject_count (  ),
     .overrun      (  )
@@ -1460,6 +1480,9 @@ always @(*) begin
     // toggled. The Game Boy core's equivalent switch is readable and does not.
     32'hF3000008: begin
         bridge_rd_data <= {31'd0, cheats_master};
+    end
+    32'hF3000010: begin
+        bridge_rd_data <= {31'd0, cheats_osd};
     end
     // What the cartridge header probe found. `CG:` is the four-character game
     // code from header 0xAC..0xAF; `CS:` is the status word, laid out in the
@@ -1570,6 +1593,7 @@ always @(posedge clk_74a) begin
         32'h88: turbo_mode     <= bridge_wr_data[1:0];
         32'h8C: ff_video_stable <= bridge_wr_data[0];
         32'hF3000008: cheats_master <= bridge_wr_data[0];
+        32'hF3000010: cheats_osd    <= bridge_wr_data[0];
         // Former Cartridge mode address 0x90 is ignored, including stale
         // persisted Boot values from older packages. APF selects the source.
         32'h98: cart_cfg <= bridge_wr_data;           // controller tuning
@@ -1622,6 +1646,21 @@ video_adapter video_out (
     .clk_sys    ( clk_sys ),
     .clk_vid    ( clk_vid ),
     .reset      ( ~pll_core_locked ),
+
+    .osd_show    ( osd_show_s ),
+    .osd_cart    ( osd_cart_s ),
+    .osd_mask    ( osd_mask_s ),
+    .osd_groups  ( osd_groups_s ),
+    .osd_codes   ( osd_codes_s ),
+    // No title source yet: .chtbin carries none, so every row reads
+    // "CHEAT nn". The .cht text loader will stream titles in here.
+    .title_clk   ( clk_sys ),
+    .title_reset ( cheat_reset ),
+    .title_wr    ( 1'b0 ),
+    .title_group ( 5'd0 ),
+    .title_col   ( 5'd0 ),
+    .title_char  ( 6'd0 ),
+    .title_end   ( 1'b0 ),
 
     .pixel_addr ( pixel_out_addr ),
     .pixel_data ( pixel_out_data ),

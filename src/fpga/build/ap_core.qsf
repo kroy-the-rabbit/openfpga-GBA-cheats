@@ -852,6 +852,9 @@ set_global_assignment -name VERILOG_FILE ../pocket/mf_audio_pll/mf_audio_pll_000
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/save_type_detector.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/cart_quirks.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/cheat_binloader.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../core/cheat_osd.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../core/cheat_font.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../core/cheat_titles.sv
 # Cartridge probe, measurement only. Vendored from Wokann/openfpga-GBA and
 # instantiated in core_top so the fitter has to place it; see the probe block
 # at the bottom of core_top.sv. Not a feature and not for merging.
