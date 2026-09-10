@@ -431,6 +431,18 @@ Package `kroy.GBA_0.9999.a8fcc1c.zip` SHA-256
 bitstream `d8815f9462f5d4a5`. First fit on the card with a save bridge
 that survives synthesis.
 
+### Savestates removed, ROM Timing menu, `ec3947b`
+
+| Seed | ALMs | Setup | Result |
+|---|---|---|---|
+| 3 | 14,368 (78 %) | **+0.063** | pass, kira |
+
+Removing `gba_savestates` and `save_state_controller` and holding the
+savestate bus constant returned about 3,300 ALMs from `a8fcc1c`'s 17,650:
+the per-register save/load muxes in every `eProcReg` folded, not just the
+two modules. Package `kroy.GBA_0.9999.ec3947b.zip` SHA-256 `be9800ccaee6173795e1e9025daaf66383884d43cc95fa1c5424521d93b30fe4`,
+bitstream `1f7263d5c0d0ebb5`. The design is no longer at the fit ceiling.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on
