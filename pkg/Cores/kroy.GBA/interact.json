@@ -151,7 +151,7 @@
         "address": "0xF4000008"
       },
       {
-        "name": "HS:",
+        "name": "EE:",
         "id": 61,
         "type": "number_u32",
         "enabled": true,

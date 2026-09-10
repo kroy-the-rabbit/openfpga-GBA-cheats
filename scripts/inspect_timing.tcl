@@ -12,39 +12,13 @@ set published [get_registers {*boot_debug|host_debug[*]}]
 if {[get_collection_size $captured] == 0 || [get_collection_size $published] == 0} {
     error "Diagnostic snapshot registers were not found"
 }
-# The alternating payload makes every snapshot bit variable; keep the
-# 23-bit floor of the status word as the check so a folded bank still fails.
-set badword [get_registers {*header_check|bad_word[*]}]
-set lanes [get_registers {*header_check|bad_lanes[*]}]
-set offset [get_registers {*header_check|bad_offset[*]}]
-set beat [get_registers {*header_check|bad_second}]
-if {[get_collection_size $badword] < 32 ||
-    [get_collection_size $lanes] < 4 || [get_collection_size $offset] < 6 ||
-    [get_collection_size $beat] < 1 ||
-    [get_collection_size $captured] < 23 || [get_collection_size $published] < 23} {
-    error "Header diagnostic requires its complete mismatch data/lanes/address/beat and 23 variable snapshot bits"
+# The snapshot carries the EEPROM abort word. Its marker nibble and the
+# unused bits legitimately fold away; require the bank to stay mostly real.
+if {[get_collection_size $captured] < 16 || [get_collection_size $published] < 16} {
+    error "Diagnostic snapshot needs at least 16 variable bits in each bank"
 }
-puts "HEADER_REGISTERS data=[get_collection_size $badword] lanes=[get_collection_size $lanes] offset=[get_collection_size $offset] beat=[get_collection_size $beat] captured=[get_collection_size $captured] published=[get_collection_size $published]"
-# Fail if the area-saving ROM was implemented as logic or disappeared.
-# Read the actual fitted memory table, not an HDL attribute or total RAM count.
-set report_file [open output_files/ap_core.fit.rpt r]
-fconfigure $report_file -encoding iso8859-1
-set m10k_column -1
-set header_m10ks 0
-foreach line [split [read $report_file] "\n"] {
-    set fields {}
-    foreach field [split $line ";"] {lappend fields [string trim $field]}
-    set column [lsearch -exact $fields "M10K blocks"]
-    if {$column >= 0} {set m10k_column $column}
-    if {$m10k_column >= 0 && [string match {*header_check*header_rom*} [lindex $fields 1]] &&
-        [lindex $fields 2] in {"M10K" "M10K block"}} {
-        set blocks [lindex $fields $m10k_column]
-        if {[string is integer -strict $blocks]} {incr header_m10ks $blocks}
-    }
-}
-close $report_file
-if {$header_m10ks < 1} {error "Header diagnostic requires the reference ROM in M10K memory"}
-puts "HEADER_REFERENCE_M10K blocks=$header_m10ks"
+puts "SNAPSHOT_BITS captured=[get_collection_size $captured] published=[get_collection_size $published]"
+
 
 # The EEPROM bridge must survive as real logic. On 2026-09-09 constant
 # propagation resolved a cycle through its fault latch and reduced the whole

@@ -74,25 +74,14 @@ module tb_core_top_cart_launch;
     endtask
     reg [31:0] captured_header=0, stable_header=0;
     integer header_samples=0;
-    reg hreq=0, hready=0;
-    reg [24:0] haddr=0;
-    reg [31:0] hfirst=0, hsecond=0;
-    initial begin
-        force dut.sdram_read_req_gba=hreq;
-        force dut.sdram_read_addr_gba=haddr;
-        force dut.romsrc_gba_rd_ready=hready;
-        force dut.romsrc_gba_rd_data=hfirst;
-        force dut.romsrc_gba_rd_data_second=hsecond;
-        force dut.cart_hdr_id=32'h424d5845;
-    end
+    // The snapshot's payload is the EEPROM abort word. Drive it directly:
+    // the bridge's own faulting is covered by tb_cart_eeprom_abort.
+    reg [31:0] ee_why=0;
+    initial force dut.cart_eeprom_fault_why=ee_why;
     task bad_header_read;
         begin
-            @(negedge clk);haddr=5;hreq=1;
-            @(negedge clk);hreq=0;haddr=0;
-            repeat(3) @(negedge clk);
-            hfirst=32'h12345678;hsecond=32'hdeadbeef;hready=1;
-            @(negedge clk);hready=0;
-            repeat(3) @(negedge clk);
+            ee_why=32'h12345678;
+            repeat(6) @(negedge clk);
         end
     endtask
     always @(posedge clk) begin
@@ -131,19 +120,16 @@ module tb_core_top_cart_launch;
         bad_header_read();
         expect_debug(0); // Not captured yet.
         command(16'h00b0,1);
-        expect_debug(32'h013a14f0);
+        expect_debug(32'h12345678);
         stable_header = captured_header;
-        bad_header_read();
+        ee_why=32'hcafe0001;
         command(16'h00b0,1); // Already open: retain the same snapshot.
         expect_debug(stable_header);
         if (captured_header !== stable_header) $fatal(1,"FAIL recaptured while menu open");
         command(16'h00b0,0);
         command(16'h00b0,1);
-        expect_debug(32'h12345678); // second open: the bad DWORD's value
-        command(16'h00b0,0);
-        command(16'h00b0,1);
-        expect_debug(32'h023a14f0); // third open: status again
-        if (header_samples != 3) $fatal(1,"FAIL header capture count %0d",header_samples);
+        expect_debug(32'hcafe0001); // reopened: the current abort word
+        if (header_samples != 2) $fatal(1,"FAIL capture count %0d",header_samples);
         $display("PASS core_top cartridge launch: real APF notification, synchronization, reset/probe gating, SD-save isolation and stale-menu immunity");
         $display("PASS core_top debug packing, live header mismatch, retired addresses zero and stable APF menu snapshots during GBA reset");
         $finish;

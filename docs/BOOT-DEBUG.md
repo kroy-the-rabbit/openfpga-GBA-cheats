@@ -1,36 +1,44 @@
-# BMXE ROM-header diagnostic
+# Cartridge boot diagnostics
 
-This build replaces the passing local pattern with a passive check of the
-first 192 bytes of Metroid Zero Mission's verified BMXE cartridge ROM. It
-compares the paired words returned by `rom_source_mux` to the game cache.
-The first word is sampled on ready; the companion is sampled on the next
-system clock, matching `cache.vhd`. Requests latch their original DWORD
-address, including odd/even ordering. Only physical cartridge mode with
-CG `424D5845` enables the checker. Other cartridge revisions are not qualified.
+The BMXE ROM-header checker was **retired from the fitted design on
+2026-09-09**, having answered its question: the header arrives byte-exact,
+and the corruption that motivated it was a dirty cartridge slot. Two bus
+lines, AD0 and AD8, were reading high where both the driven address and the
+expected data were low; after Kroy cleaned the connector the banner drew
+correctly and the checker reported 24 pairs with no mismatch. Removing the
+instance returns about 88 ALMs and one M10K.
 
-The existing direct header probe and CG/CS checks are unchanged. Their
-OR/AND fingerprints cannot establish byte-for-byte header integrity. This
-new checker observes game ROM requests, not the separate probe responses.
-The GBA engine, cartridge controller, save guards and CPU debug connections
-are unchanged from the installed pattern build. The checker never initiates,
-stalls or changes ROM transfers. Its added observation logic still requires
-a new fit and timing qualification before hardware use.
+`src/fpga/han/cart_header_check.sv`, its testbench and the ROM-path
+integration bench are all still in the tree and still run under `make test`.
+Re-instantiating it in `core_top.sv` and re-adding its line to
+`ap_core.qsf` is all it takes to bring it back.
 
-The revised checker keeps its 48 reference DWORDs in a synchronous M10K
-ROM and shares one 32-bit comparator across the two response clocks. This
-replaces the resettable 64-bit reference register and two separate compares.
-The sampling cycles are unchanged. Actual M10K placement is checked after
-fitting; timing improvement is not assumed from the RTL.
+What remains on the menu is `EE:` at `F4000014`, the cartridge save
+diagnostic, plus `CG:`, `CS:` and `SF:`.
 
-The shrunk checker (2026-09-09) reports through one 32-bit snapshot.
-The status word carries the first bad DWORD's differing byte lanes and
-beat; the count is eight bits; `HD:` is retired (`F4000010` reads zero).
-Since the same day's follow-up, the value of the first bad DWORD is kept
-again and the snapshot **alternates**: the first menu open after power-on
-captures the status word, the next captures the bad DWORD's value, the
-next the status again. The status is the one with marker `A` in bits
-19:16 and zeros in bits 3:1; the value has no marker.
-This follows [Altera's ROM inference guidance](https://docs.altera.com/r/docs/683323/18.1/intel-quartus-prime-standard-edition-user-guide-design-recommendations/inferring-rom-functions-from-hdl-code).
+## The `EE:` word
+
+Why the EEPROM abort condition first fired, snapshotted coherently when the
+core menu opens. Zero if it never fired.
+
+| Bits | Meaning |
+|---|---|
+| 31:28 | Marker `E` |
+| 27:26 | Bridge FSM state |
+| 25 | `host_dma_active` had dropped |
+| 24 | `reset_n` had dropped |
+| 23 | A bit had been sent |
+| 22 | A request was being accepted on that clock |
+| 21 | A command was active |
+| 20 | The access was a read |
+| 19 | A transfer was open |
+| 18 | That transfer was opened with writes enabled |
+| 17 | The access was part of a DMA |
+| 16 | A host request was present |
+| 15:0 | The host's bit index |
+
+It is recorded whether or not the guard latched, so a Read Only session
+still explains itself. `SF:` says whether the guard is latched.
 
 ## Hardware capture
 
