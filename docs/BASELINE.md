@@ -399,8 +399,12 @@ bitstream SHA-256
 | Seed | ALMs | Setup | Result |
 |---|---|---|---|
 | 3 | 17,933 (97 %) | **-0.121** | fail, sisko, 1490 s |
+| 1 | 17,918 (97 %) | **-0.141** | fail, sisko |
+| 2 | 17,869 (97 %) | **-0.562** | fail, kira |
+| 4 | 17,888 (97 %) | **-0.092** | fail, odo |
 
-First fit in which the EEPROM bridge provably survives synthesis:
+Four seeds, four misses, best -0.092. The EEPROM bridge survives synthesis
+in every one (`EEPROM_BRIDGE state=2` or `3`). First fit in which the bridge provably survives:
 `path-analysis.log` reports `EEPROM_BRIDGE transfer_open=1 ctl_req=1
 command_active=1 state=2` and `SNAPSHOT_BITS captured=28 published=28`.
 Two violated paths of twenty, both `gba_cpu|new_cycles_valid` to a
