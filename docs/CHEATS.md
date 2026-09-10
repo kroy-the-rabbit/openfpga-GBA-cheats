@@ -277,6 +277,14 @@ ROM came from the card or the slot. Conditional codes on ROM addresses are
 ignored. Action Replay's encrypted "ROM patch" pairs must be decrypted and
 written as a CodeBreaker halfword write, `8AAAAAAA VVVV`, to use this.
 
+Proven on hardware on 2026-09-10 with a real Zero Mission cartridge and
+`build/cheats/ZM-ROMPATCH-TEST.gba.cht`, which rewrites the ROM entry word
+`EA00002E` to `EAFFFFFE`, a branch to itself: the BIOS logo plays and the
+game never starts. A ROM line already in the cache when the file loads is
+only re-fetched because `rom_patch` pulses `changed` into `cache.vhd`'s
+`invalidate`, and the cheat slot does not reset the GBA
+(`core_top.sv:1051`), so the test needs Reset Core after loading.
+
 The one gap is loading the file: in Play Cartridge mode APF does not load slots
 named after slot 0, so `<rom filename>.gba.chtbin` is not picked up
 automatically.

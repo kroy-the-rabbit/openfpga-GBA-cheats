@@ -34,12 +34,14 @@ Two bugs, neither in the cartridge path.
 are byte-identical there apart from the grid, so its titles lose their first
 character too. Fix belongs in that repo's own session.
 
-**`rom_patch.sv` is still unproven on hardware.** No cheat in use touches
-ROM. `build/cheats/ZM-ROMPATCH-TEST.gba.cht` patches Zero Mission's entry
-word `EA00002E` to `EAFFFFFE`, a branch to itself, so with it loaded and
-Reset Core pressed the BIOS logo plays and then nothing. Loading the cheat
-slot deliberately does not reset the GBA (`core_top.sv:1051`), so the reset
-is required or the entry point is never re-executed.
+**`rom_patch.sv` works on hardware**, confirmed 2026-09-10 on a real Zero
+Mission cartridge. No cheat in use touches ROM, so it was exercised with
+`build/cheats/ZM-ROMPATCH-TEST.gba.cht`, which patches the entry word
+`EA00002E` to `EAFFFFFE`, a branch to itself: loaded, then Reset Core, the
+BIOS logo plays and the game never starts. Loading the cheat slot
+deliberately does not reset the GBA (`core_top.sv:1051`), so the reset is
+required or the entry point is never re-executed. That closes the read-side
+path end to end: file, loader, patch table, cache invalidate, cart fetch.
 
 ## 2026-09-09 night: Zero Mission boots and saves; the fit ceiling is gone
 

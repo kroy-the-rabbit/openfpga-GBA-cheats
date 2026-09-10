@@ -44,7 +44,7 @@ effect off and back on live.
 |---|---|
 | Cheats, CodeBreaker and GameShark v1/v2, from libretro `.cht` files, read directly or as a converted `.chtbin` | **works on hardware** |
 | Cheat overlay, the loaded cheats drawn over the picture by name | **works on hardware** since `6c8fd96`; names need a `.cht` file, a `.chtbin` shows `CHEAT nn` |
-| ROM patches, applied as the ROM is read, so they work on cartridges | **new**, untested on hardware; eight slots |
+| ROM patches, applied as the ROM is read, so they work on cartridges | **works on hardware** since `fc6b82e`, on a real Zero Mission cartridge; eight slots |
 | **Cheats Enabled** switch, live | **works on hardware** |
 | Everything upstream's core does | **works**, unchanged. Nothing was cut to make room |
 | Save states and sleep | **removed** here; a core built for cheats does not need them, and the ALMs went to cartridge support |
