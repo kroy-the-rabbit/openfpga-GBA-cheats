@@ -7,10 +7,10 @@ from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
 ## 2026-09-09 night: Zero Mission boots and saves; the fit ceiling is gone
 
-Card holds `6c8fd96`, bitstream `dbeb1d8dd1ac2503`, installed 2026-09-10
-morning. Beside it, `Metroid - Zero Mission (USA).gba.chtbin` with four
-cheats, nine entries: missiles, health, super missiles at IWRAM, and Jump
-In Midair as six ROM patches (`build/cheats/`, sources and notes there). Branch `p5-cartridge`, not pushed.
+Card holds `65fd93d`, bitstream `41a05851a7e817be`, installed 2026-09-10.
+Beside their ROMs: `Legend of Zelda, The - The Minish Cap (USA).gba.cht`
+and `Metroid - Zero Mission (USA).gba.cht`, the libretro text versions
+(named cheats in the overlay), each alongside its existing `.chtbin`. Branch `p5-cartridge`, not pushed.
 
 **What was wrong, in the order it was found.**
 
