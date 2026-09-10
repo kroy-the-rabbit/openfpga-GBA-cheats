@@ -5,6 +5,37 @@ the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
 from it, and CI is verify-only. `p5-cartridge` is not on the remote.
 
+## What this fork is for, and what was traded away for it
+
+The goal is coherent cheats on GBA. Not link play, not savestates. A cheat
+that works is usually what save scumming was standing in for, so the two
+compete for the same logic and only one of them is the point of this fork.
+Read that before proposing to restore any of the following.
+
+**Removed, and why.**
+
+| what | commit | bought |
+|---|---|---|
+| Savestates, `gba_savestates.vhd` and `save_state_controller.sv` | `a68aba1` | about 3,300 ALMs, 97 % to 78 %. Most of it was not the two modules: the save/load muxes in every `eProcReg` folded once the bus went constant |
+| Link cable, `gba_serial.vhd` back to its pre-PR#31 register-only stub | `a8fcc1c` | 262 ALMs and 0.036 ns |
+| Cartridge header checker | `32e4c61` | fitted area, and it was diagnosing a bus timing fault that `ROM Timing` fixed properly |
+| Read-only cartridge save gate | `5ce25d0` | correctness, not area. Its classifier swallowed Zero Mission's EEPROM reads |
+| `CL:` and `CD:` cheat readouts | `d7ecfaa` | fitted area while the branch was at the device limit |
+
+`core.json` declares `sleep_supported` and `link_port` off. Anything that
+wants them wants a different core.
+
+**What the room bought.** Everything the cheat side needed and could not fit
+before: the `.cht` text parser back in the design, the on-screen cheat
+overlay with real names, and read-side ROM patching with 32 slots. The
+design sits at 84 % with all three in, against 97 % with none of them. Every
+one of those is confirmed on a real cartridge.
+
+**The trade to watch.** Area is no longer scarce, so a future cut should not
+be justified by area alone. The old "135 ALMs per 0.1 ns" rule was measured
+wrong and is recorded as such in `docs/BASELINE.md`; do not size a cut by
+the slack you expect back.
+
 ## 2026-09-10: the jump cheat and the overlay's missing first letter
 
 Card holds `fc6b82e`, seed 1 from sisko2, bitstream SHA-256
