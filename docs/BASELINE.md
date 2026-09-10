@@ -443,6 +443,26 @@ the per-register save/load muxes in every `eProcReg` folded, not just the
 two modules. Package `kroy.GBA_0.9999.ec3947b.zip` SHA-256 `be9800ccaee6173795e1e9025daaf66383884d43cc95fa1c5424521d93b30fe4`,
 bitstream `1f7263d5c0d0ebb5`. The design is no longer at the fit ceiling.
 
+### Turnaround default, EE: traffic readout, gate removal
+
+| Commit | Seed | Runner | ALMs | Setup | Result |
+|---|---|---|---|---|---|
+| `a315dec` | 3 | sisko | 14,361 | +0.103 | pass, 1013 s |
+| `a315dec` | 1 | sisko2 | 14,386 | +0.093 | pass, 1022 s |
+| `aaa573a` | 3 | kira | 13,841 | **-1.764** | fail |
+| `aaa573a` | 4 | odo | 13,816 | **-2.424** | fail |
+| `5ce25d0` | 3 | sisko | 14,226 | +0.103 | pass; package staged, not installed |
+
+The two `aaa573a` misses are the CPU multiplier, `gba_cpu|mul_op1` through
+the DSP and a LAB carry chain into `mul_product`, 11.2 ns of data delay.
+`gba_cpu` reads the product four clocks after the operands load, but the
+path was constrained single-cycle and closed only when register retiming
+pipelined it into the DSP: retiming's estimate was 3363 ps on `a315dec`
+and 1477 ps on `aaa573a`, whose only RTL change was a 24-line readout mux
+nowhere near the CPU. `326d602` constrains it as a two-cycle path. The
+multiplier shows up in the top twenty paths of every passing build too;
+it was always this close.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on

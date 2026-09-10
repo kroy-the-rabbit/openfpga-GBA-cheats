@@ -42,13 +42,24 @@ bitstream). Branch `p5-cartridge`, not pushed.
 this design in 1013 and 1022 s at once; sisko alone used to take 1450 to
 1530 s. `docs/BUILD-RUNNER.md`.
 
-**Not tested yet.** Cheats on Zero Mission (no codes were on the card);
+**Later the same night.** Two fits of `aaa573a` missed by 1.8 and 2.4 ns
+on the CPU multiplier, which had been closing on register-retiming luck
+since the fork began (`docs/BASELINE.md`). `326d602` constrains it as the
+two-cycle path it is, drops the dead savestate multicycles, and adds the
+cheat overlay: pocket-gbc's `cheat_osd`/`cheat_font`/`cheat_titles` at
+40x20 in `video_adapter`, **Cheat Overlay** in the menu, rows reading
+`CHEAT nn` because `.chtbin` has no titles. The overlay has a one-frame
+smoke bench (`tools/sim/run_osd.py`) and is untested on hardware. Kroy's
+next step after that is `.cht` text loading, which fills the title RAM;
+the table below says what comes from where.
+
+**Not tested yet.** The overlay on hardware; cheats on Zero Mission (no codes were on the card);
 physical SRAM/Flash writes on a Flash cart; the abort latch on hardware;
 GPIO/RTC in cart mode (still `gpio_req(1'b0)`).
 
 **Parked, Kroy's call, in this order.**
 
-- **The cheat popup, and with it `.cht` text loading.** `.chtbin` existed
+- **`.cht` text loading.** The overlay is in; its titles are not. `.chtbin` existed
   only because the text parser did not fit at 97 %; at 78 % that reason is
   gone. What comes over from the other cores, measured against
   `../pocket-gbc/src/gb/` (pce's `rtl/pce/` copies are the same modules with
@@ -56,9 +67,7 @@ GPIO/RTC in cart mode (still `gpio_req(1'b0)`).
 
   | Piece | From | Work |
   |---|---|---|
-  | `cheat_font.sv` (595 lines, generated) | gbc | verbatim |
-  | `cheat_titles.sv` (71) | gbc | verbatim |
-  | `cheat_osd.sv` (300) | gbc | regrid 26x18 to 40x20 for 240x160; mux onto `video_adapter`'s output on `clk_vid`; `show` from menu-open, `cart_mode` from `osnotify_cart_play` |
+  | `cheat_font.sv`, `cheat_titles.sv`, `cheat_osd.sv` | gbc | **done in `326d602`**, title write port tied off in `core_top` |
   | text parser | **ours**, `src/fpga/core/cheat_loader.sv`, in the tree, not in the qsf, cross-checked over 513 libretro files by `tools/sim/run.py`, already recognises `_desc` and `_enable` | add the `desc_wr/group/col/char/end` output block from gbc's parser (~40 lines); qsf line; swap `cheat_binloader` for it in `core_top`; data slot extension `.cht` |
   | code tokenising, `gba_cheats` 128-bit word | ours | unchanged |
   | per-cheat enable mask for the overlay | | `gba_cheats` has no per-entry enable; the parser drops disabled cheats, so the overlay's mask is "every pushed group" unless the parser also exposes one |
