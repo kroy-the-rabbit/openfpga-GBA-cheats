@@ -173,9 +173,8 @@ architecture arch of gba_top is
    
    signal cpu_jump             : std_logic;
    
-   signal savestate_savestate  : std_logic := '0';
-   signal savestate_loadstate  : std_logic := '0';
-   signal savestate_address    : integer;
+   signal gbaon_1              : std_logic := '0';
+   signal reset_pending        : std_logic := '0';
 
    -- cheats
    signal Cheats_BusAddr       : std_logic_vector(27 downto 0);
@@ -448,61 +447,49 @@ begin
    cpu_bus_din  <= mem_bus_din;
    cpu_bus_done <= mem_bus_done;
    
-   igba_savestates : entity work.gba_savestates
-   generic map
-   (
-      Softmap_GBA_WRam_ADDR    => Softmap_GBA_WRam_ADDR,  
-      Softmap_GBA_FLASH_ADDR   => Softmap_GBA_FLASH_ADDR, 
-      Softmap_GBA_EEPROM_ADDR  => Softmap_GBA_EEPROM_ADDR,
-      is_simu                  => is_simu                
-   )
-   port map
-   (
-      clk100                => clk100,
-      gb_on                 => gbaon,
-      reset                 => reset,
-  
-      load_done             => load_done,
-                        
-      increaseSSHeaderCount => increaseSSHeaderCount,
-      save                  => savestate_savestate,
-      load                  => savestate_loadstate,
-      savestate_address     => savestate_address,
-      savestate_busy        => savestate_busy,      
+   -- Savestates are removed. The module also generated the core reset: on
+   -- GBA_on falling it reset every register on the savestate bus to its
+   -- default, then pulsed reset. That sequence is kept here; the bus and the
+   -- savestate ports are otherwise held idle.
+   process (clk100)
+   begin
+      if rising_edge(clk100) then
+         savestate_bus.rst <= '0';
+         reset             <= '0';
+         gbaon_1           <= gbaon;
+         if (gbaon = '0' and gbaon_1 = '1') then
+            savestate_bus.rst <= '1';
+            reset_pending     <= '1';
+         elsif (reset_pending = '1') then
+            reset_pending <= '0';
+            reset         <= '1';
+         end if;
+      end if;
+   end process;
+   savestate_bus.ena  <= '0';
+   savestate_bus.rnw  <= '1';
+   savestate_bus.Adr  <= (others => '0');
+   savestate_bus.Din  <= (others => '0');
+   savestate_bus.acc  <= "00";
+   savestate_bus.bEna <= "0000";
 
-      cpu_jump              => cpu_jump,
+   loading_savestate <= '0';
+   sleep_savestate   <= '0';
+   savestate_busy    <= '0';
+   load_done         <= '0';
 
-      internal_bus_out      => savestate_bus,
-      loading_savestate     => loading_savestate,
-      --saving_savestate      => saving_savestate,
-      sleep_savestate       => sleep_savestate,
-      bus_ena_in            => mem_bus_ena,
+   SAVE_Bus_ena      <= '0';
+   SAVE_BusAddr      <= (others => '0');
+   SAVE_BusRnW       <= '1';
+   SAVE_BusACC       <= "00";
+   SAVE_BusWriteData <= (others => '0');
 
-      gb_bus                => gb_bus,
-
-      SAVE_BusAddr          => SAVE_BusAddr,     
-      SAVE_BusRnW           => SAVE_BusRnW,      
-      SAVE_BusACC           => SAVE_BusACC,      
-      SAVE_BusWriteData     => SAVE_BusWriteData,
-      SAVE_Bus_ena          => SAVE_Bus_ena,     
-                                             
-      SAVE_BusReadData      => mem_bus_din, 
-      SAVE_BusReadDone      => mem_bus_done, 
-                                            
-      bus_out_Din           => SAVE_out_Din,   
-      bus_out_Dout          => SAVE_out_Dout,  
-      bus_out_Adr           => SAVE_out_Adr,   
-      bus_out_rnw           => SAVE_out_rnw,   
-      bus_out_ena           => SAVE_out_ena,   
-      bus_out_active        => SAVE_out_active,
-      bus_out_be            => SAVE_out_be,
-      bus_out_done          => SAVE_out_done  
-   );
-   
-   -- Wire save/load signals directly (statemanager removed for Pocket)
-   savestate_savestate <= save_state;
-   savestate_loadstate <= load_state;
-   savestate_address   <= Softmap_SaveState_ADDR;
+   SAVE_out_Din    <= (others => '0');
+   SAVE_out_Adr    <= (others => '0');
+   SAVE_out_rnw    <= '0';
+   SAVE_out_ena    <= '0';
+   SAVE_out_active <= '0';
+   SAVE_out_be     <= (others => '0');
    
    igba_cheats : entity work.gba_cheats
    port map

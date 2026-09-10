@@ -1178,7 +1178,7 @@ wire    [31:0]  rtc_time_bcd;
 wire            rtc_valid;
 
 // Physical save-chip state is not part of an APF snapshot.
-wire            savestate_supported = ~osnotify_cart_play;
+wire            savestate_supported = 1'b0;   // savestates removed
 wire    [31:0]  savestate_addr = 32'h40000000;
 wire    [31:0]  savestate_size = 32'h60D18;       // 0x18346 addr-units × 4 bytes
 wire    [31:0]  savestate_maxloadsize = 32'h60D18;
@@ -1733,69 +1733,37 @@ wire fast_forward = (ff_mode_s == 2'd2) ? 1'b0 :            // Disabled
 // ============================================================
 
 // ---- Save State Controller ----
-// Bridges APF save state protocol to gba_savestates via SAVE_out bus.
-// Uses SDRAM staging for load path (389 KB state >> 16 KB FIFO).
+// Savestates are removed: the module and its APF bridge cost ALMs a core
+// built for cheats does not need. Game saves are a separate path and stay.
+// The gba_top ports remain and are held idle here.
 
-wire [63:0] ss_din;          // SAVE_out_Din  (data from gba_savestates during save)
-wire [63:0] ss_dout;         // SAVE_out_Dout (data to gba_savestates during load)
-wire [25:0] ss_addr;         // SAVE_out_Adr
-wire        ss_rnw;          // SAVE_out_rnw
-wire        ss_req;          // SAVE_out_ena
-wire  [7:0] ss_be;           // SAVE_out_be
-wire        ss_ack;          // SAVE_out_done
-wire        ss_save;         // save_state trigger to gba_top
-wire        ss_load;         // load_state trigger to gba_top
-wire        ss_busy;         // savestate_busy from gba_top
-wire        ss_loading;      // Phase 1+2 active — pause core to prevent SDRAM contention
-wire        ss_load_done;    // load_done from gba_top
-
-save_state_controller ss_ctrl (
-    .clk_74a              ( clk_74a ),
-    .clk_sys              ( clk_sys ),
-    // APF bridge
-    .bridge_wr            ( bridge_wr && savestate_supported ),
-    .bridge_rd            ( bridge_rd ),
-    .bridge_endian_little ( bridge_endian_little ),
-    .bridge_addr          ( bridge_addr ),
-    .bridge_wr_data       ( bridge_wr_data ),
-    .save_state_bridge_read_data ( ss_bridge_rd_data ),
-    // APF save state signals
-    .savestate_load       ( savestate_load && savestate_supported ),
-    .savestate_load_ack_s ( savestate_load_ack ),
-    .savestate_load_busy_s( savestate_load_busy ),
-    .savestate_load_ok_s  ( savestate_load_ok ),
-    .savestate_load_err_s ( savestate_load_err ),
-    .savestate_start      ( savestate_start && savestate_supported ),
-    .savestate_start_ack_s( savestate_start_ack ),
-    .savestate_start_busy_s( savestate_start_busy ),
-    .savestate_start_ok_s ( savestate_start_ok ),
-    .savestate_start_err_s( savestate_start_err ),
-    // GBA core save state bus
-    .ss_save              ( ss_save ),
-    .ss_load              ( ss_load ),
-    .ss_din               ( ss_din ),
-    .ss_dout              ( ss_dout ),
-    .ss_addr              ( ss_addr ),
-    .ss_rnw               ( ss_rnw ),
-    .ss_req               ( ss_req ),
-    .ss_be                ( ss_be ),
-    .ss_ack               ( ss_ack ),
-    .ss_busy              ( ss_busy ),
-    .load_done            ( ss_load_done ),
-    // SDRAM staging
-    .sdram_wr_req         ( ss_sdram_wr_req ),
-    .sdram_wr_addr        ( ss_sdram_wr_addr ),
-    .sdram_wr_data        ( ss_sdram_wr_data ),
-    .sdram_wr_pending     ( sdram_wr_pending ),
-    .sdram_rd_req         ( ss_sdram_rd_req ),
-    .sdram_rd_addr        ( ss_sdram_rd_addr ),
-    .sdram_rd_data        ( sdram_rd_data ),
-    .sdram_rd_data_second ( sdram_rd_data_second ),
-    .sdram_rd_ready       ( ss_serving_active ? sdram_rd_ready : 1'b0 ),
-    // Status
-    .ss_serving_active    ( ss_serving_active ),
-    .ss_loading           ( ss_loading )
-);
+wire [63:0] ss_din;
+wire [25:0] ss_addr;
+wire        ss_rnw;
+wire        ss_req;
+wire  [7:0] ss_be;
+wire        ss_busy;
+wire        ss_load_done;
+wire [63:0] ss_dout        = 64'd0;
+wire        ss_ack         = 1'b0;
+wire        ss_save        = 1'b0;
+wire        ss_load        = 1'b0;
+wire        ss_loading     = 1'b0;
+assign ss_serving_active   = 1'b0;
+assign ss_sdram_wr_req     = 1'b0;
+assign ss_sdram_wr_addr    = 25'd0;
+assign ss_sdram_wr_data    = 16'd0;
+assign ss_sdram_rd_req     = 1'b0;
+assign ss_sdram_rd_addr    = 25'd0;
+assign ss_bridge_rd_data   = 32'd0;
+assign savestate_start_ack  = 1'b0;
+assign savestate_start_busy = 1'b0;
+assign savestate_start_ok   = 1'b0;
+assign savestate_start_err  = 1'b0;
+assign savestate_load_ack   = 1'b0;
+assign savestate_load_busy  = 1'b0;
+assign savestate_load_ok    = 1'b0;
+assign savestate_load_err   = 1'b0;
 
 gba_top #(
     .Softmap_GBA_FLASH_ADDR  (0),

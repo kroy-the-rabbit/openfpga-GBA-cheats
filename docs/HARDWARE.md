@@ -14,10 +14,8 @@ not load.
 - **Step 5, the stray `.cht`.** Nothing has verified on hardware that an
   unconverted file loads zero rather than shifting ASCII into the cheat table.
   It is two minutes and it is the one simulation cannot fully vouch for.
-- **Sleep.** Step 1 asks for it and it has not been reported. `core.json`
-  declares `sleep_supported`, and the cheat engine put `sleep_cheats` into the
-  same CPU run condition the savestate path gates on. Nothing in simulation
-  covers that interaction.
+- **Sleep.** Removed with savestates; `core.json` no longer declares
+  `sleep_supported`.
 
 It is written to be worked through in order, on one SD card, in one sitting.
 Each step names what to look at and what it means when the number is wrong, so
@@ -71,14 +69,11 @@ three hours in is not a test.
 Load any ROM, no `.chtbin` present at all.
 
 This is the one that catches a broken P1. The cheat engine sits on `gba_top`'s
-debug bus alongside the savestate path and adds `sleep_cheats` to the CPU run
+debug bus and adds `sleep_cheats` to the CPU run
 condition, so an arbitration mistake shows up as a core that hangs or never
 draws rather than as a cheat that does not work. If this fails, nothing below
 is worth trying.
 
-Also check that closing the lid and reopening it resumes. `core.json` declares
-`sleep_supported`, that path shares the run-condition gate the cheat engine now
-writes into, and it is the interaction nothing in simulation covers.
 
 ### 2. The file loads
 

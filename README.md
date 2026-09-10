@@ -45,7 +45,7 @@ effect off and back on live.
 | Cheats, CodeBreaker and GameShark v1/v2, from libretro `.cht` files | **works on hardware** |
 | **Cheats Enabled** switch, live | **works on hardware** |
 | Everything upstream's core does | **works**, unchanged. Nothing was cut to make room |
-| Save states and sleep | **works**, upstream's |
+| Save states and sleep | **removed** here; a core built for cheats does not need them, and the ALMs went to cartridge support |
 | Real-time clock | **works**, upstream's |
 | Fast forward, on Y | **works**, upstream's |
 | Button turbo, on X | **works**, upstream's |
@@ -86,8 +86,8 @@ It does not replace an upstream `mincer_ray.GBA` install, it sits beside it. APF
 names a core folder after the author in its `core.json`, and this one says
 `kroy` because it is not mincer_ray's build. Delete the old folder if you do not
 want both listed, and its `/Settings/mincer_ray.GBA` folder with it. Saves are
-keyed by platform rather than by core, so they carry over untouched; save states
-and settings do not.
+keyed by platform rather than by core, so they carry over untouched; settings
+do not.
 
 Copy the `Assets`, `Cores` and `Platforms` folders to the root of the SD card.
 Finder on macOS *replaces* folders rather than merging them the way Windows

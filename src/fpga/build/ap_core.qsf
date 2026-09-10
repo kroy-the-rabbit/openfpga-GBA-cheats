@@ -851,7 +851,6 @@ set_global_assignment -name VERILOG_FILE ../pocket/mf_audio_pll/mf_audio_pll_000
 # Phase 5: Cart Saves, Save Type Detection & RTC
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/save_type_detector.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/cart_quirks.sv
-set_global_assignment -name SYSTEMVERILOG_FILE ../core/save_state_controller.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../core/cheat_binloader.sv
 # Cartridge probe, measurement only. Vendored from Wokann/openfpga-GBA and
 # instantiated in core_top so the fitter has to place it; see the probe block
@@ -902,7 +901,6 @@ set_global_assignment -name VHDL_FILE ../gba/gba_sound_ch4.vhd
 set_global_assignment -name VHDL_FILE ../gba/gba_sound_dma.vhd
 set_global_assignment -name VHDL_FILE ../gba/gba_timer.vhd
 set_global_assignment -name VHDL_FILE ../gba/gba_timer_module.vhd
-set_global_assignment -name VHDL_FILE ../gba/gba_savestates.vhd
 set_global_assignment -name VHDL_FILE ../gba/gba_cheats.vhd
 set_global_assignment -name VHDL_FILE ../gba/gba_gpioRTCSolarGyro.vhd
 set_global_assignment -name VHDL_FILE ../gba/cache.vhd

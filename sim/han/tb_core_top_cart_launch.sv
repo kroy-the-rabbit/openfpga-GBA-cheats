@@ -47,10 +47,13 @@ module tb_core_top_cart_launch;
     endtask
     task expect_mode(input selected,input powered,input rom,input held_reset,input saves);
         begin
-            if({dut.cart_rom_select_s,dut.cart_hw_enable_s,dut.cart_rom_mode,dut.reset_gba,dut.savestate_supported}
-                !== {selected,powered,rom,held_reset,saves})
-                $fatal(1,"FAIL top cartridge mode selected=%b powered=%b rom=%b reset=%b savestates=%b",
-                    dut.cart_rom_select_s,dut.cart_hw_enable_s,dut.cart_rom_mode,dut.reset_gba,dut.savestate_supported);
+            if({dut.cart_rom_select_s,dut.cart_hw_enable_s,dut.cart_rom_mode,dut.reset_gba}
+                !== {selected,powered,rom,held_reset})
+                $fatal(1,"FAIL top cartridge mode selected=%b powered=%b rom=%b reset=%b",
+                    dut.cart_rom_select_s,dut.cart_hw_enable_s,dut.cart_rom_mode,dut.reset_gba);
+            // Savestates are removed; the APF flag must never come back on.
+            if(dut.savestate_supported !== 1'b0)
+                $fatal(1,"FAIL top savestate_supported asserted");
             if(dut.save_size_bytes !== (saves ? 32'h10000 : 32'd0))
                 $fatal(1,"FAIL top SD-save size %h",dut.save_size_bytes);
         end

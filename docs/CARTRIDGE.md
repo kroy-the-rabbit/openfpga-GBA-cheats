@@ -16,9 +16,7 @@ selection require byte writes too, so some Flash games need Writes Enabled
 before they can recognize their save chip.
 
 No SD save file is loaded or written back for cartridge games. Physical writes
-are not hardware-qualified yet. GPIO/RTC remains disconnected, and APF
-savestates are disabled for cartridge launches because they cannot snapshot physical
-save-chip state. Minish Cap's existing slots have now been read successfully with Cartridge
+are not hardware-qualified yet. GPIO/RTC remains disconnected. Savestates are removed from the core. Minish Cap's existing slots have now been read successfully with Cartridge
 Saves left at Read Only.
 
 **This core requires Pocket firmware 1.2 or newer.** Declaring the cartridge
@@ -124,9 +122,10 @@ stays in reset until APF Reset Exit and never runs without advertised power.
 
 If the probe fails, the CPU stays in reset: there is no loaded SD ROM to fall
 back to. The core menu remains available for **CG/CS** and **Reset Core**.
-SD save size is zero and savestates are unsupported for the entire cartridge
-launch, including before detection and during reset. Unsupported savestate
-requests return an error instead of waiting forever for an acknowledgment.
+SD save size is zero for the entire cartridge launch, including before
+detection and during reset. Savestate requests, which the core no longer
+supports anywhere, return an error instead of waiting forever for an
+acknowledgment.
 
 ## The probe
 
