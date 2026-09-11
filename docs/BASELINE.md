@@ -510,6 +510,20 @@ slack across every analysis type is +0.086 ns against seed 3's +0.044 ns,
 and its snapshot delay is 0.6 ns shorter. Bitstream SHA-256
 `cfac814c624d085ffaf6ed96588b10556d03fa84555b77ece8af47f2079f02b5`.
 
+### ROM patch table to 32 slots, two failed seeds, `9268623`
+
+| Seed | Runner | ALMs | Setup | Result |
+|---|---|---|---|---|
+| 3 | sisko | 16,427 (89 %) | -0.194 | fail |
+| 1 | sisko2 | 16,427 (89 %) | -0.360 | fail |
+
+Two seeds, same direction, so it was the design. `rom_patch`'s `apply()`
+walked all slots per byte lane with a `taken` flag, which synthesises as a
+SLOTS-deep chain of muxes sitting on the ROM data return path into the
+cache. Free at 8 slots, 815 ALMs and 0.36 ns at 32. Rewritten as isolate the
+lowest set bit (`cand & -cand`) then select with a one-hot OR, which does
+not deepen the same way. Do not reintroduce the walk for readability.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on

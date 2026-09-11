@@ -100,18 +100,29 @@ module rom_patch #(
 
     // Lowest slot wins a lane. Two patches on one byte is a file error, not
     // something to arbitrate.
+    //
+    // Isolate the lowest set bit, then select with a one-hot OR. The obvious
+    // form, a walk over the slots with a per-lane `taken` flag, reads better
+    // but synthesises as a SLOTS-deep chain of muxes per lane, and this sits
+    // on the ROM data return path into the cache. At 8 slots that was free;
+    // at 32 it cost 0.36 ns of setup and failed on two seeds. An AND, a
+    // two's complement negate and an OR tree do not grow in depth the same
+    // way.
     function automatic [31:0] apply(input [31:0] din, input [SLOTS-1:0] hit);
         integer s, k;
-        reg [3:0] taken;
+        reg [SLOTS-1:0] cand, win;
+        reg [7:0] lane;
         begin
             apply = din;
-            taken = 4'd0;
-            for (s = 0; s < SLOTS; s = s + 1)
-                for (k = 0; k < 4; k = k + 1)
-                    if (hit[s] && slot_be[s][k] && !taken[k]) begin
-                        apply[8*k +: 8] = slot_val[s][8*k +: 8];
-                        taken[k] = 1'b1;
-                    end
+            for (k = 0; k < 4; k = k + 1) begin
+                for (s = 0; s < SLOTS; s = s + 1)
+                    cand[s] = hit[s] & slot_be[s][k];
+                win  = cand & (~cand + {{(SLOTS-1){1'b0}}, 1'b1});
+                lane = 8'd0;
+                for (s = 0; s < SLOTS; s = s + 1)
+                    lane = lane | ({8{win[s]}} & slot_val[s][8*k +: 8]);
+                if (|cand) apply[8*k +: 8] = lane;
+            end
         end
     endfunction
 
