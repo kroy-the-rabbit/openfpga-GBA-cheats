@@ -38,11 +38,16 @@ the slack you expect back.
 
 ## 2026-09-10: the jump cheat and the overlay's missing first letter
 
-Card holds `fc6b82e`, seed 1 from sisko2, bitstream SHA-256
-`cfac814c624d085ffaf6ed96588b10556d03fa84555b77ece8af47f2079f02b5`,
-installed 2026-09-10. Beside their ROMs in `Assets/gba/common/`: the Minish
-Cap and Zero Mission `.cht` files, Zero Mission's `.chtbin`, and
-`ZM-ROMPATCH-TEST.gba.cht`. Untested on hardware.
+Card holds `f2a86db`, seed 3 from sisko, bitstream SHA-256
+`489904ea59dea4e1408c770cbe8e853a67741f5817d1884d59e57e77b7d3f31b`,
+installed 2026-09-10. `Assets/gba/common/` holds the Minish Cap and Zero
+Mission `.cht` files; the Zero Mission one now carries both midair cheats,
+12 ROM patches of the 16 the table holds.
+
+Two things in it are untested on hardware: `ROM Timing` profile 4,
+**Fast Burst**, which has to be selected in the menu and is the fix for
+cartridge audio running slow, and `Jump In Midair Ball`. `Jump In Midair`
+and the four counter cheats are confirmed.
 
 Two bugs, neither in the cartridge path.
 
