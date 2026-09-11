@@ -1629,7 +1629,7 @@ reg ff_video_stable = 1'b1; // 0 = Classic FF, 1 = wait for complete rendered li
 // Controller tuning, written at 0x98. Quasi-static: phi_sel and the GPIO
 // timing mode are settings, not per-access data, which is what the multicycle
 // in core_constraints.sdc asserts about them.
-reg [31:0] cart_cfg = 32'h20;   // ROM Timing defaults to Turnaround, cart_cfg[6:5] = 1
+reg [31:0] cart_cfg = 32'h20;   // ROM Timing defaults to Turnaround, cart_cfg[7:5] = 1
 
 reg [13:0] reset_counter = 0;
 wire       core_reset = (reset_counter != 0);
@@ -1678,8 +1678,8 @@ synch_3 cart_eeprom_fault_sync(cart_eeprom_fault, cart_eeprom_fault_s, clk_74a);
 // Only the bits with a consumer are carried across. gpio_recover_set is left
 // at the controller's own hardware-proven constant because nothing drives the
 // GPIO port here, and a constant lets the fitter fold its 14-bit compare away.
-wire [6:0] cart_cfg_s;
-synch_3 #(.WIDTH(7)) cart_cfg_sync(cart_cfg[6:0], cart_cfg_s, clk_sys);
+wire [7:0] cart_cfg_s;
+synch_3 #(.WIDTH(8)) cart_cfg_sync(cart_cfg[7:0], cart_cfg_s, clk_sys);
 
 
 // ============================================================
@@ -2068,7 +2068,7 @@ gba_cart_controller cart_ctl (
     .clk                    ( clk_sys ),
     .reset_n                ( cart_ctl_reset_n ),
     .phi_sel                ( cart_cfg_s[1:0] ),
-    .rom_profile            ( cart_cfg_s[6:5] ),
+    .rom_profile            ( cart_cfg_s[7:5] ),
 
     .cart_tran_bank2        ( cart_tran_bank2 ),
     .cart_tran_bank2_dir    ( cart_tran_bank2_dir ),

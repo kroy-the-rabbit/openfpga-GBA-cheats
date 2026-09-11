@@ -147,7 +147,7 @@ module tb_gba_cart_rom_burst;
     wire [3:0]  r_gdout;
 
     gba_cart_controller #(.ROM_BURST(0)) dut_ref (
-        .rom_profile(2'd0),
+        .rom_profile(3'd0),
         .clk(clk), .reset_n(reset_n), .phi_sel(2'd0),
         .cart_tran_bank2(r_b2), .cart_tran_bank2_dir(r_b2d),
         .cart_tran_bank3(r_b3), .cart_tran_bank3_dir(r_b3d),
@@ -190,7 +190,7 @@ module tb_gba_cart_rom_burst;
     wire [3:0]  b_gdout;
 
     gba_cart_controller #(.ROM_BURST(1)) dut_burst (
-        .rom_profile(2'd0),
+        .rom_profile(3'd0),
         .clk(clk), .reset_n(reset_n), .phi_sel(2'd0),
         .cart_tran_bank2(b_b2), .cart_tran_bank2_dir(b_b2d),
         .cart_tran_bank3(b_b3), .cart_tran_bank3_dir(b_b3d),

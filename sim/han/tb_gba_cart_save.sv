@@ -108,7 +108,7 @@ module cart_save_case #(parameter ADDR_BITS = 14)(output reg finished = 0);
         sram_writes = sram_writes + 1;
     end
     gba_cart_controller #(.RESET_LEN(8)) dut (
-        .rom_profile(2'd0),
+        .rom_profile(3'd0),
         .clk(clk), .reset_n(reset_n), .phi_sel(2'b0),
         .cart_tran_bank1(bank1), .cart_tran_bank2(bank2), .cart_tran_bank3(bank3),
         .cart_tran_bank0(bank0), .cart_tran_pin30(pin30), .cart_tran_pin31(pin31),

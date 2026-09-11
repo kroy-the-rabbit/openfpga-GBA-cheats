@@ -216,16 +216,35 @@ hardware.
 **ROM Timing menu, 2026-09-09.** Zero Mission corrupts the BIOS banner
 differently on every boot while Minish Cap never does, and every captured
 error sat in the first halfword after the address latch. The non-sequential
-read is now selectable from the menu (`ROM Timing`, `cart_cfg[6:5]`) so the
+read is now selectable from the menu (`ROM Timing`, `cart_cfg[7:5]`) so the
 window can be tested on hardware without a refit. Profile 0 is the parameter
 defaults and is bit-identical to the previous controller.
 
-| Profile | Turnaround, AD released before RD# | First RD# low | Burst halfword, RD# high/period |
-|---|---|---|---|
-| 0 Fast | 0 | 24 clocks, 238 ns | 4/12 clocks, 119 ns |
-| 1 Turnaround, **default** | 4 clocks, 40 ns | 24 clocks, 238 ns | 4/12 clocks, 119 ns |
-| 2 GBA Power-On | 4 clocks, 40 ns | 30 clocks, 298 ns | 6/20 clocks, 199 ns |
-| 3 Slow | 8 clocks, 79 ns | 48 clocks, 477 ns | 8/24 clocks, 238 ns |
+| Profile | Turnaround, AD released before RD# | First RD# low | Burst halfword, RD# high/period | 8-byte line |
+|---|---|---|---|---|
+| 0 Fast | 0 | 24 clocks, 238 ns | 4/12 clocks, 119 ns | 640 ns |
+| 1 Turnaround, **default** | 4 clocks, 40 ns | 24 clocks, 238 ns | 4/12 clocks, 119 ns | 720 ns |
+| 2 GBA Power-On | 4 clocks, 40 ns | 30 clocks, 298 ns | 6/20 clocks, 199 ns | 1020 ns |
+| 3 Slow | 8 clocks, 79 ns | 48 clocks, 477 ns | 8/24 clocks, 238 ns | 1360 ns |
+| 4 Fast Burst | 4 clocks, 40 ns | 12 clocks, 119 ns | 3/8 clocks, 79 ns | 480 ns |
+
+**Why profile 4 exists, 2026-09-10.** Audio from a cartridge ran slow and
+inconsistently, dragging and catching up, while the same game from the SD
+card was clean. That is the whole emulated machine running below realtime,
+not an audio fault. The gamepak cache is 1024 lines of 8 bytes, 8 KB against
+an 8 MB ROM, so misses are frequent and each one is a real cartridge
+transaction that stalls the core. A real GBA fetches those 8 bytes in 595 ns
+at `WAITCNT` 3,1, the setting games actually use; profile 1 takes 720 ns,
+so the core loses time in proportion to ROM traffic and the audio follows.
+Profile 4 does it in 480 ns, faster than the machine being emulated, so the
+stall disappears rather than shrinking.
+
+It is faster than a real GBA on purpose and is not guaranteed on every
+cartridge. The address is latched 8 clocks before RD# falls, so a 150 ns
+part still has about 200 ns to the sample, and a burst halfword is answered
+from the cart's own address counter, where the ROM's OE access time rather
+than its address access time is what has to be met. Turnaround stays the
+default; profile 4 is opt-in and the other profiles remain the fallback.
 
 The following counts were checked by simulating both controllers, not by
 measuring connector pins. At `clk_sys=100.663296 MHz`:

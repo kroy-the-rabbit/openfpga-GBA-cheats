@@ -145,6 +145,10 @@
           {
             "name": "Slow",
             "value": 96
+          },
+          {
+            "name": "Fast Burst",
+            "value": 128
           }
         ]
       },

@@ -121,9 +121,12 @@ module gba_cart_controller #(
     // are 4K/64K EEPROM chips, not GPIO/RTC.)
     input  wire [1:0]  phi_sel,
     // Non-sequential ROM read profile, from the menu. 0 keeps the parameter
-    // defaults. Higher values add a turnaround between releasing AD and
-    // RD# falling, lengthen the first read, and slow the burst halfwords.
-    input  wire [1:0]  rom_profile,
+    // defaults. 1 to 3 add a turnaround between releasing AD and RD# falling,
+    // lengthen the first read, and slow the burst halfwords. 4 keeps the
+    // turnaround but shortens both strobes below a real GBA's, because a
+    // cartridge line that costs more than the machine it emulates stalls the
+    // core and drags the audio; see docs/CARTRIDGE.md.
+    input  wire [2:0]  rom_profile,
 
     // ---- Pocket cartridge slot (from core_top) ----
     inout  wire [7:0]  cart_tran_bank2,    // GBA AD[15:8]
@@ -256,9 +259,15 @@ module gba_cart_controller #(
     reg [3:0] seq_high_sel;  // of which RD# is high
     always @(*) begin
         case (rom_profile)
-        2'd1:    {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} = {4'd4, 6'd24, 5'd12, 4'd4};
-        2'd2:    {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} = {4'd4, 6'd30, 5'd20, 4'd6};
-        2'd3:    {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} = {4'd8, 6'd48, 5'd24, 4'd8};
+        3'd1:    {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} = {4'd4, 6'd24, 5'd12, 4'd4};
+        3'd2:    {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} = {4'd4, 6'd30, 5'd20, 4'd6};
+        3'd3:    {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} = {4'd8, 6'd48, 5'd24, 4'd8};
+        // Faster than a real GBA on purpose. The address is latched 8 cycles
+        // before RD# falls, so a 150 ns part still has ~200 ns to the sample,
+        // and a burst halfword is answered from the cart's own counter where
+        // the ROM's OE access time, not its address access time, is what has
+        // to be met.
+        3'd4:    {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} = {4'd4, 6'd12, 5'd8,  4'd3};
         default: {rom_turn, rom_wait_sel, seq_wait_sel, seq_high_sel} =
                      {4'd0, ROM_WAIT[5:0], ROM_SEQ_WAIT[4:0], ROM_SEQ_RD_HIGH[3:0]};
         endcase

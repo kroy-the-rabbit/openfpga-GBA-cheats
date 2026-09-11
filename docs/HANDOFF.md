@@ -106,7 +106,7 @@ and `Metroid - Zero Mission (USA).gba.cht`, the libretro text versions
 1. **The white screen was the ROM read window.** The controller released
    the address bus and asserted RD# on the same clock. Every captured header
    error was in the first halfword after the address latch. `ROM Timing` in
-   the menu (`cart_cfg[6:5]`, four profiles, `ec3947b`) settled it on
+   the menu (`cart_cfg[7:5]`, five profiles, `ec3947b`) settled it on
    hardware in one evening: Fast freezes white, every profile with a
    turnaround boots clean every time. Default is now Turnaround (`a315dec`).
    The dirty-slot theory was wrong; Minish Cap's ROM chip simply tolerates
