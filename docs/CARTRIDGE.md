@@ -239,6 +239,9 @@ so the core loses time in proportion to ROM traffic and the audio follows.
 Profile 4 does it in 480 ns, faster than the machine being emulated, so the
 stall disappears rather than shrinking.
 
+Confirmed on hardware 2026-09-10 on a Zero Mission cartridge: audio runs
+clean on Fast Burst where it dragged and caught up on Turnaround.
+
 It is faster than a real GBA on purpose and is not guaranteed on every
 cartridge. The address is latched 8 clocks before RD# falls, so a 150 ns
 part still has about 200 ns to the sample, and a burst halfword is answered

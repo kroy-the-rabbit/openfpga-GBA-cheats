@@ -27,7 +27,7 @@ wants them wants a different core.
 
 **What the room bought.** Everything the cheat side needed and could not fit
 before: the `.cht` text parser back in the design, the on-screen cheat
-overlay with real names, and read-side ROM patching with 32 slots. The
+overlay with real names, and read-side ROM patching with 16 slots. The
 design sits at 84 % with all three in, against 97 % with none of them. Every
 one of those is confirmed on a real cartridge.
 
@@ -44,10 +44,9 @@ installed 2026-09-10. `Assets/gba/common/` holds the Minish Cap and Zero
 Mission `.cht` files; the Zero Mission one now carries both midair cheats,
 12 ROM patches of the 16 the table holds.
 
-Two things in it are untested on hardware: `ROM Timing` profile 4,
-**Fast Burst**, which has to be selected in the menu and is the fix for
-cartridge audio running slow, and `Jump In Midair Ball`. `Jump In Midair`
-and the four counter cheats are confirmed.
+All of it is confirmed on hardware: the six cheats including both midair
+ROM patches, and `ROM Timing` profile 4, **Fast Burst**, on which cartridge
+audio runs clean. Fast Burst is not the default and has to be selected.
 
 Two bugs, neither in the cartridge path.
 
@@ -160,7 +159,7 @@ confirmed by the MiSTer cheat archive in
 `.gg` records are 16-byte `gba_cheats` words, a ready-made second source
 of decoded cheats). And ROM codes now work on cartridges: `rom_patch.sv`
 (`02d0527`) substitutes plain writes to `08000000..0DFFFFFF` into the
-fetched line, thirty-two slots, a Game Genie. Zero Mission's "Jump In Midair"
+fetched line, sixteen slots, a Game Genie. Zero Mission's "Jump In Midair"
 is six Thumb halfword patches at `0x0800958A..0x080093D4`, checked against
 the cart dump (`D10D` bne becomes `D00D` beq), and is in
 `build/cheats/Metroid - Zero Mission (USA).gba.cht` as CodeBreaker writes.
