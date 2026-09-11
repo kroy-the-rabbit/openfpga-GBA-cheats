@@ -242,6 +242,12 @@ stall disappears rather than shrinking.
 Confirmed on hardware 2026-09-10 on a Zero Mission cartridge: audio runs
 clean on Fast Burst where it dragged and caught up on Turnaround.
 
+**Turnaround stays the default, decided 2026-09-10.** Fast Burst is opt-in
+and is meant to stay that way: it drives the bus faster than the hardware it
+emulates, and it has been tried on one cartridge. Defaulting it would make
+every cart session depend on a margin no cart promises. Do not promote it
+without testing across several cartridges.
+
 It is faster than a real GBA on purpose and is not guaranteed on every
 cartridge. The address is latched 8 clocks before RD# falls, so a 150 ns
 part still has about 200 ns to the sample, and a burst halfword is answered
