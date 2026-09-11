@@ -510,32 +510,31 @@ slack across every analysis type is +0.086 ns against seed 3's +0.044 ns,
 and its snapshot delay is 0.6 ns shorter. Bitstream SHA-256
 `cfac814c624d085ffaf6ed96588b10556d03fa84555b77ece8af47f2079f02b5`.
 
-### ROM patch table to 32 slots, two failed seeds, `9268623`
+### ROM patch table: 32 does not fit, 16 does
 
-| Seed | Runner | ALMs | Setup | Result |
+Six fits across three structures, all at 32 slots:
+
+| Structure | Commit | ALMs | Seed 3 | Seed 1 |
 |---|---|---|---|---|
-| 3 | sisko | 16,427 (89 %) | -0.194 | fail |
-| 1 | sisko2 | 16,427 (89 %) | -0.360 | fail |
+| walk with a per-lane `taken` flag | `9268623` | 16,427 (89 %) | -0.194 | -0.360 |
+| one-hot, `cand & -cand` then OR | `06cc1a4` | 18,095 (98 %) | +0.092 | -0.030 |
+| fold by DWORD at fill time | `e349420` | 17,864 (97 %) | -0.911 | -0.862 |
 
-Two seeds, same direction, so it was the design. `rom_patch`'s `apply()`
-walked all slots per byte lane with a `taken` flag, which synthesises as a
-SLOTS-deep chain of muxes sitting on the ROM data return path into the
-cache. Free at 8 slots, 815 ALMs and 0.36 ns at 32.
+Against 15,612 (84 %) for the 8-slot walk already on the card, which closes
+with margin.
 
-**Two rewrites, because the first traded the wrong thing.** Isolating the
-lowest set bit (`cand & -cand`) and selecting with a one-hot OR fixed the
-depth, seed 3 closing at +0.092 and seed 1 at -0.030, but cost another
-1,620 ALMs and put the design at **98 %**, back at the ceiling the savestate
-cut was meant to leave behind. A per-lane arbiter is expensive however it is
-written.
+**It is the slot count, not the structure.** Every slot is a registered
+address, value and mask that has to be compared and multiplexed in parallel,
+so 32 is 1,500 to 2,500 ALMs however the selection is written. The one-hot
+fixed the mux depth and spent the saving on area. The fold took the
+arbitration off the read path and put a worse one on the fill path: a
+32-deep comparator producing `same_idx`, feeding a 32-way by 4-lane
+byte-granular write decoder into `slot_val`, all inside the push clock.
 
-What worked was removing the arbitration instead. One slot per DWORD: the
-fill folds a second write to the same word into the slot that already holds
-it, so addresses are unique, `hit` is one-hot by construction, and the read
-side is a single OR of non-matching zeros with no priority and no per-lane
-logic at all. The arbitration that was on the data path is now a fill-time
-compare, run while the loader is between entries. It also spends fewer
-slots: Zero Mission's six-patch `Jump In Midair` occupies four.
+Settled at **16 slots with the original walk**, which is the 8-slot design
+with one parameter changed. Zero Mission's two midair-jump cheats are 12
+entries together, so 16 holds both with four spare. Do not raise it again
+without re-reading this table.
 
 ## The fit problem, and how to measure it
 

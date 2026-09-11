@@ -23,11 +23,16 @@
 module rom_patch #(
     // A real GBA ROM hack is a run of consecutive halfword writes, not one
     // poke: Zero Mission's two midair-jump cheats are six patches each, and
-    // eight slots could not hold both. Thirty-two is the whole cheat table,
-    // so the read side can no longer be the thing that runs out first.
-    // count is one bit wider than the index, so a full table is
-    // distinguishable from an empty one; raising SLOTS again needs both.
-    parameter integer SLOTS = 32
+    // eight slots could not hold both. Sixteen holds them with four spare.
+    //
+    // Not more than that. The selection below is a chain whose depth is
+    // SLOTS, and every slot is a registered address, value and mask that
+    // has to be compared and multiplexed in parallel. Thirty-two was tried
+    // three ways (this walk, a one-hot OR, and folding by DWORD at fill
+    // time) and all three landed at 96 to 98 % ALMs without closing
+    // reliably; docs/BASELINE.md has the numbers. count is one bit wider
+    // than the index so a full table is distinguishable from an empty one.
+    parameter integer SLOTS = 16
 ) (
     input  wire         clk,
 
@@ -44,7 +49,7 @@ module rom_patch #(
     output wire [31:0]  dout_first,
     output wire [31:0]  dout_second,
 
-    output reg  [5:0]   count,       // slots in use
+    output reg  [4:0]   count,       // slots in use
     output reg          changed      // one clock per table write: invalidate the cache
 );
     reg [22:0] slot_addr [0:SLOTS-1];   // ROM DWORD index, 32 MB
@@ -62,36 +67,12 @@ module rom_patch #(
 
     integer i;
     initial begin
-        count = 6'd0;
+        count = 5'd0;
         for (i = 0; i < SLOTS; i = i + 1) begin
             slot_addr[i] = 23'd0; slot_val[i] = 32'd0; slot_be[i] = 4'd0;
         end
     end
 
-    wire [3:0]  entry_be  = cheat_in_1[103:100];
-    wire [31:0] entry_val = cheat_in_1[31:0];
-    wire        entry_take = cheat_on && !cheat_on_1 && entry_rom && entry_plain;
-
-    // One slot per DWORD. Two halfword writes into the same word is the
-    // normal shape of a ROM hack, not an edge case, so they are folded here
-    // rather than arbitrated on every ROM read. That is what keeps the read
-    // side to a single one-hot OR: with addresses unique, at most one slot
-    // can match a read and there is nothing to choose between. The fold runs
-    // while the loader is between entries, where a clock is free.
-    reg        have_same;
-    reg [4:0]  same_idx;
-    integer    m;
-    always @* begin
-        have_same = 1'b0;
-        same_idx  = 5'd0;
-        for (m = SLOTS-1; m >= 0; m = m - 1)
-            if (valid[m] && slot_addr[m] == entry_addr[24:2]) begin
-                have_same = 1'b1;         // lowest match wins, so the first
-                same_idx  = m[4:0];       // write to a lane is the one kept
-            end
-    end
-
-    integer f;
     initial changed = 1'b0;
     always @(posedge clk) begin
         cheat_on_1 <= cheat_on;
@@ -99,19 +80,14 @@ module rom_patch #(
         changed    <= 1'b0;
         if (load_reset) begin
             valid <= {SLOTS{1'b0}};
-            count <= 6'd0;
-        end else if (entry_take && have_same) begin
-            for (f = 0; f < 4; f = f + 1)
-                if (entry_be[f] && !slot_be[same_idx][f])
-                    slot_val[same_idx][8*f +: 8] <= entry_val[8*f +: 8];
-            slot_be[same_idx] <= slot_be[same_idx] | entry_be;
-            changed           <= 1'b1;
-        end else if (entry_take && count < SLOTS[5:0]) begin
-            slot_addr[count[4:0]] <= entry_addr[24:2];
-            slot_val[count[4:0]]  <= entry_val;
-            slot_be[count[4:0]]   <= entry_be;
-            valid[count[4:0]]     <= 1'b1;
-            count                 <= count + 6'd1;
+            count <= 5'd0;
+        end else if (cheat_on && !cheat_on_1 && entry_rom && entry_plain &&
+                     count < SLOTS[4:0]) begin
+            slot_addr[count[3:0]] <= entry_addr[24:2];
+            slot_val[count[3:0]]  <= cheat_in_1[31:0];
+            slot_be[count[3:0]]   <= cheat_in_1[103:100];
+            valid[count[3:0]]     <= 1'b1;
+            count                 <= count + 5'd1;
             changed               <= 1'b1;
         end
     end
@@ -127,36 +103,25 @@ module rom_patch #(
         end
     end
 
-    // Addresses are unique across slots, so hit_first and hit_second are
-    // one-hot and the selection is an OR of the slots that did not match
-    // against zero. No priority, no per-lane arbitration, no depth that
-    // grows with SLOTS.
-    reg [31:0] val_first, val_second;
-    reg [3:0]  be_first,  be_second;
-    integer    r;
-    always @* begin
-        val_first  = 32'd0; be_first  = 4'd0;
-        val_second = 32'd0; be_second = 4'd0;
-        for (r = 0; r < SLOTS; r = r + 1) begin
-            val_first  = val_first  | ({32{hit_first[r]}}  & slot_val[r]);
-            be_first   = be_first   | ({4{hit_first[r]}}   & slot_be[r]);
-            val_second = val_second | ({32{hit_second[r]}} & slot_val[r]);
-            be_second  = be_second  | ({4{hit_second[r]}}  & slot_be[r]);
-        end
-    end
-
-    function automatic [31:0] apply(input [31:0] din, input [31:0] val,
-                                    input [3:0] be);
-        integer k;
+    // Lowest slot wins a lane. Two patches on one byte is a file error, not
+    // something to arbitrate.
+    function automatic [31:0] apply(input [31:0] din, input [SLOTS-1:0] hit);
+        integer s, k;
+        reg [3:0] taken;
         begin
             apply = din;
-            for (k = 0; k < 4; k = k + 1)
-                if (be[k]) apply[8*k +: 8] = val[8*k +: 8];
+            taken = 4'd0;
+            for (s = 0; s < SLOTS; s = s + 1)
+                for (k = 0; k < 4; k = k + 1)
+                    if (hit[s] && slot_be[s][k] && !taken[k]) begin
+                        apply[8*k +: 8] = slot_val[s][8*k +: 8];
+                        taken[k] = 1'b1;
+                    end
         end
     endfunction
 
-    assign dout_first  = apply(din_first,  val_first,  be_first);
-    assign dout_second = apply(din_second, val_second, be_second);
+    assign dout_first  = apply(din_first,  hit_first);
+    assign dout_second = apply(din_second, hit_second);
 endmodule
 
 `default_nettype wire

@@ -2375,7 +2375,7 @@ synch_3 #(.WIDTH(32)) cart_readout_st_sync(cart_readout_st, cart_readout_st_s, c
 // SDRAM, which is the pre-cartridge behaviour bit for bit.
 // ROM patches ride the fetched line: a Game Genie for both sources.
 wire [31:0] romsrc_gba_rd_data_raw, romsrc_gba_rd_data_second_raw;
-wire [5:0]  rom_patch_count;
+wire [4:0]  rom_patch_count;
 wire        rom_patch_changed;
 rom_patch rom_patches (
     .clk        ( clk_sys ),
