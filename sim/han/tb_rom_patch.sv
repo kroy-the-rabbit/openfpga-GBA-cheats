@@ -68,15 +68,26 @@ module tb_rom_patch;
         read(25'h800);
         if (dout_first!==32'h11223344) $fatal(1,"FAIL thirty-third entry landed %h", dout_first);
 
-        // Lowest slot wins a contested lane, and an uncontested lane in the
-        // same word still takes the later slot's byte. Pinned because the
-        // selection is a one-hot OR rather than an obvious priority walk.
-        load_reset=1; @(negedge clk); load_reset=0;
-        push(28'h8004000, 32'h00005500, 4'h2, 4'd0);   // slot 0: lane 1 = 55
-        push(28'h8004000, 32'h00CC6600, 4'h6, 4'd0);   // slot 1: lane 1 = 66 (loses), lane 2 = CC
+        // Two writes into one DWORD fold into one slot: the second does not
+        // allocate, the lane the first already claimed keeps its byte, and
+        // the lane it did not claim takes the second's. The read side needs
+        // this to hold, because it assumes at most one slot matches.
+        load_reset=1; @(negedge clk); load_reset=0; changes=0;
+        push(28'h8004000, 32'h00005500, 4'h2, 4'd0);   // lane 1 = 55
+        push(28'h8004000, 32'h00CC6600, 4'h6, 4'd0);   // lane 1 = 66 (folded, loses), lane 2 = CC
+        if (count!==1) $fatal(1,"FAIL same DWORD took %0d slots, expected 1", count);
+        if (changes!==2) $fatal(1,"FAIL fold did not pulse changed");
         read(25'h1000);
         if (dout_first!==32'h11CC5544)
-            $fatal(1,"FAIL lowest slot did not win the lane: %h", dout_first);
+            $fatal(1,"FAIL fold kept the wrong bytes: %h", dout_first);
+
+        // A third write into the same word, both lanes already taken, must
+        // change nothing.
+        push(28'h8004000, 32'h00990000, 4'h4, 4'd0);
+        if (count!==1) $fatal(1,"FAIL third write allocated a slot");
+        read(25'h1000);
+        if (dout_first!==32'h11CC5544)
+            $fatal(1,"FAIL a taken lane was overwritten: %h", dout_first);
 
         $display("PASS rom_patch: fill from the push, both words, byte lanes, RAM and conditional entries ignored, reset, 32 slots and no overrun");
         $finish;

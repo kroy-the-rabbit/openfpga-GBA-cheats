@@ -520,9 +520,22 @@ and its snapshot delay is 0.6 ns shorter. Bitstream SHA-256
 Two seeds, same direction, so it was the design. `rom_patch`'s `apply()`
 walked all slots per byte lane with a `taken` flag, which synthesises as a
 SLOTS-deep chain of muxes sitting on the ROM data return path into the
-cache. Free at 8 slots, 815 ALMs and 0.36 ns at 32. Rewritten as isolate the
-lowest set bit (`cand & -cand`) then select with a one-hot OR, which does
-not deepen the same way. Do not reintroduce the walk for readability.
+cache. Free at 8 slots, 815 ALMs and 0.36 ns at 32.
+
+**Two rewrites, because the first traded the wrong thing.** Isolating the
+lowest set bit (`cand & -cand`) and selecting with a one-hot OR fixed the
+depth, seed 3 closing at +0.092 and seed 1 at -0.030, but cost another
+1,620 ALMs and put the design at **98 %**, back at the ceiling the savestate
+cut was meant to leave behind. A per-lane arbiter is expensive however it is
+written.
+
+What worked was removing the arbitration instead. One slot per DWORD: the
+fill folds a second write to the same word into the slot that already holds
+it, so addresses are unique, `hit` is one-hot by construction, and the read
+side is a single OR of non-matching zeros with no priority and no per-lane
+logic at all. The arbitration that was on the data path is now a fill-time
+compare, run while the loader is between entries. It also spends fewer
+slots: Zero Mission's six-patch `Jump In Midair` occupies four.
 
 ## The fit problem, and how to measure it
 
