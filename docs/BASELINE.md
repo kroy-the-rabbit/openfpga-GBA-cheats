@@ -536,6 +536,18 @@ with one parameter changed. Zero Mission's two midair-jump cheats are 12
 entries together, so 16 holds both with four spare. Do not raise it again
 without re-reading this table.
 
+### Sixteen slots and the Fast Burst profile, `f2a86db`
+
+| Seed | Runner | ALMs | Setup | Hold | Result |
+|---|---|---|---|---|---|
+| 3 | sisko | 16,080 (87 %) | +0.092 | +0.121 | pass |
+| 1 | sisko2 | 16,089 (87 %) | +0.045 | +0.109 | pass |
+
++468 ALMs over the 8-slot build for twice the table, against +815 for the
+32-slot walk that missed on both seeds. Seed 3 is the better build. Also
+carries `ROM Timing` profile 4, which is constants rather than logic and
+moved nothing.
+
 ## The fit problem, and how to measure it
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on
