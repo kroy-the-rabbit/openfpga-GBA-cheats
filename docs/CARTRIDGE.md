@@ -1,6 +1,6 @@
 # Cartridges on the Pocket GBA core
 
-The released build is `f2a86db`, installed on 2026-09-10. **Play Cartridge**
+The tested build is `f2a86db`, installed on 2026-09-10. **Play Cartridge**
 boots Minish Cap and Zero Mission, loads their existing physical saves and
 plays with cheats. A new Zero Mission save written by this core was read back
 by Analogue's own cartridge mode.

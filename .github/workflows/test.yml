@@ -24,6 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Calendar version checks
+        run: bash tools/podman/test-version.sh
+
       - name: Install Podman
         run: |
           sudo apt-get update -qq

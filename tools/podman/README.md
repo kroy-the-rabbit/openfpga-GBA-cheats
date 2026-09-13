@@ -15,7 +15,7 @@ make report
 `make gba SKIP_COMPILE=1` repackages existing outputs without synthesis. It
 does not prove those outputs came from the current checkout. Keep the built
 commit and report with the bitstream, and stamp a release from that commit.
-`RELEASE_NAME=v0.9999.<built-commit>` selects the package version.
+`RELEASE_NAME=v0.9999.YYYYMMDD` selects the package version.
 
 | Path under `build/gba/` | Contents |
 |---|---|

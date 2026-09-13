@@ -11,7 +11,7 @@
 # What CI does on a tag is check that the release the orchestrator published
 # is the one the tag names: the package is present, its checksums verify, and
 # the version stamped into core.json is the tag. A tag with no package, or a
-# package stamped from another commit, fails here and says so. Nothing here
+# package stamped with another version, fails here and says so. Nothing here
 # synthesises, uploads or replaces a core.
 #
 # The ancestry check is what keeps this a release of main: `on: push: tags`
@@ -41,6 +41,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Validate the release date
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          source tools/podman/version.sh
+          pocket_version "$GITHUB_REF_NAME"
 
       - name: Require the tag to be on the release branch
         run: |
@@ -76,7 +83,7 @@ jobs:
           version="${tag#v}"
           zip="kroy.GBA_${version}.zip"
           mkdir -p dist && cd dist
-          gh release download "$tag" -p "$zip" -p SHA256SUMS -p report.txt
+          gh release download "$tag" -p "$zip" -p BUILD.json -p SHA256SUMS -p report.txt
           sha256sum -c SHA256SUMS
           unzip -p "$zip" Cores/kroy.GBA/core.json \
             | python3 -c "import json,sys; v=json.load(sys.stdin)['core']['metadata']['version']; print('stamped', v); sys.exit(v != '$version')"

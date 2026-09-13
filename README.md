@@ -26,9 +26,9 @@ See [docs/CHEATS.md](docs/CHEATS.md) and [docs/CARTRIDGE.md](docs/CARTRIDGE.md).
 
 ## What works
 
-Release [`v0.9999.f2a86db`](../../releases/tag/v0.9999.f2a86db) uses the
-hardware-tested build installed on 2026-09-10. These features are on `main`.
-The older `v0.9999` predates cartridge support and reads only `.chtbin` cheats.
+The cartridge update is on `main`, with hardware-tested build `f2a86db`
+installed on 2026-09-10. The latest published release, `v0.9999`, predates
+cartridge support and reads only `.chtbin` cheats.
 
 | Feature | Status |
 |---|---|
@@ -50,17 +50,10 @@ from the checks still needed.
 
 ## Versions
 
-Every project in this set sits at **0.9999** and none of them moves off it.
-1.0 is a claim to be finished, none of this is finished, and a version that
-never climbs cannot drift into making that claim by accident.
-
-The projects are not kept in step with each other. A release adds the short
-SHA of the commit it was cut from, so a tag reads `v0.9999.<sha>`, and two
-tags that share the prefix are unrelated releases. This core's `v0.9999`
-predates the suffix. Read the tail, not the number.
-
-Provenance is stated in words, above and in the credits, rather than implied by
-a number.
+Versions use `0.9999.YYYYMMDD`, where the date is UTC. Release tags add `v`,
+for example `v0.9999.20260913`. Each project releases independently.
+The source commit and bitstream checksums are recorded in build provenance.
+A published date is not reused for a different build.
 
 ## Installation
 
@@ -191,10 +184,12 @@ hundred database files by hand is tedious.
 | [docs/CHEATBIN.md](docs/CHEATBIN.md) | the `.chtbin` format contract |
 | [docs/CARTRIDGE.md](docs/CARTRIDGE.md) | Play Cartridge, physical saves, timing and limits |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | validating a build on a real Pocket, and what is still unwalked |
-| [docs/PLAN.md](docs/PLAN.md) | design and phasing, including where the cartridge work stands |
-| [docs/HANDOFF.md](docs/HANDOFF.md) | current release and historical bring-up notes |
-| [docs/BASELINE.md](docs/BASELINE.md) | measured area and timing, build by build |
+| [docs/PLAN.md](docs/PLAN.md) | remaining development work |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | current development and release status |
+| [docs/BASELINE.md](docs/BASELINE.md) | current tested build measurements |
 | [docs/BUILD-RUNNER.md](docs/BUILD-RUNNER.md) | controlled builds through the shared runner interface |
+
+[Engineering history](https://github.com/kroy-the-rabbit/pocket-engineering/blob/main/gba/README.md) (private).
 
 ## Building from source
 
@@ -265,10 +260,11 @@ bitstream and does not link with any of the above: it is separate programs that
 run on a desktop and write files.
 
 Neither this repository nor upstream carries a LICENSE file, so the per-file
-notices and that `info.txt` are the licence. Binary releases here are built from
-the exact tagged commit of this repository on a controlled builder, and the tag
-is the corresponding source for them; the release carries the zip, its SHA-256
-and the timing report.
+notices and that `info.txt` are the licence. Binary releases come from controlled builders. Each dated release includes
+`BUILD.json` with the original build commit and bitstream checksums. Its
+release tag may also include documentation and packaging changes; the FPGA
+source is unchanged from the recorded build. The package, checksums and
+timing report accompany that provenance.
 
 The builder runs Quartus Prime Lite from an image assembled from Intel's own
 installers. Quartus Lite needs no licence file, but that grants no right to

@@ -1,6 +1,6 @@
 # Hardware validation
 
-The released build is `f2a86db`, seed 3, installed on 2026-09-10.
+The tested build is `f2a86db`, seed 3, installed on 2026-09-10.
 Later changes through `f5de823` are documentation only. This document records
 hardware evidence; simulation and timing results are separate checks.
 
