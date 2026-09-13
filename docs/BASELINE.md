@@ -1,6 +1,6 @@
 # Build measurements
 
-## Current candidate: `f2a86db`
+## Current release: `v0.9999.f2a86db`
 
 Quartus Lite 25.1std build 1129, STANDARD FIT. Seed 3 is the installed,
 hardware-tested build; seed 1 is an independent passing fit.

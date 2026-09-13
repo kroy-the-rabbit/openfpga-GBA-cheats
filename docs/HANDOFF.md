@@ -2,13 +2,13 @@
 
 ## Current state, 2026-09-12
 
-`main` contains the cartridge work from `p5-cartridge`. The published release
-is still `v0.9999`; this update has not been pushed, tagged or released.
-The tested candidate is **`f2a86db`**, seed 3, installed on 2026-09-10.
+`main` contains the cartridge work from `p5-cartridge` and is pushed.
+Release **`v0.9999.f2a86db`** is published with the signed tag on the exact
+tested commit **`f2a86db`**, seed 3, installed on 2026-09-10.
 `f5de823` adds only documentation to that source; the main-alignment changes
 update documentation and simulation CI, not the FPGA design or package.
 
-| Candidate | Result |
+| Released build | Result |
 |---|---|
 | Quartus | Lite 25.1std build 1129, STANDARD FIT |
 | ALMs / RAM blocks | 16,080 / 18,480 (87 %); 278 / 308 |
@@ -42,7 +42,7 @@ Check the workflow at the tagged commit before publication; the workflow on
 verifies release assets. Quartus runs only through `tools/runner-build` on
 controlled runners; CI does not build or replace bitstreams.
 
-The candidate ZIP and report are under
+Published assets are under `build/releases/0.9999.f2a86db/`, copied from
 `build/watch/pocket-gba-gba-slots16-s3-f2a86db59fa9/`. Ignore stale
 `build/gba/sd` and old top-level packages when selecting release assets.
 See [HARDWARE.md](HARDWARE.md), [BUILD-RUNNER.md](BUILD-RUNNER.md) and

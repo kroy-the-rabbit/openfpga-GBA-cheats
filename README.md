@@ -26,9 +26,9 @@ See [docs/CHEATS.md](docs/CHEATS.md) and [docs/CARTRIDGE.md](docs/CARTRIDGE.md).
 
 ## What works
 
-The hardware-tested candidate is `f2a86db`, installed on 2026-09-10.
-These features are on `main`; the published `v0.9999` predates cartridge
-support and reads only `.chtbin` cheats.
+Release [`v0.9999.f2a86db`](../../releases/tag/v0.9999.f2a86db) uses the
+hardware-tested build installed on 2026-09-10. These features are on `main`.
+The older `v0.9999` predates cartridge support and reads only `.chtbin` cheats.
 
 | Feature | Status |
 |---|---|
@@ -192,7 +192,7 @@ hundred database files by hand is tedious.
 | [docs/CARTRIDGE.md](docs/CARTRIDGE.md) | Play Cartridge, physical saves, timing and limits |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | validating a build on a real Pocket, and what is still unwalked |
 | [docs/PLAN.md](docs/PLAN.md) | design and phasing, including where the cartridge work stands |
-| [docs/HANDOFF.md](docs/HANDOFF.md) | current candidate, release status and historical bring-up notes |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | current release and historical bring-up notes |
 | [docs/BASELINE.md](docs/BASELINE.md) | measured area and timing, build by build |
 | [docs/BUILD-RUNNER.md](docs/BUILD-RUNNER.md) | controlled builds through the shared runner interface |
 

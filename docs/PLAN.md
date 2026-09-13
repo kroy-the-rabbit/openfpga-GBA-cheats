@@ -3,8 +3,8 @@
 ## Current state, 2026-09-12
 
 The working and release line is `main`, including the cartridge work from
-`p5-cartridge`. The tested build is `f2a86db`; the published `v0.9999`
-predates this update. [HANDOFF.md](HANDOFF.md) identifies the candidate.
+`p5-cartridge`. The tested build is published as `v0.9999.f2a86db`.
+[HANDOFF.md](HANDOFF.md) identifies the release and its hardware results.
 
 | Phase | Current state |
 |---|---|
@@ -16,10 +16,10 @@ predates this update. [HANDOFF.md](HANDOFF.md) identifies the candidate.
 | P5, cartridge launch | APF Play Cartridge, power/probe sequencing and ROM path implemented |
 | P6, gameplay and saves | Minish Cap and Zero Mission tested; new Zero Mission save read back independently |
 | P7, cartridge cheats | RAM cheats, conditions, named overlay and sixteen read-side ROM patches tested |
-| P8, release | Previous cheat release published; cartridge update prepared on main, not released |
+| P8, release | Cartridge update published as `v0.9999.f2a86db`; main pushed |
 
 The 32-entry cheat table remains. A conditional costs two entries and ROM
-patches also use the separate sixteen-slot patch table. The candidate uses
+patches also use the separate sixteen-slot patch table. The release uses
 87 % of ALMs and closes at seed 3 with +0.092 ns setup and +0.121 ns hold.
 The earlier fit ceiling was removed by cutting savestates; sleep and link
 support are also removed. SD-ROM RTC remains supported.
