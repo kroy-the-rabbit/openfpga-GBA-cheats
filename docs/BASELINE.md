@@ -1,4 +1,27 @@
-# P0 baseline: upstream v0.6.2, unmodified
+# Build measurements
+
+## Current candidate: `f2a86db`
+
+Quartus Lite 25.1std build 1129, STANDARD FIT. Seed 3 is the installed,
+hardware-tested build; seed 1 is an independent passing fit.
+
+| Seed | ALMs | RAM blocks | Setup | Hold |
+|---|---|---|---|---|
+| 3 | 16,080 (87 %) | 278 | +0.092 ns | +0.121 ns |
+| 1 | 16,089 (87 %) | 278 | +0.045 ns | +0.109 ns |
+
+Seed 3 also passes recovery (+2.935 ns), removal (+0.966 ns) and minimum
+pulse width (+0.827 ns), with 24,360 registers and 1121 s elapsed.
+The sixteen-slot ROM-patch table, `.cht` parser, named overlay and Fast Burst
+profile are included. Bitstream SHA-256:
+`489904ea59dea4e1408c770cbe8e853a67741f5817d1884d59e57e77b7d3f31b`.
+
+All sections below record earlier measurements and experiments. Their 21.1
+toolchain, binary-only loader, 84 % area, old headroom estimates and historical
+CI fits do not describe the current build or release process. Use each row's
+commit and settings when comparing results; no fixed ALM-to-slack ratio applies.
+
+## Historical P0 baseline: upstream v0.6.2, unmodified
 
 Built here with `make gba` from `98c04b2`, whose RTL is untouched upstream
 v0.6.2: Quartus Prime Lite 21.1.1 Build 850 inside
@@ -548,7 +571,7 @@ without re-reading this table.
 carries `ROM Timing` profile 4, which is constants rather than logic and
 moved nothing.
 
-## The fit problem, and how to measure it
+## Historical fit problem before cartridge support
 
 P1+P2 together do not fit. The gap is a reproducible **0.45 ns** of setup on
 `clk_sys` at 97 % ALM occupancy. Three things about measuring it:

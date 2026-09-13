@@ -5,24 +5,14 @@ game.
 
 **Based on [mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA)
 by mincer-ray**, which is a Pocket port of
-[GBA_MiSTer](https://github.com/MiSTer-devel/GBA_MiSTer). Everything that ships
-here is theirs apart from the cheat engine.
+[GBA_MiSTer](https://github.com/MiSTer-devel/GBA_MiSTer). The GBA machine and
+Pocket framework come from those projects.
 
-The Pocket port dropped MiSTer's `gba_cheats.vhd`. This puts it back, along with
-the debug-bus arbitration and the CPU pause it needs, a data slot to load codes
-through and a menu switch. That is six files touched in `src/`, three of them
-new, plus a data slot and two menu entries in `pkg/`:
-
-| | |
-|---|---|
-| `core/cheat_binloader.sv` | **new**, reads the `.chtbin` into the cheat table |
-| `core/cheat_loader.sv` | **new**, the loader around it |
-| `gba/gba_cheats.vhd` | **new** here, MiSTer's engine that the Pocket port dropped |
-| `core/core_top.sv` | the data slot, the debug-bus branch, the menu switch |
-| `gba/gba_top.vhd` | the engine ports and the CPU run condition |
-| `build/ap_core.qsf` | two lines, so the new files are compiled |
-
-See [docs/CHEATS.md](docs/CHEATS.md).
+The fork restores MiSTer's cheat engine and adds direct `.cht` loading,
+named cheat overlays, read-side ROM patches and physical cartridge support.
+The cartridge controller comes from [Wokann/openfpga-GBA](https://github.com/Wokann/openfpga-GBA),
+with Pocket launch plumbing informed by [Rai/openfpga-GBA](https://github.com/Rai/openfpga-GBA).
+See [docs/CHEATS.md](docs/CHEATS.md) and [docs/CARTRIDGE.md](docs/CARTRIDGE.md).
 
 > **Cheats can corrupt save files.** A cheat is a write into the memory of a
 > running game, made once a frame, and a game builds its save data out of that
@@ -36,31 +26,27 @@ See [docs/CHEATS.md](docs/CHEATS.md).
 
 ## What works
 
-Confirmed on a real Pocket with v0.6.4: the core boots, a `.chtbin` beside the
-ROM loads, a code visibly takes effect in game, and **Cheats Enabled** turns the
-effect off and back on live.
+The hardware-tested candidate is `f2a86db`, installed on 2026-09-10.
+These features are on `main`; the published `v0.9999` predates cartridge
+support and reads only `.chtbin` cheats.
 
-| | |
+| Feature | Status |
 |---|---|
-| Cheats, CodeBreaker and GameShark v1/v2, from libretro `.cht` files, read directly or as a converted `.chtbin` | **works on hardware** |
-| Cheat overlay, the loaded cheats drawn over the picture by name | **works on hardware** since `6c8fd96`; names need a `.cht` file, a `.chtbin` shows `CHEAT nn` |
-| ROM patches, applied as the ROM is read, so they work on cartridges | **works on hardware** since `fc6b82e`, on a real Zero Mission cartridge; sixteen slots |
-| **Cheats Enabled** switch, live | **works on hardware** |
-| Everything upstream's core does | **works**, unchanged. Nothing was cut to make room |
-| Save states and sleep | **removed** here; a core built for cheats does not need them, and the ALMs went to cartridge support |
-| Real-time clock | **works**, upstream's |
-| Fast forward, on Y | **works**, upstream's |
-| Button turbo, on X | **works**, upstream's |
-| Display filters | **works**, upstream's |
-| Link cable | **removed** here, to buy the ALMs cartridge support needs; SIO registers still answer with no cable present |
-| A stray `.cht` loading zero rather than garbage | correct in simulation, **unconfirmed on hardware** |
-| Closing the lid with the engine running | **unconfirmed on hardware** |
-| Encrypted codes: GameShark v3, Action Replay v3, CodeBreaker after a `9` line | refused, and cannot be made to work |
-| Cartridges | **Bring-up.** Minish Cap loads an existing physical save and plays with cheats on hardware. Write persistence and the new automatic launch path still need hardware qualification. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) |
-| 64 MB video carts | do not work |
+| Cheats from `.cht` or `.chtbin`, with a live global switch | Confirmed on hardware; off at launch |
+| Overlay showing cheat names | Confirmed; `.cht` supplies names, `.chtbin` shows `CHEAT nn` |
+| Sixteen read-side ROM-patch slots | Confirmed on a Zero Mission cartridge, including two midair cheats together |
+| Physical cartridge gameplay and existing saves | Minish Cap and Zero Mission confirmed |
+| Physical save persistence | A new Zero Mission save was read back by Analogue's own cartridge mode |
+| Fast Burst cartridge timing | Clean audio on the tested Zero Mission cartridge; opt-in |
+| SD-ROM RTC, fast forward, button turbo and display filters | Retained from upstream |
+| Savestates, sleep and link cable | Removed |
+| Cartridge RTC/GPIO, solar and gyro | Not connected |
+| Physical SRAM/Flash save writes, interrupted-transfer guard, empty-slot handling | Not hardware-qualified |
+| Encrypted cheat codes | No decryption; supply supported raw codes |
+| 64 MB video carts | Unsupported |
 
-[docs/HARDWARE.md](docs/HARDWARE.md) is the checklist and says exactly which
-steps have been walked and which have not.
+[docs/HARDWARE.md](docs/HARDWARE.md) separates recorded hardware results
+from the checks still needed.
 
 ## Versions
 
@@ -80,8 +66,8 @@ a number.
 
 Prebuilt cores are on the [Releases](../../releases) page. Download
 `kroy.GBA_<version>.zip`, not the "Source code" archives: the bitstream is built
-by CI rather than committed, so a core installed from a source archive is listed
-by the Pocket and cannot start.
+on controlled runners rather than committed, so a core installed from a
+source archive is listed by the Pocket and cannot start.
 
 This core installs as `Cores/kroy.GBA` and shows as "Game Boy Advance (cheats)".
 It does not replace an upstream `mincer_ray.GBA` install, it sits beside it. APF
@@ -109,51 +95,30 @@ hardware or supply your own copy.
 ## Usage
 
 ROMs go in `/Assets/gba/common/`. Choose **Play Cartridge** in the asset
-browser to use the inserted cartridge. Cartridge saves are live, reads and writes. This automatic launch path
-is installed in `417a55f` and awaiting hardware qualification. [docs/CARTRIDGE.md](docs/CARTRIDGE.md) covers
-the current hardware results and diagnostic readouts.
+browser to boot the inserted cartridge. Cartridge saves read and write the
+physical chip directly; no SD `.sav` is imported or exported in this mode.
+See [docs/CARTRIDGE.md](docs/CARTRIDGE.md) for tested cartridges and limits.
+Pocket firmware **1.2 or newer** is required.
 
-Declaring the cartridge adapter raises the firmware this core needs: it will not
-load on a Pocket below **firmware 1.2**.
+For named cheats, put `Game.gba.cht` beside `Game.gba` and set the desired
+`cheatN_enable` keys to `true`. The core also accepts `Game.gba.chtbin`,
+which carries packed codes without titles. If both are present, select the
+`.cht` through the **Cheats** slot to use its names. In Play Cartridge mode,
+browse to the cheat file once; ROM-derived filenames do not autoload there.
 
-**This is the one core in the set where the file you pick from is not the file
-the handheld reads.** The core reads `<rom filename>.gba.chtbin`, not a `.cht`.
+**Cheats Enabled** and **Cheat Overlay** start off and are not persisted.
+Loading a cheat file does not reset the game or turn cheats on. Enable the
+global switch to apply the file's selected cheats, and enable the overlay
+to see the loaded names and counts. `CL:` and `CD:` are no longer menu items.
 
-That is not a preference. The cheat engine went into a design already at 90 %
-logic utilisation, and an ASCII parser on the FPGA measured 441 ALMs but grew
-the design by 1,285 and cost 0.54 ns of setup timing, which is the difference
-between a core that runs and one that does not exist. So the parse happens on a
-desktop, where it can also be cross-checked against the whole libretro Game Boy
-Advance directory rather than inferred from a handheld with no console. That
-cross-check is opt-in and needs the corpus mounted, `make test CHT_DB=/path/to/cht`;
-a plain `make test` skips it and still exits zero, so a green run on its own is
-not evidence the corpus passed.
+The [desktop app](#the-desktop-app) writes cheat files for you. Conversion
+to `.chtbin` is optional; [docs/CHEATS.md](docs/CHEATS.md) covers raw code
+formats, the 32-entry limit and the separate sixteen-slot ROM-patch limit.
+Encrypted codes need decoding before use; neither loader decrypts them.
 
-Two ways to produce the file:
-
-* the [desktop app](#the-desktop-app), which lists the games on your card,
-  matches each against the cheat database and writes both files for you;
-* `tools/cheats/cht2bin.py YourGame.gba.cht`, which writes
-  `YourGame.gba.chtbin` beside it.
-
-A plain `.cht` copied to the card loads **zero** cheats rather than misbehaving.
-The `.chtbin` header carries a magic number precisely so the old format cannot
-be mistaken for the new one and shifted into the cheat table as garbage. That is
-correct in simulation and is one of the two things still unconfirmed on
-hardware.
-
-**Cheats Enabled** in the core menu turns the whole lot on and off, and is
-the only cheat control. The `CL:` and `CD:` readouts that counted bytes,
-entries and rejects were removed on 2026-09-09 to give the fitter room;
-[docs/CHEATS.md](docs/CHEATS.md) says what they showed and how to check a
-file without them.
-
-Encrypted codes, meaning GameShark v3, Action Replay v3 and CodeBreaker codes
-after a `9` line, are enciphered with a per-game seed and cannot work. The
-converter rejects them by plausibility rather than guessing: a real code's
-address lands in the machine's RAM and an enciphered word almost never does. A
-few real codes will be refused this way and a few enciphered ones will slip
-through as pokes at nothing.
+For cartridge audio, **ROM Timing** defaults to **Turnaround**. **Fast Burst**
+fixes slowdown on the tested Zero Mission cartridge but runs the bus faster
+than a real GBA and remains opt-in.
 
 ### Fast forward
 
@@ -166,7 +131,8 @@ which is most obvious on the Classic NES Series titles.
 
 ### RTC and save compatibility
 
-When a game uses RTC, the core appends RTC data to the end of the save file.
+For SD ROMs, when a game uses RTC, the core appends RTC data to the end of
+the save file.
 That makes the save larger than a standard GBA save, so loading it on a GBA core
 without RTC support fails on the size check. To move such a save to a non-RTC
 core, the extra bytes have to come off the end.
@@ -179,8 +145,9 @@ converts between many retro save formats. Neither has been tested here.
 
 ### Force Quirk
 
-Manually enables RTC for a ROM that is not in the database, for ROM hacks that
-add RTC support to a game that does not normally use it. At the time of writing
+For SD ROMs only, manually enables RTC for a ROM that is not in the database,
+for ROM hacks that add RTC support to a game that does not normally use it.
+At the time of writing
 one hack needs it. Enable it on the first load of the hack, as early in the BIOS
 display as possible, or the save initialises wrong.
 
@@ -211,46 +178,48 @@ hundred database files by hand is tedious.
 
 * Fast forward shows screen tearing. Fixing it needs a frame buffer.
 * 64 MB video carts do not work.
-* Two items on [docs/HARDWARE.md](docs/HARDWARE.md) are still unwalked: the
-  stray `.cht`, and closing the lid with the engine in the CPU run condition.
+* Cartridge RTC/GPIO is disconnected. Flash save writes, the interrupted-transfer
+  guard and empty-slot handling still need hardware qualification.
+* Savestates, sleep and link cable are unavailable.
+* Fast Burst has been tested on one cartridge; Turnaround remains the default.
 
 ## Documentation
 
 | | |
 |---|---|
-| [docs/CHEATS.md](docs/CHEATS.md) | using cheats: the converter, the file, the menu readout |
+| [docs/CHEATS.md](docs/CHEATS.md) | cheat files, supported codes, overlay and cartridge loading |
 | [docs/CHEATBIN.md](docs/CHEATBIN.md) | the `.chtbin` format contract |
-| [docs/CARTRIDGE.md](docs/CARTRIDGE.md) | using a cartridge: the menu setting, the probe, the readout |
+| [docs/CARTRIDGE.md](docs/CARTRIDGE.md) | Play Cartridge, physical saves, timing and limits |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | validating a build on a real Pocket, and what is still unwalked |
 | [docs/PLAN.md](docs/PLAN.md) | design and phasing, including where the cartridge work stands |
-| [docs/HANDOFF.md](docs/HANDOFF.md) | the fit history, and why the parser had to leave the FPGA |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | current candidate, release status and historical bring-up notes |
 | [docs/BASELINE.md](docs/BASELINE.md) | measured area and timing, build by build |
-| [docs/BUILD-RUNNER.md](docs/BUILD-RUNNER.md) | standing up a dedicated build runner, if a workstation is not the place for a 40-minute fit |
+| [docs/BUILD-RUNNER.md](docs/BUILD-RUNNER.md) | controlled builds through the shared runner interface |
 
 ## Building from source
 
-Quartus Prime Lite runs in a container and nothing is installed on the host.
-The container is one you build yourself from Intel's installers, see the
-licence section below; the harness expects it as `localhost/pocket-quartus:25.1std`
-and `IMAGE=` points it anywhere else:
+Quartus Prime Lite **25.1std build 1129** runs on controlled build runners
+through the shared `tools/runner-build` interface. See
+[docs/BUILD-RUNNER.md](docs/BUILD-RUNNER.md). Routine fits run there;
+GitHub Actions runs simulations and verifies published packages.
 
 ```sh
-make gba      # -> build/gba/{bitstream.rbf_r, sd/, kroy.GBA_<version>.zip, report.txt}
-make test     # the simulation suite
+make sim-image   # Icarus Verilog, GHDL and Python, no Quartus
+make test        # complete simulation suite
 ```
 
-**Measure before moving the toolchain.** Upstream tuned the constraints, the
-fitter seed and the custom STA reports against 21.1, and this design closes
-setup by about 0.09 ns on one placement seed in three. That held across the
-move to 25.1std: seed 3 closes at +0.092 ns where 21.1 gave +0.087, and the
-other seeds miss on both. `docs/BASELINE.md` has every number; a version
-change without a row in that table is a guess.
+Optional cheat-corpus checks need `CHT_DB=/path/to/cht`. Without it, both
+corpus passes report a skip; the fixture and integration suites still run.
 
-The build fails if the design misses timing. Quartus exits 0 on negative slack,
-so `tools/podman/report.sh` checks worst-case slack itself and stops the build,
-because a bitstream with negative slack may work on one bench and fail on
-somebody's handheld. Releases are built with the same script on a controlled
-builder, `SEED=3`, and the timing report ships beside the zip.
+The tested `f2a86db` seed-3 build uses 16,080 of 18,480 ALMs (87 %) and
+278 RAM blocks. Worst setup is +0.092 ns and hold +0.121 ns; all timing
+categories pass. [docs/BASELINE.md](docs/BASELINE.md) carries the fit evidence.
+`tools/podman/report.sh` rejects negative slack even when Quartus exits zero.
+
+Releases use a signed `v0.9999.<built-commit>` tag on `main`, the tested
+package, `report.txt` and `SHA256SUMS`. CI verifies them and never synthesises
+or replaces the bitstream. A later documentation commit does not change the
+source commit recorded for the tested package.
 
 ## Where to report a problem
 
@@ -266,8 +235,10 @@ This core is other people's work with a cheat engine put back into it.
 | | |
 |---|---|
 | [GBA_MiSTer](https://github.com/MiSTer-devel/GBA_MiSTer) | the original FPGA GBA, and `gba_cheats.vhd`, which is the cheat engine this fork restores |
-| [mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA) | the Pocket port this forks. Everything that ships here is theirs apart from the cheat wiring |
+| [mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA) | the Pocket port this forks, including the GBA machine integration and framework |
 | [budude2/openfpga-GBC](https://github.com/budude2/openfpga-GBC) | reference for MiSTer to Pocket porting patterns |
+| [Wokann/openfpga-GBA](https://github.com/Wokann/openfpga-GBA) | cartridge controller and original controller tests |
+| [Rai/openfpga-GBA](https://github.com/Rai/openfpga-GBA) | reference for the APF Play Cartridge declaration |
 | [agg23](https://github.com/agg23) | analogue-pocket-utils, and reference SNES and NES Pocket cores |
 | [libretro/libretro-database](https://github.com/libretro/libretro-database) | the cheat files themselves, CC-BY-SA-4.0, none of them shipped here |
 | [Analogue openFPGA](https://www.analogue.co/developer) | the Pocket framework and core template |

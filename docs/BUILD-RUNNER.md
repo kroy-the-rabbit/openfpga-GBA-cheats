@@ -1,4 +1,43 @@
-# Stand up a Quartus build runner on a Proxmox node
+# Controlled build runners
+
+Routine GBA synthesis and fitting run through the ecosystem's shared
+`tools/runner-build` interface, never on the workstation or GitHub Actions.
+The profile is `pocket-gba gba`. The current image is private
+`localhost/pocket-quartus:25.1std`, Quartus Lite build 1129.
+
+From the GBA checkout in the ecosystem, substitute a registered runner and
+unique build name:
+
+```sh
+../tools/runner-build status
+../tools/runner-build current
+SEED=3 FITTER_EFFORT="STANDARD FIT" ../tools/runner-build start RUNNER pocket-gba gba BUILD HEAD
+../tools/runner-build job RUNNER pocket-gba gba BUILD HEAD
+../tools/runner-build fetch RUNNER pocket-gba gba BUILD HEAD
+```
+
+`start` sends the exact committed source to an isolated checkout. Working-tree
+changes are not included. Each runner permits one fit; a busy runner is a
+refusal, not permission to start another job manually. Keep the source commit
+fixed when using `job` and `fetch`.
+
+`fetch` retrieves build results under `build/`; it does not refresh every old
+`sd/` tree or `output_files` directory. Select the ZIP and report for the same
+job, inspect every timing category, and install from that ZIP. Compare the
+card's bitstream hash to the archive. The current tested candidate and its
+artifact directory are in [HANDOFF.md](HANDOFF.md).
+
+GitHub builds only the simulation image (`make sim-image`) and runs
+`make test`. Releases are signed tags on `main` plus tested packages,
+checksums and reports; CI verifies them. The Quartus image and its archive
+stay private and are never uploaded as CI artifacts or to a registry.
+
+<details>
+<summary>Historical runner provisioning notes, 2026-09-09</summary>
+
+The notes below record infrastructure setup. Their direct SSH build, bundle
+and reset commands are not the routine build interface; use `runner-build`
+above for scheduling, isolated checkouts and retrieval.
 
 Goal: an LXC on a Proxmox node that runs this repo's containerised Quartus
 build, so builds stop competing with a workstation.
@@ -199,10 +238,8 @@ Elapsed, all three runners, that job or its equivalent:
 | kira | | 1977 s |
 | odo | E5-2640 v4, node at load 8 to 16 | 2113 s |
 
-odo is the slowest of the three; use it for a third seed in parallel, not
-for the one fit you are waiting on. `runner-build` in the orchestrator
-needs an `odo) RUNNER_HOST=root@10.50.1.244` entry beside sisko and kira
-before it can drive odo; until then the manual form above works.
+All four runners, including odo and sisko2, are registered in `runner-build`.
+Use that interface for routine builds.
 
 ## Checklist
 
@@ -224,5 +261,8 @@ node 0 at the same time. Same commit `a315dec`, same 78 % design, run at once:
 | sisko | 3 | 1013 s | 14,361 | +0.103 |
 | sisko2 | 1 | 1022 s | 14,386 | +0.093 |
 
-Two fits in the time one used to take; the earlier sisko runs on this design
-family were 1450 to 1530 s, so the NUMA pinning alone is worth about 30 %.
+The earlier 1450 to 1530 s fits were different, 97 % designs. These 78 %
+measurements do not isolate a speedup from NUMA pinning; that needs the same
+commit and settings before and after.
+
+</details>

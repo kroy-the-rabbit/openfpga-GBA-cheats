@@ -1,100 +1,58 @@
 # Cheats on the Pocket GBA core
 
-CodeBreaker and GameShark codes from a libretro `.cht` file, converted on your
-computer and copied to the SD card as a `.chtbin`. Which cheats are on is
-decided by the file; the core menu has a single global switch.
-
-**The core no longer parses `.cht` on the handheld, and a `.cht` copied
-straight to the SD card will not work.** That is not a preference. The ASCII
-parser fit in the FPGA only on paper: it measured 441 ALMs but grew the design
-by 1,285 and cost 0.54 ns of setup timing at 97 % utilisation, which is the
-difference between a core that runs and one that does not exist. The parse
-moved to your computer, where it is also far easier to test. `docs/HANDOFF.md`
-has the measurements and `docs/CHEATBIN.md` has the format.
+CodeBreaker and GameShark codes load directly from libretro `.cht` text.
+The optional `.chtbin` format carries the same decoded entries without names.
+Each file selects its cheats; **Cheats Enabled** is the global switch.
 
 ## Quick start
 
-**Since 2026-09-10 the core reads libretro `.cht` text directly.** Drop the
-`.cht` beside the ROM as `<rom filename>.gba.cht` and it loads: the text
-parser (`src/fpga/core/cheat_loader.sv`) runs on the FPGA again now that
-the design has the room, and the cheat names in it are what the overlay
-shows. `.chtbin` still works and is picked by its magic bytes; its rows read
-`CHEAT nn` because the format carries no names. The converter is no longer
-required, only convenient for the picker below.
+1. Put `Game.gba.cht` beside `Game.gba` in `/Assets/gba/common/`.
+   Set the cheats you want to `cheatN_enable = true`; stock database files
+   usually have every cheat disabled.
+2. Load the game. Use the **Cheats** slot to select the `.cht` explicitly if
+   there is also a `.chtbin`. In **Play Cartridge** mode, browse to the file
+   once; it does not autoload from a ROM filename.
+3. Turn on **Cheats Enabled**. It starts off on each core launch and is not
+   persisted. Loading another file neither resets the game nor changes this
+   switch.
+4. Turn on **Cheat Overlay** to see the loaded names and counts. It also
+   starts off and is not persisted.
 
-There are two ways to get a `.chtbin` onto the card. The desktop picker is the
-one to use if you have it:
+A file is plain text. `_code` and `_desc` take quoted values, `_enable`
+takes a bare `true` or `false`. Cheats are read in file order:
 
-**[pocket-tools](https://github.com/kroy-the-rabbit/pocket-tools)**
-lists the games on your card, matches each against the libretro cheat database,
-and lets you tick what you want. It knows this format, uses the same decoder
-this repo does, and writes the `.chtbin` for you. It also writes a `.cht`
-alongside, which is deliberate and explained under
-[Two files](#two-files-if-you-used-the-picker) below.
+```
+cheat0_desc = "Infinite Health"
+cheat0_code = "3200E924+0096"
+cheat0_enable = true
+```
 
-By hand, with this repo checked out:
+Check that a text editor has not appended `.txt` or saved rich text.
+The whole ROM filename is retained: `Game.gba.cht`, not `Game.cht`.
 
-1. Convert the `.cht` on your computer:
+## Optional binary conversion
 
-   ```
-   tools/cheats/cht2bin.py Zelda.gba.cht          # writes Zelda.gba.chtbin
-   tools/cheats/cht2bin.py *.cht -d out/          # or a whole directory
-   ```
+The [pocket-tools picker](https://github.com/kroy-the-rabbit/pocket-tools)
+writes `.cht` and `.chtbin` files. Prefer the text file for overlay names;
+the packed file remains compatible with the older `v0.9999` GBA release.
 
-   It prints what it found and what it had to drop. A cheat that produces no
-   entries is reported rather than silently skipped, so an empty result is
-   distinguishable from a broken file.
+For a manual conversion, use a Python virtual environment:
 
-2. Put the `.chtbin` next to the ROM, named after the **whole** ROM filename
-   with `.chtbin` appended:
-   `/Assets/gba/common/Zelda.gba` -> `/Assets/gba/common/Zelda.gba.chtbin`.
-   That is APF's rule for a slot whose filename is cloned from slot 0: the
-   extension is appended, not swapped.
+```sh
+python3 -m venv build/cheats-venv
+build/cheats-venv/bin/python tools/cheats/cht2bin.py Game.gba.cht
+```
 
-   The `.cht` you convert from is plain text and you can write it by hand. Only keys ending
-   `_code`, `_desc` and `_enable` are read; `_code` and `_desc` take a quoted
-   value, `_enable` a bare `true` or `false`. Everything else is ignored,
-   including `cheats = N` and the number in `cheatN_`: cheats are taken in file
-   order and each `_code` starts a new one.
-
-   ```
-   cheat0_desc = "Infinite Health"
-   cheat0_code = "3200E924+0096"
-   cheat0_enable = true
-   ```
-
-   Watch the extension when you write the `.cht`. Windows hides known ones, so
-   a file saved from Notepad as `Zelda.gba.cht` may really be
-   `Zelda.gba.cht.txt`: turn on "File name extensions" in Explorer's View tab.
-   On macOS, TextEdit writes rich text unless you pick Format > Make Plain
-   Text first. The converter will tell you if it read nothing useful.
-
-3. Load the game. **Cheats Enabled** in the core menu turns the whole lot on
-   and off; it is on at every launch and is not persisted.
-
-4. If nothing happens, run `cht2bin.py` on the file again and read what it
-   prints; the core no longer reports counts in its menu (see below).
-
-If you copy a `.cht` to the SD card by mistake, the core loads **zero** cheats
-rather than misbehaving: the `.chtbin` header carries a magic number precisely
-so the old file cannot be mistaken for the new one and shifted into the cheat
-table as garbage.
+This writes `Game.gba.chtbin` beside the input and reports accepted entries
+and dropped cheats. The core recognises binary `GBAC` magic and otherwise
+parses the stream as text; a text file is a supported input.
 
 ## Two files, if you used the picker
 
-The picker leaves both `Game.gba.chtbin` and `Game.gba.cht` beside the ROM.
-That is not the mistake above and nothing is wrong.
-
-Data slot 7 accepts `.cht` and `.chtbin`, and with the picker's two files the
-Pocket offers both; either loads. Before 2026-09-10 the slot accepted
-extension and no other, so the `.cht` is invisible to the hardware. It is there
-for the picker, which needs somewhere to keep the descriptions and the enable
-flags that the packed format has no room for and the core has no use for. It is
-what makes your ticks come back the next time you open the app.
-
-Edit or delete them as a pair. Changing the `.cht` by hand does nothing until
-it is converted again; deleting only the `.chtbin` leaves the app thinking the
-cheats are installed.
+Data slot 7 accepts both extensions. `.cht` supplies the selected codes and
+their names; `.chtbin` supplies packed codes and displays `CHEAT nn`.
+After editing text by hand, regenerate the binary if you still use it.
+Remove both files to remove an installation made by the picker.
 
 ## Which cheats are on
 
@@ -155,10 +113,12 @@ The core skips what it cannot run rather than poking something at random.
   by shape. They are rejected on plausibility instead: a raw code's address
   lands in EWRAM, IWRAM or IO, and an encrypted word almost never does.
 * **Types the engine has no way to express**: `OR`, `AND`, `ADD`, multi-line
-  fills, ROM patches, button tests and pointer chains.
+  fills, native Action Replay ROM-patch opcodes, button tests and pointer chains.
+  Plain CodeBreaker writes to ROM are supported as read-side patches.
 * **Addresses outside EWRAM (`0x02000000`), IWRAM (`0x03000000`) and IO
-  (`0x04000000`).** The engine writes 32 bits at a time through the internal
-  bus. ROM and BIOS are not writable, SRAM at `0x0E000000` is a byte-wide bus
+  (`0x04000000`), except explicit CodeBreaker ROM writes.** ROM addresses
+  `0x08000000` through `0x0DFFFFFF` go to the read-side patch table.
+  BIOS is not writable; SRAM at `0x0E000000` is a byte-wide bus
   that a 32-bit access misreads, and VRAM, OAM and palette RAM are rewritten by
   the game every frame after the vblank write lands.
 * **Master and hook codes** (CodeBreaker types `0` and `1`, GameShark type `F`).
@@ -168,15 +128,9 @@ The core skips what it cannot run rather than poking something at random.
   entry, so a condition guarding another condition cannot be expressed. Such a
   cheat produces nothing rather than a write that runs when it should not.
 
-Over the whole libretro GBA cheat database, 514 files, this admits 7570 entries
-<!-- The count disagrees with the 513 of 513 below. Both were recorded from
-     corpus runs and only one can be right; settle it the next time a corpus is
-     mounted rather than by picking the nicer number. -->
-and not one address outside those three regions. The comparison worth making is
-MiSTer's own pre-encoded cheat files, which gamehacking.org generates and which
-do not filter: their GBA files carry entries with addresses like `0b070768`,
-encrypted codes run through a raw decoder, poking nothing, out of a table that
-has 32 slots in it.
+The raw eight-plus-eight-digit forms keep the RAM/IO address filter.
+Only explicit CodeBreaker writes may target ROM; accepting that larger
+address window for ambiguous raw codes would admit encrypted junk.
 
 ### Limits
 
@@ -184,11 +138,13 @@ has 32 slots in it.
   because the condition and the write it guards are separate entries.
 * A cheat is **all or nothing**. If the remaining slots cannot hold a whole
   cheat it is skipped and counted, and a later, smaller cheat can still fit.
+* **16 ROM-patch slots**, separate from the 32-entry load budget. Each ROM
+  patch also consumes a loaded entry. Do not select more than 16 ROM entries.
 * 1 MB of file.
 
 ## What is confirmed on hardware
 
-Every path through the engine has now been exercised on a real Zero Mission
+The following paths have been exercised on a real Zero Mission
 cartridge, 2026-09-10, on `fc6b82e`:
 
 | Path | How |
@@ -199,10 +155,10 @@ cartridge, 2026-09-10, on `fc6b82e`:
 | ROM patches | the entry word rewritten to a branch to itself halts the game after the BIOS logo |
 | `.cht` titles in the overlay | the cheat names draw instead of `CHEAT nn` |
 
-A cheat that still does nothing after all four pass is a cheat whose own
-condition does not hold on that cart, not a core fault. The way to tell is a
-probe: guard an obvious write, a counter the HUD shows, with the suspect
-condition and see whether it ever fires.
+On `f2a86db`, both six-patch Zero Mission midair cheats also worked together,
+using twelve of the sixteen ROM-patch slots. A non-working cheat still needs
+its address, game revision and condition checked; these tests qualify the
+listed paths, not every code in a database.
 
 ## The overlay
 
@@ -221,67 +177,12 @@ exactly: one stage too many and every title loses its first character.
 `sim/core/tb_cheat_osd_titles.sv` reads a rendered row back against the font
 and fails if it slips.
 
-## The readout, removed 2026-09-09
+## Diagnostics
 
-`CL:` and `CD:` were two numbers in the core menu for when a file did not do
-what you expected. They were removed to give the fitter room while the
-cartridge branch is near the device limit; Cheats Enabled is the only
-control now. The loader still keeps the counters internally and the
-simulation benches still check them, so the description stays for the RTL
-and for a future readout. A file's expected numbers come from
-`cht2bin.py`, which prints them as it writes.
-
-`CL:` packs three counters into one 32-bit number:
-
-```
-bits 31:12  bytes received, used or not
-bits 11:6   entries the file's header DECLARED
-bits  5:0   entries actually pushed to the engine
-```
-
-Read the low two fields against each other:
-
-* **Zero bytes.** The file was never loaded: wrong name, wrong extension, or it
-  is not next to the ROM. Nothing downstream of this matters.
-* **Bytes, but declared and pushed are both zero.** The file arrived and was
-  rejected at the header. Almost always a `.cht` that got renamed rather than
-  converted, see `CD:` bit 7. This is the safety interlock doing its job.
-* **Declared higher than pushed.** The file is truncated, or it declared more
-  entries than the 32-slot table holds. `CD:` bits 5:0 tell you which.
-* **Declared equals pushed, game unchanged.** The codes are loading and running
-  and are simply wrong for your version of the game or your save.
-
-A worked example. `cht2bin.py` prints what it wrote:
-
-```
-smoke.cht: 3 cheats, 4 entries, 0 dropped at the 32-entry cap, 80 bytes
-```
-
-so `CL:` should read `(80 << 12) | (4 << 6) | 4` = **327,940**. If it does not,
-the difference tells you where it went wrong before you have opened anything.
-
-`CD:` is the diagnostics word:
-
-```
-bit   7     the file was malformed: wrong magic, wrong version, or it ended
-            mid-entry. This is the only state that otherwise looks exactly
-            like a valid file containing no cheats.
-bit   6     the master switch, i.e. Cheats Enabled
-bits  5:0   declared entries the table had no room for
-```
-
-Two cautions on those fields. **`CD:` bit 7 is set by a plain `.cht`**, which is
-the point: the header magic exists so that renaming a file instead of converting
-it loads nothing, rather than shifting ASCII into the cheat table and corrupting
-the game. And **bits 5:0 saturate**: the declared count is clamped at 63, so the
-overflow tally stops at 31. It means "there were more", not an exact number, and
-a file that trips it should have been trimmed by the converter already.
-
-One name to be aware of if you read the RTL: internally these are
-`group_count` and `overrun`, names inherited from the ASCII loader where they
-counted cheats and push collisions. Under the binary format they count declared
-entries and malformed files. The RTL says so at
-`src/fpga/core/cheat_binloader.sv:76`.
+`CL:` and `CD:` were removed from the menu. Use the overlay's loaded counts
+and names, the converter's report, and a cheat with a visible gameplay effect.
+Loader counters remain available to simulation. The historical binary-only
+menu layout is documented in `f5de823:docs/CHEATS.md`; that layout is retired.
 
 ## Cartridges
 
@@ -304,7 +205,7 @@ only re-fetched because `rom_patch` pulses `changed` into `cache.vhd`'s
 (`core_top.sv:1051`), so the test needs Reset Core after loading.
 
 The one gap is loading the file: in Play Cartridge mode APF does not load slots
-named after slot 0, so `<rom filename>.gba.chtbin` is not picked up
+named after slot 0, so neither `.cht` nor `.chtbin` is picked up
 automatically.
 Use the **Cheats** slot in the core menu to browse for the file once; the slot
 sets the "persist browsed filename" parameter, so it comes back on later
@@ -312,12 +213,11 @@ launches.
 
 ## How it is tested
 
-`docs/HARDWARE.md` is the checklist for validating a build on a real Pocket,
-including the stray-`.cht` case. In simulation:
+`docs/HARDWARE.md` records tested behavior and the remaining hardware checks. In simulation:
 
 ```
 make sim-image                     # once
-make test                          # fixtures, end to end, and the cross-check
+make test                          # fixtures and integration; corpus checks skip
 make test CHT_DB=/path/to/cht      # against your own corpus
 make test ARGS="-n 100"            # sample the corpus instead of all of it
 ```
@@ -330,8 +230,8 @@ by side. Three harnesses use it:
   RTL in Icarus Verilog and diffs the 128-bit words it pushes against the model,
   word for word. Each file is run twice, once as written and once with every
   cheat switched on, because stock libretro files are all `enable = false` and
-  a pass over them would prove nothing about the emitter. 513 of 513 files
-  match, at both the slowest and the fastest byte rate the hardware can produce.
+  a pass over them would prove nothing about the emitter. Corpus results depend
+  on the mounted dataset; a run without it is a skip.
 * `tools/sim/run_fixtures.py` runs cases that carry the right answer with them,
   so the two agreeing cannot hide a mistake in both. Among them is an oracle
   nothing in this repo wrote: the same libretro codes encoded by

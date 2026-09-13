@@ -9,8 +9,8 @@
 #   make shell                interactive shell in the Quartus container
 #
 # Simulation for the cheat loaders (see docs/CHEATS.md, docs/CHEATBIN.md and
-# tools/sim/). `test` covers both the .chtbin loader the core builds today and
-# the .cht parser it replaced, which is still in the tree:
+# tools/sim/). `test` covers both fitted cheat loaders, title rendering,
+# cartridge ROM/save paths, APF launch and debug snapshots:
 #
 #   make sim-image   build the Icarus Verilog container (once, about a minute)
 #   make test        the whole suite

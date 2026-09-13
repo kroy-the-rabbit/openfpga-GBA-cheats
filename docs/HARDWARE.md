@@ -1,141 +1,72 @@
 # Hardware validation
 
-Everything in this fork is proven in simulation and in the fit report. Some of
-it is now proven on a Pocket too. This is the checklist, and what is left of it.
+The tested candidate is `f2a86db`, seed 3, installed on 2026-09-10.
+Later changes through `f5de823` are documentation only. This document records
+hardware evidence; simulation and timing results are separate checks.
 
-**Confirmed on hardware, v0.6.4:** the core boots, a `.chtbin` beside the ROM
-loads, a code visibly takes effect in game, and **Cheats Enabled** turns the
-effect off and back on live. Steps 1 to 4 below therefore pass, the first three
-implicitly - a code cannot take effect if the core did not boot or the file did
-not load.
+## Recorded results
 
-**Still unconfirmed, and both are the kind that fail quietly:**
+| Feature | Evidence |
+|---|---|
+| SD ROMs, `.chtbin` loading, visible cheat effect and live global switch | Confirmed on the earlier v0.6.4 core |
+| Physical cartridge gameplay | Minish Cap and Zero Mission boot and play |
+| Existing physical saves | Both cartridges load their existing saves |
+| New physical save | Zero Mission wrote a save that Analogue's own cartridge mode read back |
+| Direct `.cht` and named overlay | Confirmed on a real cartridge; the first-character alignment fix is included |
+| RAM writes and conditional pairs | Visible Zero Mission counter tests, including inverted conditions |
+| EWRAM, IWRAM and IO reads | Guarded HUD-counter writes exercise each region |
+| Read-side ROM patches | Entry-word test plus both six-patch midair cheats together on `f2a86db` |
+| Fast Burst timing | Clean cartridge audio on the tested Zero Mission cartridge |
 
-- **Step 5, the stray `.cht`.** Nothing has verified on hardware that an
-  unconverted file loads zero rather than shifting ASCII into the cheat table.
-  It is two minutes and it is the one simulation cannot fully vouch for.
-- **Sleep.** Removed with savestates; `core.json` no longer declares
-  `sleep_supported`.
+The twelve midair patches fit within the sixteen-slot ROM table.
+Fast Burst remains opt-in; Turnaround is the default.
 
-It is written to be worked through in order, on one SD card, in one sitting.
-Each step names what to look at and what it means when the number is wrong, so
-that a failure identifies itself instead of starting an investigation. The
-Pocket has no console; `CL:` and `CD:` in the core menu are the entire
-diagnostic surface, and `docs/CHEATS.md` documents what their bits mean.
+## Not qualified or unsupported
 
-## Before you start
+- Physical SRAM/Flash save-write persistence, the interrupted-transfer guard,
+  and empty or partially inserted cartridges still need hardware checks.
+- Fast Burst has been exercised on one cartridge, not a range of ROM chips.
+- Cartridge GPIO/RTC, solar and gyro are disconnected.
+- Savestates, sleep and link cable are removed. Sleep is not a pending feature test.
+- The malformed-binary cases pass simulation; no new on-device malformed-file
+  result is recorded. A normal `.cht` is supported and should load cheats.
 
-```
-make gba FITTER_EFFORT="STANDARD FIT"
-```
+## Qualifying a package
 
-About 23 minutes. `FITTER_EFFORT` is not optional: AUTO FIT throws placements
-up to 0.9 ns worse on this design, and the closing result was measured at
-STANDARD. The build fails loudly on negative slack rather than shipping a
-bitstream that will not run.
+1. Use a package built from the exact source commit on a controlled runner.
+   [BUILD-RUNNER.md](BUILD-RUNNER.md) describes the interface. Check every
+   timing category in that package's report; a zero Quartus exit is not enough.
+2. Merge its `Assets`, `Cores` and `Platforms` into the SD root. Preserve
+   existing ROMs, BIOS and saves. Compare the installed bitstream's hash to
+   the file inside that exact ZIP, then sync the card and power cycle the
+   Pocket before checking its displayed version.
+3. Boot an SD ROM with cheats disabled. Load a supported `.cht`, inspect its
+   names and counts in **Cheat Overlay**, enable a visible cheat, and check
+   the global switch off and on. Disabling stops new writes; it does not undo
+   values already written into game memory.
+4. Select a `.chtbin` explicitly and verify the same code effect, with
+   `CHEAT nn` titles. Reloading either file must not reset gameplay or change
+   **Cheats Enabled**. A fresh core launch starts both cheat switches off.
+5. Choose **Play Cartridge** with a tested cartridge inserted. Browse to its
+   cheat file through the **Cheats** slot. Verify gameplay and existing saves.
+   Qualify write persistence separately by reloading a backed-up test save.
+6. Record the source commit, package and bitstream hashes, cartridge/game,
+   timing profile and observed result. Report any untested cases explicitly.
 
-It leaves `build/gba/kroy.GBA_<version>.zip`, which unzips over the root of the
-Pocket's SD card. Confirm before copying:
+`CL:` and `CD:` are no longer menu diagnostics. Cartridge readouts are
+`CG:`, `CS:`, `SF:` and `EE:`; see [BOOT-DEBUG.md](BOOT-DEBUG.md).
 
-```
-grep -E 'ALM|RAM|setup' build/gba/report.txt
-```
+## Candidate fit
 
-Expect **282 RAM blocks and setup +0.090 ns**. Those two are the ones to check:
-they have come out identical on every closing build. If setup is negative the
-build should not have got this far; if it is positive but much smaller than
-0.090, something changed and the fit history in `docs/HANDOFF.md` is the place
-to start.
+`f2a86db`, Quartus Lite 25.1std build 1129, STANDARD FIT, seed 3:
 
-ALMs should read **16,689 (90 %)**. Local and CI builds agree in every figure,
-so a different number means something changed; `docs/BASELINE.md` has the one
-earlier reading that has never been reproduced.
+| Measure | Result |
+|---|---|
+| ALMs | 16,080 / 18,480 (87 %) |
+| RAM blocks | 278 / 308 |
+| Worst setup / hold | +0.092 / +0.121 ns |
+| Recovery / removal / minimum pulse width | +2.935 / +0.966 / +0.827 ns |
+| Bitstream SHA-256 | `489904ea59dea4e1408c770cbe8e853a67741f5817d1884d59e57e77b7d3f31b` |
 
-You also need a test `.chtbin`. Make one from a game you own, and **write down
-what `cht2bin.py` printed**. The entry count is what step 3 checks against:
-
-```
-python3 tools/cheats/cht2bin.py YourGame.gba.cht
-```
-
-Pick codes whose effect is immediate and unmistakable: max money, infinite
-health, a character that should be visibly wrong. A code that only matters
-three hours in is not a test.
-
-## The five checks
-
-### 1. The core still boots
-
-Load any ROM, no `.chtbin` present at all.
-
-This is the one that catches a broken P1. The cheat engine sits on `gba_top`'s
-debug bus and adds `sleep_cheats` to the CPU run
-condition, so an arbitration mistake shows up as a core that hangs or never
-draws rather than as a cheat that does not work. If this fails, nothing below
-is worth trying.
-
-
-### 2. The file loads
-
-Put `YourGame.gba.chtbin` next to the ROM, named after the **whole** ROM
-filename with `.chtbin` appended: `YourGame.gba` -> `YourGame.gba.chtbin`, not
-`YourGame.chtbin`. Load the game and read `CL:`.
-
-* **`CL:` is 0.** The file never arrived. Wrong name, wrong directory, or
-  Windows appended `.txt`. Nothing to do with the core.
-* **`CL:` is non-zero.** The bytes got there. Go to step 3.
-
-### 3. It loaded the right number of entries
-
-`CL:` packs `(bytes << 12) | (declared << 6) | pushed`. Against the converter's
-own output, 4 entries in an 80-byte file, that is `(80 << 12) | (4 << 6) | 4`
-= **327,940**.
-
-Compute the expected value for your file and compare. The interesting failures:
-
-* **Declared and pushed both 0, with bytes non-zero.** The header was rejected.
-  Check `CD:` bit 7. Almost certainly a `.cht` that got renamed rather than
-  converted, which is exactly what the magic exists to catch, see step 5.
-* **Declared higher than pushed.** Truncated file, or more entries than the
-  32-slot table holds; `CD:` bits 5:0 say which.
-* **Bytes disagree with the file size.** The slot is reading something else.
-
-### 4. A cheat actually takes effect, and the switch works
-
-With the numbers right, look at the game.
-
-* The code visibly does its thing.
-* **Cheats Enabled** off in the core menu: the effect stops. The engine pokes
-  on vblank and does not restore, so a value it wrote stays written until the
-  game overwrites it, so expect the effect to stop being *reapplied*, not to
-  rewind. Watching health drain again from a full bar is the pass.
-* Back on: it resumes.
-
-The switch is `persist: false` and defaults on, so it is on again at every
-launch. That is deliberate and it is why `CD:` bit 6 reports its live state.
-
-### 5. A stray `.cht` loads nothing
-
-Copy an unconverted `.cht` to the card, renamed to `.chtbin`. Load the game.
-
-Expected: `CL:` shows bytes but zero declared and zero pushed, `CD:` bit 7 set,
-and **the game is completely unaffected**.
-
-This is the most important check on the list and the one simulation can only
-partly vouch for. The previous format was a plain `.cht`, so someone dropping
-the old file in is a real scenario, not a hypothetical, and without the header
-magic it would shift ASCII into the cheat table and poke it into live memory.
-A pass here is what makes the format change safe to ship.
-
-## What a full pass means
-
-P1, P2's surviving parts and P3 are done, closed at both ends, simulation and
-hardware. That clears P8 (packaging and release). The cartridge question in
-`docs/PLAN.md` §2 is no longer a decision waiting to be made: P5 is under way on
-`p5-cartridge`. Do not size it against the old **1,791 ALMs and 26 RAM blocks**
-figure, which is withdrawn. Identical RTL spans 81 ALMs across placement seeds,
-so worst-case slack across several seeds is the measure, not utilisation.
-
-Record the result in `docs/BASELINE.md` next to the fit numbers. A green fit
-report and a green hardware pass are different claims and the log should not
-blur them.
+The complete simulation suite is `make test`. Its two corpus checks require
+`CHT_DB`; without a mounted corpus they report skips.

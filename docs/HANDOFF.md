@@ -1,5 +1,60 @@
 # Handoff
 
+## Current state, 2026-09-12
+
+`main` contains the cartridge work from `p5-cartridge`. The published release
+is still `v0.9999`; this update has not been pushed, tagged or released.
+The tested candidate is **`f2a86db`**, seed 3, installed on 2026-09-10.
+`f5de823` adds only documentation to that source; the main-alignment changes
+update documentation and simulation CI, not the FPGA design or package.
+
+| Candidate | Result |
+|---|---|
+| Quartus | Lite 25.1std build 1129, STANDARD FIT |
+| ALMs / RAM blocks | 16,080 / 18,480 (87 %); 278 / 308 |
+| Setup / hold | +0.092 / +0.121 ns; all timing categories pass |
+| Bitstream SHA-256 | `489904ea59dea4e1408c770cbe8e853a67741f5817d1884d59e57e77b7d3f31b` |
+
+**On hardware:** Minish Cap and Zero Mission cartridge gameplay and existing
+saves; a new Zero Mission save read back through Analogue's own mode; direct
+`.cht`, named overlay, RAM conditions and read-side ROM patches. Both midair
+cheats work together, using twelve of sixteen ROM-patch slots. Fast Burst
+gives clean audio on the tested Zero Mission cart; Turnaround stays default.
+
+**Behavior:** cheats and overlay start off and are not persisted. Loading
+cheats neither resets the game nor enables the switch. Slot 7 accepts `.cht`
+and `.chtbin`; cartridge games require browsing to the file. Physical saves
+read and write the cartridge directly, with no Read Only mode or SD save.
+Savestates, sleep and link cable are removed. RTC remains for SD ROMs.
+
+**Remaining:** SRAM/Flash write persistence, interrupted transfers, empty-slot
+handling and Fast Burst on more cartridges need hardware qualification.
+Cartridge GPIO/RTC, solar and gyro are disconnected. Native Action Replay
+ROM-patch opcodes and encrypted codes need conversion to supported raw codes.
+
+## Release preparation
+
+Use a signed `v0.9999.<built-commit>` tag whose commit is on `main`. Publish
+the exact tested ZIP, `report.txt` and `SHA256SUMS`. A package built from
+`f2a86db` retains that source identity even when later docs are on `main`.
+Check the workflow at the tagged commit before publication; the workflow on
+`main` may be newer. Current CI runs `make sim-image` and `make test`, then
+verifies release assets. Quartus runs only through `tools/runner-build` on
+controlled runners; CI does not build or replace bitstreams.
+
+The candidate ZIP and report are under
+`build/watch/pocket-gba-gba-slots16-s3-f2a86db59fa9/`. Ignore stale
+`build/gba/sd` and old top-level packages when selecting release assets.
+See [HARDWARE.md](HARDWARE.md), [BUILD-RUNNER.md](BUILD-RUNNER.md) and
+[BASELINE.md](BASELINE.md).
+
+<details>
+<summary>Historical bring-up notes through 2026-09-10</summary>
+
+These are dated records, not current instructions or release status. The
+summary above supersedes old branch names, installed builds, failed cartridge
+boots, 84 % utilization, binary-only cheats, removed controls and build steps.
+
 State of the fork as of 2026-09-09. Read the sections in order, newest first;
 the ones below the 2026-08-30 heading predate the release and still say
 `master` and "nothing is pushed". `main` is the branch, `v0.9999` is released
@@ -2418,3 +2473,5 @@ correctness problem. `make test`:
 
 The last two want the corpus; see the branch map for where it went and how to
 get it back.
+
+</details>

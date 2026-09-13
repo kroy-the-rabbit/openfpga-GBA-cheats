@@ -53,6 +53,19 @@ Any abort latches the guard, and `SF:` says whether it is latched.
 
 ## Hardware capture
 
+After installing a timing-qualified package, power cycle the Pocket and
+launch the cartridge with cheats disabled and ROM Timing at Turnaround.
+Open the core menu and record **CG, CS, SF, EE**. Menu entry snapshots these
+values; close and reopen to refresh. There is no Cartridge Saves toggle.
+`SF` is the EEPROM abort latch, not a general SRAM failure flag.
+
+## Historical HS diagnostic, retired 2026-09-09
+
+The following encoding describes older diagnostic builds. `HS` and Read Only
+are not current menu controls; use `EE` above for the fitted design.
+
+### Historical capture
+
 After installing a timing-qualified package, fully power off/on and launch
 BMXE with Cartridge Saves set to Read Only and cheats disabled. At the
 corrupted startup, open the core menu and photograph **CG, CS, SF, HS**.

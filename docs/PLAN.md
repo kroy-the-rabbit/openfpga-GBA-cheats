@@ -1,4 +1,53 @@
-# Plan: cartridge support and cheats for `kroy.GBA`
+# Cartridge support and cheats for `kroy.GBA`
+
+## Current state, 2026-09-12
+
+The working and release line is `main`, including the cartridge work from
+`p5-cartridge`. The tested build is `f2a86db`; the published `v0.9999`
+predates this update. [HANDOFF.md](HANDOFF.md) identifies the candidate.
+
+| Phase | Current state |
+|---|---|
+| P0, build harness | Controlled-runner Quartus Lite 25.1std; all timing categories gated |
+| P1, cheat engine | MiSTer engine restored; RAM writes and conditional pairs tested |
+| P2, text loader | `.cht` parsing restored to the FPGA; names reach the overlay |
+| P3, packed format | `.chtbin` remains an optional input, without names |
+| P4, overlay | Implemented and hardware-tested, including title alignment |
+| P5, cartridge launch | APF Play Cartridge, power/probe sequencing and ROM path implemented |
+| P6, gameplay and saves | Minish Cap and Zero Mission tested; new Zero Mission save read back independently |
+| P7, cartridge cheats | RAM cheats, conditions, named overlay and sixteen read-side ROM patches tested |
+| P8, release | Previous cheat release published; cartridge update prepared on main, not released |
+
+The 32-entry cheat table remains. A conditional costs two entries and ROM
+patches also use the separate sixteen-slot patch table. The candidate uses
+87 % of ALMs and closes at seed 3 with +0.092 ns setup and +0.121 ns hold.
+The earlier fit ceiling was removed by cutting savestates; sleep and link
+support are also removed. SD-ROM RTC remains supported.
+
+## Remaining work
+
+- Qualify physical SRAM/Flash writes, interrupted transfers and empty slots
+  on hardware. Existing EEPROM saves and a Zero Mission write already pass.
+- Route cartridge GPIO/RTC, solar and gyro if those features are added.
+- Test Fast Burst on additional cartridges. It stays opt-in; Turnaround
+  remains the default.
+- Decode native Action Replay ROM-patch forms and encrypted codes if support
+  is added. Current ROM patches use explicit raw CodeBreaker writes.
+- Publish the hardware-tested package with its exact source tag and report.
+
+The cartridge controller is derived from Wokann/openfpga-GBA and has local
+burst, timing and integration changes. Rai/openfpga-GBA informed the APF
+declaration. The machine is MiSTer-devel/GBA_MiSTer through mincer-ray's
+Pocket port; the overlay derives from the GBC fork. Attribution and the
+original design references are preserved below and in the source history.
+
+<details>
+<summary>Historical design study and phase decisions, through 2026-08-30</summary>
+
+The study below describes the earlier code and fit budget. Its pending phases,
+`master` release line, binary-only loader, rejected overlay, unpowered slot,
+save-write toggle and savestate plans are superseded by the current state
+above. The source references and measured experiments remain useful history.
 
 Fork of https://github.com/mincer-ray/openfpga-GBA (Pocket port of
 `MiSTer-devel/GBA_MiSTer`), tracked here as `upstream`. Two goals, in this
@@ -435,3 +484,5 @@ timing, and it should not block a feature that is a re-port of working code.
 6. Why does the same RTL fit at 16,689 ALMs on the workstation and in CI and at
    17,744 on the build runner? Never reproduced into a cause, and it is the
    reason every fit comparison has to be built on one host, back to back.
+
+</details>

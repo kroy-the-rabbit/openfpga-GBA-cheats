@@ -1,107 +1,45 @@
 # Cartridges on the Pocket GBA core
 
-Build `99293a3` boots Minish Cap, loads a working physical
-cartridge save, and plays with cheats, confirmed by the user. Physical write support passes
-simulation but still needs a hardware persistence test. See `docs/HANDOFF.md`
-for the latest results. The installed build is now **`417a55f`**, which uses
-**Play Cartridge** directly; hardware confirmation of the new launch path
-is pending.
+The tested candidate is `f2a86db`, installed on 2026-09-10. **Play Cartridge**
+boots Minish Cap and Zero Mission, loads their existing physical saves and
+plays with cheats. A new Zero Mission save written by this core was read back
+by Analogue's own cartridge mode.
 
-**Cartridge saves are live.** SRAM/Flash reads and writes and every EEPROM
-command reach the physical chip as the game issues them. The Read Only mode
-and its **Cartridge Saves** menu entry were removed on 2026-09-09: its
-command classifier forwarded only 9 or 17 bit DMA3 read requests, Zero
-Mission's request does not fit that shape, and the game showed no saves
-until writes were enabled.
-
-No SD save file is loaded or written back for cartridge games. Physical writes
-are not hardware-qualified yet. GPIO/RTC remains disconnected. Savestates are removed from the core. Minish Cap's and Zero Mission's existing slots read on hardware, and a new
-Zero Mission save written here was read back by Analogue's own cartridge mode.
-
-**This core requires Pocket firmware 1.2 or newer.** Declaring the cartridge
-adapter raises `version_required`, and an older firmware will refuse to load the
-core at all rather than start it without the slot.
+Cartridge saves access the physical chip directly. The Read Only mode and
+its menu entry were removed; there is no save-write enable toggle. No SD
+`.sav` is loaded or written in cartridge mode. Back up saves before testing
+new cheats or a cartridge that has not been qualified.
 
 ## What works
 
-| | |
+| Feature | Status |
 |---|---|
-| Powering the slot | working for the successful Minish Cap header read |
-| Detecting a cartridge, reading its header | **Minish Cap passed** on `85bb71a`: `CG=425A4D45`, `CS=FFFF96E1` |
-| Refusing to act on an empty or half-inserted slot | **unconfirmed on hardware** |
-| ROM out of the cartridge | **Minish Cap gameplay from an existing save confirmed** on `99293a3`; test duration not reported |
-| Cartridge saves / EEPROM | **Minish Cap existing save loaded and played on hardware**; physical write persistence pending |
-| Cheats during cartridge gameplay | **Confirmed by the user on Minish Cap** with `99293a3`; specific codes not reported |
-| Metroid Zero Mission (`BMXE`, SRAM) | Header passes; white screen after BIOS on `99293a3` in both save modes and on `417a55f` (Save Fault 0). Cause unresolved. |
-| Cartridge RTC/GPIO | not routed |
-| Writing to a cartridge | disabled by default; enabled explicitly via Cartridge Saves |
+| Play Cartridge, header probe, ROM reads and gameplay | Minish Cap and Zero Mission confirmed |
+| Existing EEPROM saves | Both cartridges confirmed |
+| Physical save persistence | Zero Mission write read back through Analogue's cartridge mode |
+| RAM cheats, conditional pairs, named overlay and ROM patches | Confirmed on hardware |
+| Fast Burst timing | Clean audio on the tested Zero Mission cartridge; opt-in |
+| Physical SRAM/Flash write persistence | Not hardware-qualified |
+| Interrupted-transfer guard | Covered in simulation; not hardware-qualified |
+| Empty or partially inserted slot | Not hardware-qualified |
+| Cartridge RTC/GPIO, solar and gyro | Not routed |
+| Savestates, sleep and link cable | Removed |
 
-For the current white-screen investigation, see [boot diagnostics](BOOT-DEBUG.md).
+## Quick start
 
-**Cartridge EEPROM saves have never worked, and the reason was synthesis,
-not logic.** Every build up to 2026-09-09 fitted `cart_eeprom_bridge` as one
-ALM and two registers. `fault` was reported "Stuck at VCC", and
-`transfer_open`, `ctl_req` and `command_active` "Stuck at GND", so the bridge
-never issued a physical EEPROM access, every EEPROM read returned ones, and
-the `SF` readout reported a fault that was a hardwired constant rather than
-anything the cartridge did. Simulation passed throughout, because simulation
-does not constant-fold. The cause was a power-up initialiser written on the
-module's output port declaration, which the fitter did not honour, leaving
-`fault` with no defined power-up state and letting constant propagation
-resolve the cycle through `transfer_open` to the degenerate answer. The
-power-up values now live on internal registers, `fault` no longer gates the
-transfer-tracking clear, and `scripts/inspect_timing.tcl` fails any build
-where the bridge's registers do not survive.
+1. Use Pocket firmware **1.2 or newer** and provide
+   `/Assets/gba/common/gba_bios.bin` (16,384 bytes).
+2. Insert the cartridge before launching the core and choose **Play Cartridge**
+   in the asset browser. Choosing an SD ROM instead uses the SD path.
+3. Browse to a `.cht` or `.chtbin` using the **Cheats** slot. Prefer text for
+   overlay names. This selection persists; filename-based autoload does not
+   run in cartridge mode.
+4. Turn on **Cheats Enabled** and, if wanted, **Cheat Overlay**. Both start off.
+5. Keep **ROM Timing** at **Turnaround** unless testing another profile.
+   **Fast Burst** fixes the tested Zero Mission audio slowdown but exceeds
+   real GBA bus speed and is not qualified on every cartridge.
 
-The abort guard latches on any interrupted physical transfer, since every
-transfer may be a write. The
-abort still retires its accepted bit and drops the command policy either
-way; only the permanent latch is conditional.
-
-## Interrupted EEPROM transfers (new source)
-
-**Save Fault** is normally 0. If a physical EEPROM transfer is interrupted,
-the bridge blocks further physical EEPROM traffic and reports 1. Power the
-Pocket fully off and relaunch the core before continuing. Reset Core does
-not clear the fault; a CS pulse is not assumed to reset the chip's serial
-command parser. This prevents a later transfer inheriting write permission
-from an aborted DMA. It cannot undo a physical write interrupted in progress.
-
-## First hardware run, 2026-09-05
-
-Build `0.9999-cheats.60990db`, `p5-cartridge` at `60990db`, Quartus 25.1std,
-`STANDARD FIT`, seed 3, timing met at +0.092 ns setup and +0.111 ns hold;
-installed on the card and hash-verified. Kroy booted The Legend of Zelda: The
-Minish Cap from the cartridge in the slot and **it froze at the GBA logo**.
-
-Kroy read the menu afterwards: `CG:` was 0 and `CS:` was `0x000000B0`.
-Decoded: the menu was not Off, the probe finished, and it timed out. The header
-fingerprint is `0000`, byte `0xB2` read as `00`, and no ROM read ever completed.
-The controller never answered.
-
-Why it never answered is in the wiring, not the slot. The probe starts on
-`dataslot_allcomplete`, but the controller's reset is APF `reset_n`, and the
-probe does not wait for it. The controller's ROM read path is counters only and
-answers in about 64 cycles against a 4000-cycle timeout, so the one way to get
-`B0` is the controller still held in reset when the probe ran, which says the
-Pocket sends "data slot access all complete" before "Reset Exit". The probe
-times out, `cart_detect` stays low, and `Boot` then starts the core against
-SDRAM with no ROM in it, which is the GBA logo and nothing after it.
-
-The fix is to hold the probe in reset until `reset_n` is high, so it runs only
-once the controller does. It is `cfd4264`, built and timing-met at seed 1 on
-2026-09-06, not yet run on the slot.
-
-## Quick start (`417a55f`; pending hardware qualification)
-
-1. Insert the cartridge before launching the core.
-2. Choose **Play Cartridge** in the GBA core's asset browser. The core probes
-   and boots the cartridge automatically, including existing physical saves.
-
-There is no separate Off/Detect/Boot switch. Choosing an SD ROM uses the SD
-path. Old persisted mode values at `0x90` are ignored. The `417a55f`
-bitstream and matching package are installed; no mode-switch migration is
-needed.
+The old Off/Detect/Boot and Cartridge Saves controls no longer exist.
 
 ## Launch selection
 
@@ -122,7 +60,7 @@ acknowledgment.
 
 ## The probe
 
-On every core start, the core reads the cartridge's 192-byte header twice and
+On a cartridge launch, the core reads the cartridge's 192-byte header twice and
 requires the two passes to agree, then holds the CPU in reset until it has
 finished so the ROM source is settled before the game begins. It costs about
 450 us at boot and gives up after about 40 us on any single read that the
@@ -137,8 +75,8 @@ Some cartridges do not have one.
 
 ## The readout
 
-The Pocket has no console, so `CG:` and `CS:` are the whole diagnostic surface,
-the same trick the cheat loader used for `CL:` and `CD:` until those went.
+`CG:` and `CS:` describe the cartridge probe. `SF:` and `EE:` describe the
+EEPROM bridge; see [BOOT-DEBUG.md](BOOT-DEBUG.md). `CL:` and `CD:` were removed.
 
 ### `CG:`, the game code
 
@@ -169,8 +107,9 @@ Convert it to hex and read it in three pieces.
 every licensed cartridge. If those bits read `96`, the read is real. It is
 reported and not gated on, because an unlicensed cartridge is still a cartridge.
 
-**Bits 31:16** say what came back at all. `0000` means nothing was read. `FFFF`
-means an empty slot. Anything else is a header.
+**Bits 31:16** are an OR fingerprint, not an empty-slot verdict. A valid header
+can also produce `FFFF`. Use bit 2 and the low-byte status to identify the
+all-`FFFF` read pattern.
 
 **The low byte** is the verdict:
 
@@ -185,40 +124,20 @@ means an empty slot. Anything else is a header.
 
 ## Cheats on a cartridge game
 
-They work, for the codes that matter. The cheat engine writes RAM through the
-internal bus rather than patching ROM reads, so codes that write EWRAM, IWRAM or
-IO behave the same whether the ROM came from the SD card or a cartridge. Codes
-that patch the ROM image do not apply, because there is nothing writable there,
-and the converter rejects them anyway.
+The cheat engine applies EWRAM, IWRAM and IO writes through the internal bus.
+Explicit CodeBreaker ROM writes are applied by `rom_patch.sv` on reads from
+either SDRAM or the cartridge; they do not modify physical ROM. The table
+holds sixteen ROM patches. Conditional ROM codes are ignored.
 
-Loading the file needs one extra step in cartridge mode, and `docs/CHEATS.md`
-covers it: APF does not load a file named after slot 0 when slot 0 is not
-loaded, so browse for the `.chtbin` once using the **Cheats** slot in the core
-menu. The slot sets the "persist browsed filename" parameter, so it comes back
-on later launches.
+Browse to the `.cht` or `.chtbin` once through **Cheats**. Loading a file
+does not reset the game or enable cheats. See [CHEATS.md](CHEATS.md).
 
-## What is not settled
+## ROM timing
 
-**The bus timing still needs hardware qualification in this core.** The
-sequential defaults are `ROM_SEQ_WAIT=12`, `ROM_SEQ_RD_HIGH=4` since
-2026-09-09, which is a real GBA's `WAITCNT=4317h` sequential access. They
-were 20/6, matching `pocket-cartridge`'s `gba_cart_bus.sv` edge intervals,
-until hardware showed what that costs: 20/6 makes an eight-byte cache line
-take 834.5 ns, exactly a GBA's **power-on** `WAITCNT=0000h`, while a game
-that has set `4317h` is written against 596.0 ns. Zero Mission froze in its
-opening cutscene at 20/6 and START skipped past the freeze. CartTools can
-afford the slower window because it is the only master and is not racing a
-frame budget. CartTools has dumped cartridges, including Minish Cap,
-byte-exact against No-Intro. That is evidence for its complete
-implementation, not proof that either window makes this controller work on
-hardware.
-
-**ROM Timing menu, 2026-09-09.** Zero Mission corrupts the BIOS banner
-differently on every boot while Minish Cap never does, and every captured
-error sat in the first halfword after the address latch. The non-sequential
-read is now selectable from the menu (`ROM Timing`, `cart_cfg[7:5]`) so the
-window can be tested on hardware without a refit. Profile 0 is the parameter
-defaults and is bit-identical to the previous controller.
+The non-sequential read needs turnaround between releasing the address bus
+and asserting RD#. **Fast** failed on Zero Mission; the profiles with
+turnaround booted. **Turnaround** remains the default. These cycle counts
+describe the controller, not qualification on every cartridge:
 
 | Profile | Turnaround, AD released before RD# | First RD# low | Burst halfword, RD# high/period | 8-byte line |
 |---|---|---|---|---|
@@ -278,22 +197,19 @@ clock plus two waitstates, about 179 ns. The commonly used fast setting
 the safe RD# high/low split through the Pocket's electrical path.
 See [GBATEK's WAITCNT description](https://problemkaputt.de/gbatek-gba-system-control.htm).
 
-The burst bench now asserts the default six-clock high and fourteen-clock low
-pulses, including around 128 KiB boundary fallback. Its ROM data model still
-responds immediately: it proves protocol and edge counts, not physical read
-margin. Repeat full ROM hash checks and gameplay on real cartridges before
-calling this timing qualified or restoring the faster setting. Measure the
-performance cost too. `ROM_BURST=0` remains a diagnostic fallback, not a
-guarantee that every other electrical assumption is correct.
+The burst bench checks protocol, edge counts and the 128 KiB boundary
+fallback. Its ROM model responds immediately, so it does not prove physical
+read margin. Turnaround and Fast Burst have the hardware results stated
+above; more cartridges need testing. `ROM_BURST=0` is a diagnostic fallback.
 
-**ROM reads burst, and that is new.** Words after the first in a read hold `CS#`
-low and pulse `RD#` only, relying on the cartridge's own address counter, which
-takes a 4-halfword read from 129 clock cycles to 93 with the current defaults
-(the previous 12/4 setting took 69). The counter is 16 bits of
+**ROM reads burst.** Words after the first in a read hold `CS#`
+low and pulse `RD#` only, relying on the cartridge's own address counter.
+The current controller bench measures 129 cycles per request without a burst
+and 69 with a burst under its test parameters. The counter is 16 bits of
 halfword address and wraps every 128K, so a read crossing that boundary falls
 back to re-driving the address. If a cartridge turns out not to honour its own
 counter, `ROM_BURST=0` in the controller restores the original path exactly.
 
-**Save-write persistence is the next hardware test.** Physical saves are now
-routed and Minish Cap existing-save reads work. Writes remain behind the
-explicit test setting until persistence is qualified. See `docs/HANDOFF.md`.
+**Remaining qualification:** physical SRAM/Flash save-write persistence,
+interrupted transfers, empty-slot handling and Fast Burst across more
+cartridges. There is no save-write toggle. See [HARDWARE.md](HARDWARE.md).

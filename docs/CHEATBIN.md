@@ -1,17 +1,12 @@
 # `.chtbin`: the packed cheat format
 
-## Why this exists
+## Purpose
 
-`cheat_loader.sv` parses libretro `.cht` ASCII on the FPGA, and that is what
-stopped the cheat feature fitting. It carries a 64-bit token shift register,
-hex nibble conversion, quoted-string tracking, key matching, a CodeBreaker pair
-collector and a wide decoder. The module measures 441 ALMs but grows the design
-by 1,285 and costs 0.54 ns of setup, and run M in `HANDOFF.md` showed the cost
-is combinational, so no constraint or fitter setting reaches it.
-
-Moving the parse to the host makes the on-chip loader a byte counter and a
-shift register. **The file stores exactly the 128-bit words `gba_cheats`
-consumes, so the loader performs no transformation whatsoever.**
+The packed format stores exactly the 128-bit words `gba_cheats` consumes.
+It was introduced when the text parser could not fit alongside savestates.
+The current core accepts both `.cht` and `.chtbin`; text carries overlay
+names, while the packed format is an optional input and remains compatible
+with the published `v0.9999` core.
 
 ## Layout
 
@@ -28,9 +23,9 @@ Little-endian throughout. A file is a 16-byte header followed by
 | 6 | 2 | `entry_count` | uint16, number of 16-byte entries that follow |
 | 8 | 8 | reserved | all `0` |
 
-The magic exists so the loader can reject a raw `.cht` dropped in by mistake
-rather than shifting ASCII into the cheat table and corrupting the game. That
-is a real scenario, because the previous format was exactly that file.
+The binary loader validates this magic. The current core selects the binary
+loader for `GBAC` streams and the text parser otherwise; both file formats
+are supported.
 
 ### Entry, 16 bytes
 
@@ -54,7 +49,7 @@ Note the optype numbering: `OPT_GE` is 3 and `OPT_LT` is 4, which do not match
 the names in the MiSTer VHDL (`OPTYPE_LESS` and `OPTYPE_GREATER_EQ`). The
 numbering here is what the hardware does. See `tools/cheats/gbacht.py`.
 
-## What the host decides, and the hardware no longer does
+## What the host decides for a binary file
 
 Everything. The converter resolves `enable` keys and emits **only enabled
 cheats**, decodes GameShark and CodeBreaker pairs, places values into byte
@@ -62,12 +57,14 @@ lanes, filters by address region, enforces the 32-entry ceiling, and orders
 conditional pairs so a compare entry is immediately followed by the entry it
 guards. The hardware receives a finished table.
 
-The region filter keeps **EWRAM, IWRAM and IO only**. That is narrower than
-"addresses the GBA has": BIOS and ROM are not writable, SRAM is byte wide so a
-32-bit debug write is wrong there, and VRAM, OAM and palette are rewritten by
-the game every frame so a write into them does nothing useful. A second
-converter written from this document alone would otherwise emit a larger file
-that the hardware cannot act on. See `REGIONS` in `tools/cheats/gbacht.py`.
+The region filter keeps EWRAM, IWRAM and IO. Explicit CodeBreaker writes may
+also target ROM at `0x08000000` through `0x0DFFFFFF`; the core applies these
+as read-side patches rather than physical ROM writes. Conditional ROM codes
+are rejected. The raw eight-plus-eight-digit forms retain the RAM/IO filter.
+See `REGIONS`, `ROM` and the decoder in `tools/cheats/gbacht.py`.
+
+The ROM-patch table holds sixteen entries, separate from the 32-entry input
+limit. A producer must keep the ROM entries within that smaller limit too.
 
 ## Conditionals
 
@@ -110,11 +107,13 @@ must preserve it exactly.** Do not sort, dedupe or reorder entries.
 ## Naming
 
 The Pocket clones data slot 7's filename from slot 0 and appends the slot
-extension, so the file the core looks for is `<rom>.gba.chtbin`. The extension
-in `data.json` changes from `cht` to `chtbin` accordingly.
+extension, so a binary file is named `Game.gba.chtbin` for `Game.gba`.
+`data.json` accepts both `cht` and `chtbin`. In Play Cartridge mode, browse
+to the file through the Cheats slot; ROM-derived names do not autoload.
 
 ## Compatibility
 
-A `.cht` no longer works if dropped straight onto the SD card. It has to go
-through `tools/cheats/cht2bin.py` first. That is a deliberate trade: it is the
-only route found that keeps cheats without giving up save states or the RTC.
+The published `v0.9999` core accepts only `.chtbin`. Current `main` also
+parses `.cht` directly and uses its descriptions as overlay titles. A binary
+file has no titles, so the overlay uses `CHEAT nn`. Savestates and sleep
+have been removed; RTC remains available for SD ROMs.

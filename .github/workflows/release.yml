@@ -2,20 +2,17 @@
 # A release is a tag on main, and the package it names was built somewhere
 # this workflow is not.
 #
-# Quartus runs only on the controlled builders, sisko and kira, through the
+# Quartus runs only on controlled builders through the
 # orchestrator's tools/runner-build, against a Quartus image that is private
-# and stays so: Quartus Lite needs no licence, but that grants no right to
-# redistribute its installed files, so the image is never uploaded to Actions
-# or a registry, and this workflow no longer pulls anybody else's. The gates
-# the hosted build carried live in the harness, not here: report.sh exits 3
-# on negative slack, so a package that ships was fit to flash where it was
-# built.
+# and stays so. The Quartus image is never uploaded to Actions or a registry.
+# The simulation image contains Icarus Verilog, GHDL and Python, not Quartus.
+# report.sh gates timing on the builder and exits 3 on negative slack.
 #
 # What CI does on a tag is check that the release the orchestrator published
 # is the one the tag names: the package is present, its checksums verify, and
 # the version stamped into core.json is the tag. A tag with no package, or a
 # package stamped from another commit, fails here and says so. Nothing here
-# builds, uploads or clobbers.
+# synthesises, uploads or replaces a core.
 #
 # The ancestry check is what keeps this a release of main: `on: push: tags`
 # has no branch filter and GitHub offers none, so a tag on a scratch branch
@@ -56,6 +53,14 @@ jobs:
                  "and tag the merge."
             exit 1
           fi
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends podman
+
+      - name: Build the simulation image
+        run: make sim-image
 
       - name: Simulation suite
         run: make test
