@@ -23,7 +23,7 @@ new cheats or a cartridge that has not been qualified.
 | Interrupted-transfer guard | Covered in simulation; not hardware-qualified |
 | Empty or partially inserted slot | Not hardware-qualified |
 | Cartridge RTC/GPIO, solar and gyro | Not routed |
-| Flash carts: EZ-Flash Omega DE, EverDrive | `p6-flashcarts`; boot on Turnaround, EverDrive SD not yet working |
+| Flash carts: EZ-Flash Omega DE, EverDrive | `p6-flashcarts`; Omega DE boots on Turnaround, EverDrive boots and runs games on Slow |
 | Savestates, sleep and link cable | Removed |
 
 ## Quick start
@@ -149,6 +149,10 @@ read comes back as ROM data; the EverDrive shows a red screen.
   its version, SD status and sector data at `09E00000`; the EverDrive keeps
   its registers, including the SD_DAT FIFO, at `09FC0000`. The latch clears
   on reset.
+- After that first write, reads of the RTC port at `080000C4..C8` go to the
+  cart too unless the game's quirk selects the emulated RTC. The EverDrive OS
+  reads its clock there and reported a dead battery while the reads came
+  from the ROM cache.
 - Cheat-engine traffic is not forwarded, so a ROM-patch cheat never writes
   to a cart or consumes a register read.
 - The GPIO emulation at `080000C4..080000C8` keeps its writes when the game's
@@ -169,7 +173,14 @@ the version it reports is known to be correct.
 On `1a7e841`, 2026-09-14: with ROM Timing on **GBA Power-On** the Omega DE's
 BIOS logo is corrupt and it does not boot. On **Turnaround** it boots, and the
 EverDrive boots but fails to mount its FAT32 card. `8f18fa8` (register-read
-turnaround) still fails the mount.
+turnaround) still fails the mount. `10a7163` (DMA copies as one burst) mounts
+the card and loads the OS, then runs off into garbage on Turnaround: the
+EverDrive fills its PSRAM by writing one SD word on every ROM read strobe, and
+the fill needs a strobe as long as a real GBA's. On **Slow** (RD# low about
+160 ns per halfword) the OS boots and runs games. Power the Pocket fully off
+between EverDrive runs: a core reset leaves the cart with PSRAM mapped and its
+registers locked, so the header probe reads garbage and the BIOS stops at a
+white screen.
 
 `tools/sim/run_cart_rom.py` replays each cart's own register sequences, from
 `ez-flash/omega-de-kernel`, the EverDrive X5 driver in

@@ -38,8 +38,12 @@ at `09E00000..09FFFFFF` bypass the cache after the first write. Baseline on
 `f2a86db`: the Omega DE bootloops at a popup, most likely its firmware update prompt, and the
 EverDrive shows a red screen. `1a7e841` (seed 3 on kira, +0.092 ns) boots both
 on Turnaround; the EverDrive then fails to mount its SD card. `8f18fa8` adds a
-register-read turnaround and still fails the mount. The next build reads DMA
-copies from cart registers as one sequential burst.
+register-read turnaround and still fails the mount. `10a7163` reads DMA copies
+from cart registers as one burst: the EverDrive mounts, loads its OS and runs
+games on ROM Timing **Slow** (its PSRAM fill needs the long strobe). The
+`EE:`/`SF:` menu fields carry a flash-cart diagnostic on this branch, see
+[BOOT-DEBUG.md](BOOT-DEBUG.md). Next: RTC port reads to the cart (the EverDrive
+OS reported a dead battery), then an Omega DE game load.
 See [CARTRIDGE.md](CARTRIDGE.md#flash-carts).
 
 ## Release preparation

@@ -616,7 +616,12 @@ begin
                            state         <= READOAMRAM;
 
                         when x"8" | x"9" | x"A" | x"B" | x"C" =>
-                           if (cart_save_mode = '1' and cartio_seen = '1' and host_save = '0' and adr_save(24 downto 21) = "1111") then
+                           -- Register window, or the RTC port at 080000C4..C8
+                           -- that flash carts and unquirked RTC carts answer
+                           -- themselves once a write has reached the cart.
+                           if (cart_save_mode = '1' and cartio_seen = '1' and host_save = '0' and specialmodule = '0' and
+                               (adr_save(24 downto 21) = "1111" or
+                                (adr_save(27 downto 24) = x"8" and unsigned(adr_save(23 downto 1)) >= 16#62# and unsigned(adr_save(23 downto 1)) <= 16#64#))) then
                               cart_io_rnw   <= '1';
                               if (acc_save = ACCESS_32BIT) then
                                  cartio_addr_r <= adr_save(24 downto 2) & '0';
