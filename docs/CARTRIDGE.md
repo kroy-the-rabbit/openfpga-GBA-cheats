@@ -145,7 +145,7 @@ read comes back as ROM data; the EverDrive shows a red screen.
   halfword write per halfword. The ROM cache and the 8-byte line beside it
   are dropped afterwards, since the cart may now map different ROM.
 - After the first such write, reads from `09E00000..09FFFFFF` go to the cart
-  one halfword at a time, uncached and never as a burst. The Omega DE keeps
+  one halfword at a time and uncached. The Omega DE keeps
   its version, SD status and sector data at `09E00000`; the EverDrive keeps
   its registers, including the SD_DAT FIFO, at `09FC0000`. The latch clears
   on reset.
@@ -157,17 +157,24 @@ read comes back as ROM data; the EverDrive shows a red screen.
 - A register read releases AD four clocks before RD# falls, as the
   Turnaround ROM profile does. `1a7e841` strobed RD# on the same clock and the
   EverDrive booted but could not mount its SD card.
+- A DMA copy from that window is one sequential burst: CS# stays low and each
+  further halfword is an RD# pulse with no new address, as on a GBA. Both
+  carts copy SD sectors with DMA from one register with the source
+  incrementing; re-latching each address reads the EverDrive's next register
+  instead of SD_DAT. Separate CPU reads are never joined into a burst.
 
 **Do not accept the Omega DE's firmware update prompt** on any build unless
 the version it reports is known to be correct.
 
 On `1a7e841`, 2026-09-14: with ROM Timing on **GBA Power-On** the Omega DE's
 BIOS logo is corrupt and it does not boot. On **Turnaround** it boots, and the
-EverDrive boots but fails to mount its FAT32 card.
+EverDrive boots but fails to mount its FAT32 card. `8f18fa8` (register-read
+turnaround) still fails the mount.
 
 `tools/sim/run_cart_rom.py` replays each cart's own register sequences, from
-`ez-flash/omega-de-kernel` and the EverDrive X5 driver in
-`afska/gba-flashcartio`, against pin models of both carts.
+`ez-flash/omega-de-kernel`, the EverDrive X5 driver in
+`afska/gba-flashcartio` and `krikzz/gba-ed-pub`, against pin models of both
+carts.
 `tools/sim/run_cart_memorymux.py` checks forwarding, uncached reads, cache
 invalidation and cheat-engine isolation through the real memorymux and cache.
 

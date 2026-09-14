@@ -104,6 +104,11 @@ entity gba_memorymux is
       cart_io_wdata        : out    std_logic_vector(15 downto 0) := (others => '0');
       cart_io_rdata        : in     std_logic_vector(15 downto 0) := (others => '1');
       cart_io_done         : in     std_logic := '0';
+      -- High while a DMA copy (or a 32-bit read) may continue as a
+      -- sequential burst: the cart controller keeps CS# low and reads the
+      -- next halfword with RD# alone, as a GBA does.
+      cart_io_hold         : out    std_logic := '0';
+      mem_bus_dma          : in     std_logic := '0';
       mem_bus_dma3          : in     std_logic := '0';
       dma3_active           : in     std_logic := '0';
       dma_eepromcount      : in     unsigned(16 downto 0);
@@ -254,6 +259,8 @@ architecture arch of gba_memorymux is
    signal cartio_invalidate  : std_logic := '0';
    signal cartio_second      : std_logic := '0';   -- a 32-bit access has its upper halfword left
    signal cartio_low         : std_logic_vector(15 downto 0) := (others => '0');
+   signal cartio_hold        : std_logic := '0';
+   signal dma_any_save       : std_logic := '0';
    signal cache_inval_any    : std_logic;
 
    -- gamepak cache
@@ -369,6 +376,7 @@ begin
 
    cache_inval_any <= cache_invalidate or cartio_invalidate;
    cart_io_addr    <= cartio_addr_r;
+   cart_io_hold    <= cartio_hold;
    
    
    i_gamepak_cache : entity work.cache
@@ -483,6 +491,7 @@ begin
          cartio_invalidate <= '0';
          if (reset = '1' or gb_on = '0' or cart_save_mode = '0') then
             cartio_seen <= '0';
+            cartio_hold <= '0';
          end if;
          if (reset = '1' or dma3_active = '0') then
             cart_eeprom_index <= (others => '0');
@@ -527,6 +536,10 @@ begin
                   rnw_save  <= mem_bus_rnw;
                   dma_save  <= mem_bus_dma3;
                   host_save <= mem_bus_host;
+                  dma_any_save <= mem_bus_dma;
+                  if (mem_bus_dma = '0') then
+                     cartio_hold <= '0';
+                  end if;
                   if (mem_bus_Adr(31 downto 28) /= x"0") then
                      upper_nonzero <= '1';
                   else
@@ -608,9 +621,11 @@ begin
                               if (acc_save = ACCESS_32BIT) then
                                  cartio_addr_r <= adr_save(24 downto 2) & '0';
                                  cartio_second <= '1';
+                                 cartio_hold   <= '1';
                               else
                                  cartio_addr_r <= adr_save(24 downto 1);
                                  cartio_second <= '0';
+                                 cartio_hold   <= dma_any_save and acc_save(0);  -- 16-bit, not 8-bit
                               end if;
                               cart_io_req   <= '1';
                               state         <= CART_IO_WAIT;
@@ -699,6 +714,7 @@ begin
                            elsif (cart_save_mode = '1' and host_save = '0') then
                               cartio_seen   <= '1';
                               cart_io_rnw   <= '0';
+                              cartio_hold   <= '0';
                               cart_io_wdata <= Dout_save(15 downto 0);
                               if (acc_save = ACCESS_32BIT) then
                                  cartio_addr_r <= adr_save(24 downto 2) & '0';
@@ -1229,6 +1245,7 @@ begin
                      mem_bus_done <= '1';
                      state        <= IDLE;
                   else
+                     cartio_hold <= dma_any_save;
                      if (acc_save = ACCESS_32BIT) then
                         rotate_data <= cart_io_rdata & cartio_low;
                      else

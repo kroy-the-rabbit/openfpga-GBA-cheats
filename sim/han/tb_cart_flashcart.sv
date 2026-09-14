@@ -15,13 +15,17 @@
 //   EverDrive registers at 09FC0000 + 2*n. ed_init_sd_only writes KEY 0,
 //             proves SD_CFG does not take a write while locked, writes KEY
 //             A5, proves it does now. SD_DAT at 09FC0012 is a FIFO: each read
-//             takes one halfword.
+//             takes one halfword. ed_sd_dma_rd in krikzz/gba-ed-pub copies a
+//             sector with DMA from SD_DAT with the source incrementing; on a
+//             GBA that is one CS# fall and 256 RD# pulses, and the register
+//             decode follows the latched address, not the advanced one.
 //
 // Checked: every value the software would read, exactly one RD# pulse per IO
 // read and one WR# pulse per IO write, a turnaround before every RD#, no RD#
-// during a write, no FIFO read
-// consumed by anything but the CPU's own reads, and that 8-byte ROM line reads
-// still work against the same cart after it has been written to.
+// during a write, no FIFO read consumed by anything but the software's own
+// reads, a DMA copy held as one sequential burst and separate CPU reads never
+// joined into one, and that 8-byte ROM line reads still work against the same
+// cart after it has been written to.
 `timescale 1ns / 1ps
 `default_nettype none
 
@@ -34,7 +38,8 @@ module flashcart_model #(parameter EVERDRIVE = 0) (
     input  wire       bank3_dir,  // 1 = host drives AD[7:0]
     output integer    rd_pulses,
     output integer    wr_pulses,
-    output integer    fifo_pops
+    output integer    fifo_pops,
+    output integer    cs_falls
 );
     wire cs_n = bank0[0];
     wire rd_n = bank0[1];
@@ -48,14 +53,11 @@ module flashcart_model #(parameter EVERDRIVE = 0) (
     // EverDrive state
     reg         ed_unlocked = 0;
     reg  [15:0] ed_sd_cfg = 16'h0000;
-    reg  [15:0] fifo [0:15];
     integer     fifo_head = 0;
 
-    reg  [23:0] addr;
-    integer i;
+    reg  [23:0] addr, latched;
     initial begin
-        rd_pulses = 0; wr_pulses = 0; fifo_pops = 0;
-        for (i = 0; i < 16; i = i + 1) fifo[i] = 16'hF000 + i;
+        rd_pulses = 0; wr_pulses = 0; fifo_pops = 0; cs_falls = 0;
     end
 
     function [15:0] rom_word(input [23:0] a, input [15:0] page);
@@ -72,14 +74,16 @@ module flashcart_model #(parameter EVERDRIVE = 0) (
                 else if (sd_ctl == 16'd1)             read_value = 16'h5D00 ^ a[15:0];
             end
             if (EVERDRIVE && ed_unlocked) begin
-                if (a == 24'hFE000A) read_value = ed_sd_cfg;
-                if (a == 24'hFE0009) read_value = fifo[fifo_head];
+                if (latched == 24'hFE000A) read_value = ed_sd_cfg;
+                if (latched == 24'hFE0009) read_value = 16'hF000 + fifo_head;
             end
         end
     endfunction
 
     always @(negedge cs_n) begin
         #2 addr = {bank1, bank2, bank3};
+        latched = addr;
+        cs_falls = cs_falls + 1;
     end
 
     // The Pocket's translators need a turnaround: AD released well before
@@ -98,7 +102,7 @@ module flashcart_model #(parameter EVERDRIVE = 0) (
     end
     always @(posedge rd_n) if (cs_n === 1'b0) begin
         if (!EVERDRIVE && sd_ctl == 16'd3 && addr[23:16] == 8'hF0 && busy_reads) busy_reads = busy_reads - 1;
-        if (EVERDRIVE && ed_unlocked && addr == 24'hFE0009) begin
+        if (EVERDRIVE && ed_unlocked && latched == 24'hFE0009) begin
             fifo_head = fifo_head + 1; fifo_pops = fifo_pops + 1;
         end
         addr[15:0] = addr[15:0] + 16'd1;
@@ -148,7 +152,7 @@ module tb_cart_flashcart;
     reg         rom_req = 0;
     reg  [24:0] rom_addr = 0;
     wire        rom_done;
-    reg         io_req = 0, io_rnw = 1;
+    reg         io_req = 0, io_rnw = 1, io_hold = 0;
     reg  [23:0] io_addr = 0;
     reg  [15:0] io_din = 0;
     wire        io_done;
@@ -198,18 +202,19 @@ module tb_cart_flashcart;
         .eeprom_req(1'b0), .eeprom_rnw(1'b1), .eeprom_din(1'b0), .eeprom_dma(1'b0),
         .eeprom_dout(), .eeprom_done(),
         .io_req(c_io_req), .io_rnw(c_io_rnw), .io_addr(c_io_addr), .io_din(c_io_din),
-        .io_dout(io_dout), .io_done(c_io_done),
+        .io_dout(io_dout), .io_done(c_io_done), .io_hold(io_hold),
         .gpio_req(1'b0), .gpio_rnw(1'b1), .gpio_addr(2'd0), .gpio_din(4'd0),
         .gpio_dout(), .gpio_done(),
         .gpio_timing_mode(3'd0), .gpio_recover_set(14'd0),
         .gpio_diag(), .cart_present(), .err_count()
     );
 
-    integer rd_pulses, wr_pulses, fifo_pops;
+    integer rd_pulses, wr_pulses, fifo_pops, cs_falls;
     flashcart_model #(.EVERDRIVE(EVERDRIVE)) cart (
         .bank2(b2), .bank3(b3), .bank1(b1), .bank0(b0),
         .bank2_dir(b2d), .bank3_dir(b3d),
-        .rd_pulses(rd_pulses), .wr_pulses(wr_pulses), .fifo_pops(fifo_pops)
+        .rd_pulses(rd_pulses), .wr_pulses(wr_pulses), .fifo_pops(fifo_pops),
+        .cs_falls(cs_falls)
     );
 
     // The software's own view: byte addresses in 08000000..09FFFFFF.
@@ -266,7 +271,7 @@ module tb_cart_flashcart;
 
     reg [15:0] q, prior;
     reg [31:0] line;
-    integer n, polls;
+    integer n, polls, falls;
     initial begin
         repeat (4) @(negedge clk); reset_n = 1;
         repeat (20) @(negedge clk);
@@ -284,10 +289,14 @@ module tb_cart_flashcart;
             do begin rd(32'h09E00000, q); polls = polls + 1; end while (q == 16'hEEE1 && polls < 20);
             if (polls != 6) $fatal(1, "FAIL Omega SD status took %0d polls, expected 6", polls);
             omega_reg(32'h09400000, 16'd1);
+            // dmaCopy(0x9E00000, buffer, 512): one sequential burst.
+            falls = cs_falls; io_hold = 1;
             for (n = 0; n < 256; n = n + 1) begin
                 rd(32'h09E00000 + 2*n, q);
                 if (q !== (16'h5D00 ^ n)) $fatal(1, "FAIL Omega sector halfword %0d read %h", n, q);
             end
+            io_hold = 0;
+            if (cs_falls != falls + 1) $fatal(1, "FAIL Omega sector copy took %0d CS# falls, expected 1", cs_falls - falls);
             omega_reg(32'h09400000, 16'd0);
             // SetRompage: an 8-byte ROM line shows the new page afterwards.
             rom_line(32'h08000100, line);
@@ -316,11 +325,29 @@ module tb_cart_flashcart;
                 if (q !== 16'hF000 + n) $fatal(1, "FAIL EverDrive SD_DAT read %0d gave %h", n, q);
             end
             if (fifo_pops != 8) $fatal(1, "FAIL EverDrive SD_DAT popped %0d times for 8 reads", fifo_pops);
+            // CPU reads of neighbouring registers are separate accesses:
+            // SD_CFG after SD_DAT must not become a sequential SD_DAT read.
+            rd(32'h09FC0012, q);
+            rd(32'h09FC0014, q);
+            if (q !== 16'h0000 || fifo_pops != 9) $fatal(1, "FAIL EverDrive CPU reads were joined: SD_CFG %h, %0d pops", q, fifo_pops);
+            // ed_sd_dma_rd: DMA from SD_DAT, source incrementing, 256 words.
+            falls = cs_falls; io_hold = 1;
+            for (n = 0; n < 256; n = n + 1) begin
+                rd(32'h09FC0012 + 2*n, q);
+                if (q !== 16'hF009 + n) $fatal(1, "FAIL EverDrive DMA sector word %0d gave %h", n, q);
+            end
+            if (cs_falls != falls + 1) $fatal(1, "FAIL EverDrive DMA copy took %0d CS# falls, expected 1", cs_falls - falls);
+            if (fifo_pops != 265) $fatal(1, "FAIL EverDrive DMA copy popped %0d, expected 265", fifo_pops);
+            // A ROM read ends the burst even while the hold is still up.
             rom_line(32'h08000100, line);
             if (line[15:0] !== rom_expect(hw(32'h08000100), 16'h0000))
                 $fatal(1, "FAIL EverDrive ROM line after register traffic %h", line);
-            if (fifo_pops != 8) $fatal(1, "FAIL ROM line read disturbed the SD_DAT FIFO");
-            $display("PASS EverDrive: locked write refused, KEY A5 unlock, SD_CFG readback, 8 single SD_DAT pops, ROM line after, one strobe per access");
+            rd(32'h09FC0212, q);
+            if (q !== rom_expect(hw(32'h09FC0212), 16'h0000) || cs_falls != falls + 3)
+                $fatal(1, "FAIL EverDrive read after a ROM line was not re-latched: %h", q);
+            io_hold = 0;
+            if (fifo_pops != 265) $fatal(1, "FAIL ROM line read disturbed the SD_DAT FIFO");
+            $display("PASS EverDrive: locked write refused, KEY A5 unlock, SD_CFG readback, single SD_DAT pops, CPU reads kept apart, 256-word DMA burst on one CS#, ROM line after, one strobe per access");
         end
         $finish;
     end

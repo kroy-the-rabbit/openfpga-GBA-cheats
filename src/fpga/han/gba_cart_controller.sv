@@ -183,15 +183,19 @@ module gba_cart_controller #(
     // driven through its ROM space: the EZ-Flash Omega and the EverDrive
     // unlock, select pages and talk to their SD card with halfword writes
     // and reads there. A write is one CS#-latched address and a WR# pulse;
-    // a read is one RD# pulse, never a burst, because a register that pops
-    // a FIFO must be read exactly as often as the CPU reads it. No GPIO
-    // recovery wait follows either.
+    // a read is one RD# pulse, because a register that pops a FIFO must be
+    // read exactly as often as the CPU reads it. No GPIO recovery wait
+    // follows either. While io_hold is high (a DMA copy), CS# stays low after
+    // a read and a read of the next halfword is one more RD# pulse with no
+    // address phase, as on a GBA: the carts copy SD sectors with DMA from a
+    // fixed register, and the latched address must not move.
     input  wire        io_req,
     input  wire        io_rnw,             // 1 = read, 0 = write
     input  wire [23:0] io_addr,            // halfword address, A[23:0]
     input  wire [15:0] io_din,
     output reg  [15:0] io_dout,
     output reg         io_done,
+    input  wire        io_hold,
     // GPIO write-timing mode select (0..5), written by the diag ROM via
     // 0x400030A so one bitstream can sweep several write timings:
     //   0: addr-hold 8, data-setup 4, WR#-low 16 (default)
@@ -314,6 +318,7 @@ module gba_cart_controller #(
     localparam S_ROM_SEQ   = 4'd14;  // kroy: burst halfword. CS# stays low and
                                      // the address is not re-driven; RD# alone
                                      // pulses and the cart's counter advances.
+    localparam S_IO_SEQ    = 4'd15;  // kroy: sequential IO read, RD# only
 
     reg [3:0]  state;
     reg [1:0]  word_idx;
@@ -325,6 +330,8 @@ module gba_cart_controller #(
     reg [23:0] gpio_abs_addr;      // halfword address, GPIO or io_addr
     reg [15:0] gpio_din_r;
     reg        io_is_gpio;         // GPIO access: done on gpio_done, then recover
+    reg        io_sess;            // CS# held low after an IO read in a DMA copy
+    reg [23:0] io_next;            // the cart's advanced address in that session
     reg        gpio_rnw_r;         // latched R/W direction at request accept
     // Selected GPIO write timing (combinational from gpio_timing_mode)
     reg [7:0]  gpio_wr_addr_hold, gpio_wr_data_setup, gpio_wr_low;
@@ -403,6 +410,8 @@ module gba_cart_controller #(
             io_is_gpio      <= 1'b0;
             io_dout         <= 16'd0;
             io_done         <= 1'b0;
+            io_sess         <= 1'b0;
+            io_next         <= 24'd0;
             gpio_rnw_r      <= 1'b0;
             gpio_dout       <= 4'd0;
             gpio_done       <= 1'b0;
@@ -472,6 +481,13 @@ module gba_cart_controller #(
                         cs2_n         <= 1'b1;
                         out_bank1_dir <= 1'b0;
                     end
+                    if (io_sess) begin
+                        cs_n          <= 1'b0;
+                        out_bank1_dir <= 1'b1;
+                        if (!io_hold) io_sess <= 1'b0;
+                    end
+                    if (rd_req || save_req || eeprom_req || io_req || gpio_req)
+                        io_sess <= 1'b0;
 
                     if (rd_req) begin
                         eeprom_sess     <= 1'b0;   // other access: close session
@@ -513,7 +529,12 @@ module gba_cart_controller #(
                         gpio_rnw_r    <= io_rnw;
                         io_is_gpio    <= 1'b0;
                         acc_cnt       <= 8'd0;
-                        state         <= S_GPIO_A;
+                        if (io_sess && io_hold && io_rnw && io_addr == io_next) begin
+                            io_sess <= 1'b1;
+                            state   <= S_IO_SEQ;
+                        end else begin
+                            state   <= S_GPIO_A;
+                        end
                     end else if (gpio_req) begin
                         eeprom_sess     <= 1'b0;
                         // Halfword address: 0x080000C4..0x080000C8 (byte) >> 1
@@ -888,7 +909,36 @@ module gba_cart_controller #(
                         gpio_diag[3] <= 1'b1;   // read sampled
                         rd_n <= 1'b1;
                         acc_cnt <= 8'd0;
-                        state   <= S_GPIO_DONE;
+                        if (!io_is_gpio && io_hold) begin
+                            // RD# rising advanced the cart to the next halfword.
+                            io_sess <= 1'b1;
+                            io_next <= gpio_abs_addr + 24'd1;
+                            io_done <= 1'b1;
+                            state   <= S_IDLE;
+                        end else begin
+                            state   <= S_GPIO_DONE;
+                        end
+                    end
+                end
+
+                S_IO_SEQ: begin
+                    // AD is already released and CS# is low: RD# high for
+                    // the recovery, then the same strobe as S_GPIO_R.
+                    cs_n <= 1'b0;
+                    wr_n <= 1'b1;
+                    if (acc_cnt < IO_TURN) begin
+                        rd_n <= 1'b1;
+                        acc_cnt <= acc_cnt + 1'b1;
+                    end else if (acc_cnt < IO_TURN + SAVE_WAIT - 1) begin
+                        rd_n <= 1'b0;
+                        acc_cnt <= acc_cnt + 1'b1;
+                    end else begin
+                        io_dout <= {cart_tran_bank2, cart_tran_bank3};
+                        rd_n    <= 1'b1;
+                        io_next <= io_next + 24'd1;
+                        io_done <= 1'b1;
+                        acc_cnt <= 8'd0;
+                        state   <= S_IDLE;
                     end
                 end
 

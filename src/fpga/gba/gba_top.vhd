@@ -109,6 +109,7 @@ entity gba_top is
       cart_io_wdata        : out    std_logic_vector(15 downto 0) := (others => '0');
       cart_io_rdata        : in     std_logic_vector(15 downto 0) := (others => '1');
       cart_io_done         : in     std_logic := '0';
+      cart_io_hold         : out    std_logic := '0';
       -- save memory used
       save_eeprom           : out    std_logic;
       save_sram             : out    std_logic;
@@ -308,6 +309,7 @@ architecture arch of gba_top is
    signal dma3_active : std_logic;
    signal dma3_bus_ena : std_logic;
    signal mem_bus_dma3 : std_logic;
+   signal mem_bus_dma  : std_logic;
    
    signal MaxPakAddr_modified  : std_logic_vector(24 downto 0);
    
@@ -396,6 +398,7 @@ begin
    mem_bus_acc  <=  debug_bus_acc         when debug_bus_active = '1' else cpu_bus_acc  when cpu_bus_ena = '1' else dma_bus_acc;
    cart_eeprom_dma_active <= dma3_active;
    mem_bus_dma3 <= dma3_bus_ena and not cpu_bus_ena and not debug_bus_active;
+   mem_bus_dma  <= dma_bus_ena and not cpu_bus_ena and not debug_bus_active;
    mem_bus_dout <=  debug_bus_dout        when debug_bus_active = '1' else cpu_bus_dout when cpu_bus_ena = '1' else dma_bus_dout;
        
    process (clk100)
@@ -652,6 +655,8 @@ begin
       cart_io_wdata         => cart_io_wdata,
       cart_io_rdata         => cart_io_rdata,
       cart_io_done          => cart_io_done,
+      cart_io_hold          => cart_io_hold,
+      mem_bus_dma           => mem_bus_dma,
       mem_bus_dma3         => mem_bus_dma3,
       dma3_active          => dma3_active,
       dma_eepromcount      => dma_eepromcount,

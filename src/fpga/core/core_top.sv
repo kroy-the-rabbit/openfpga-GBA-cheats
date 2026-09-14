@@ -255,7 +255,7 @@ wire [7:0] cart_save_din, cart_save_dout;
 wire       cart_eeprom_req, cart_eeprom_rnw, cart_eeprom_din;
 wire       cart_eeprom_dma, cart_eeprom_last, cart_eeprom_dout, cart_eeprom_done;
 // Flash-cart halfword traffic in ROM space: gba_top -> arbiter -> controller.
-wire        cart_io_req, cart_io_rnw, cart_io_done;
+wire        cart_io_req, cart_io_rnw, cart_io_done, cart_io_hold;
 wire [23:0] cart_io_addr;
 wire [15:0] cart_io_wdata, cart_io_rdata;
 wire [16:0] cart_eeprom_count;
@@ -1891,6 +1891,7 @@ gba_top #(
     .cart_io_wdata       ( cart_io_wdata ),
     .cart_io_rdata       ( cart_io_rdata ),
     .cart_io_done        ( cart_io_done ),
+    .cart_io_hold        ( cart_io_hold ),
     .GBA_lockspeed       ( ~fast_forward ),
     .GBA_stable_ff_video ( ff_video_stable_s ),
     .GBA_cputurbo        ( 1'b0 ),
@@ -2132,6 +2133,7 @@ gba_cart_controller cart_ctl (
     .io_din                 ( ctl_io_din ),
     .io_dout                ( cart_io_rdata ),
     .io_done                ( ctl_io_done ),
+    .io_hold                ( cart_io_hold && cart_rom_mode ),
 
     .gpio_req               ( 1'b0 ),
     .gpio_rnw               ( 1'b1 ),

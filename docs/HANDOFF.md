@@ -37,8 +37,9 @@ Flash-cart support: CPU writes to ROM space reach the cart, and register reads
 at `09E00000..09FFFFFF` bypass the cache after the first write. Baseline on
 `f2a86db`: the Omega DE bootloops at a popup, most likely its firmware update prompt, and the
 EverDrive shows a red screen. `1a7e841` (seed 3 on kira, +0.092 ns) boots both
-on Turnaround; the EverDrive then fails to mount its SD card. The next build
-adds a turnaround to register reads.
+on Turnaround; the EverDrive then fails to mount its SD card. `8f18fa8` adds a
+register-read turnaround and still fails the mount. The next build reads DMA
+copies from cart registers as one sequential burst.
 See [CARTRIDGE.md](CARTRIDGE.md#flash-carts).
 
 ## Release preparation

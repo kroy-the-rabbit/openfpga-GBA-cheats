@@ -62,6 +62,8 @@ architecture test of tb_gba_cart_memorymux is
    signal cio_last : cio_log := (others => (others => '0'));   -- addr & wdata, newest in 0
    signal cio_wait : natural range 0 to 3 := 0;
    signal mem_bus_host : std_logic := '0';
+   signal mem_bus_dma, cart_io_hold : std_logic := '0';
+   signal cio_holds : std_logic_vector(1 downto 0) := "00";   -- cart_io_hold at each request, newest in 0
    signal rom_far : boolean := false;   -- a host read of 09E00000's line
 begin
    clk <= not clk after 5 ns;
@@ -134,6 +136,8 @@ begin
       cart_io_wdata => cart_io_wdata,
       cart_io_rdata => cart_io_rdata,
       cart_io_done => cart_io_done,
+      cart_io_hold => cart_io_hold,
+      mem_bus_dma => mem_bus_dma,
       mem_bus_dma3 => mem_bus_dma3,
       dma3_active => dma3_active,
       dma_eepromcount => dma_eepromcount,
@@ -189,6 +193,7 @@ begin
             cio_wait <= 2;
             cio_last(1) <= cio_last(0);
             cio_last(0) <= cart_io_addr & cart_io_wdata;
+            cio_holds <= cio_holds(0) & cart_io_hold;
             if cart_io_rnw = '1' then
                cio_reads <= cio_reads + 1;
                -- Every read answers differently, so a cached answer shows.
@@ -365,15 +370,31 @@ begin
          report "Register read did not come from the cart" severity failure;
       access_bus(x"09E00000", '1', x"00000000", ACCESS_16BIT);
       assert mem_bus_din = x"0000C001" report "Register read was served from a cache" severity failure;
+      assert cio_holds(0) = '0' and cart_io_hold = '0'
+         report "A CPU 16-bit register read asked for a sequential burst" severity failure;
       access_bus(x"09FC0010", '1', x"00000000", ACCESS_32BIT);
       assert cio_last(1)(39 downto 16) = x"FE0008" and cio_last(0)(39 downto 16) = x"FE0009"
          and mem_bus_din = x"C003C002"
          report "32-bit register read was not two halfwords, low first" severity failure;
+      assert cio_holds = "11" and cart_io_hold = '0'
+         report "A 32-bit read was not held across its halfwords, or stayed held after" severity failure;
       access_bus(x"09FC0013", '1', x"00000000", ACCESS_8BIT);
       assert cio_last(0)(39 downto 16) = x"FE0009" and mem_bus_din = x"000000C0"
          report "8-bit register read took the wrong halfword or lane" severity failure;
       assert cio_reads = 5 and rom_requests = before_count
          report "Register reads touched the ROM cache" severity failure;
+      -- A DMA copy from a register is one sequential burst on the cart: the
+      -- hold stays up across its reads and drops at the CPU's next access.
+      mem_bus_dma <= '1';
+      access_bus(x"09FC0012", '1', x"00000000", ACCESS_16BIT);
+      assert cio_holds(0) = '1' and cart_io_hold = '1'
+         report "DMA register read was not held" severity failure;
+      access_bus(x"09FC0014", '1', x"00000000", ACCESS_16BIT);
+      assert cio_last(0)(39 downto 16) = x"FE000A" and cio_holds(0) = '1' and cart_io_hold = '1'
+         report "DMA burst dropped its hold between words" severity failure;
+      mem_bus_dma <= '0';
+      access_bus(x"08000010", '1', x"00000000", ACCESS_16BIT);
+      assert cart_io_hold = '0' report "CPU access did not end the DMA burst" severity failure;
       -- A write drops both caches: a line already cached, and the 8-byte
       -- line held beside the cache, are fetched again.
       access_bus(x"08000010", '1', x"00000000", ACCESS_16BIT);
@@ -402,7 +423,7 @@ begin
       access_bus(x"09FE0000", '0', x"0000D200", ACCESS_16BIT);
       assert cio_writes = before_count report "SD ROM write reached the cartridge" severity failure;
       cart_save_mode <= '1';
-      report "PASS flash cart: ROM-space writes as halfwords, uncached register reads after a write, both caches dropped, cheat engine kept off the cart, SD mode untouched";
+      report "PASS flash cart: ROM-space writes as halfwords, uncached register reads after a write, DMA reads held as one burst, both caches dropped, cheat engine kept off the cart, SD mode untouched";
       -- Raw Flash unlock, bank and ID command bytes must reach the chip,
       -- with no emulated ID substitution or bank-address translation.
       access_bus(x"0E005555", '0', x"000000AA");
