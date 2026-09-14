@@ -263,7 +263,7 @@ wire [16:0] cart_eeprom_count;
 wire       cart_eeprom_dma_active;
 wire       cart_eeprom_fault, cart_eeprom_fault_s;
 wire [31:0] cart_eeprom_fault_why;
-wire [31:0] cart_debug_host;
+wire [63:0] cart_debug_host;
 
 // Menu readouts, in clk_74a for the bridge read mux. Driven at the bottom.
 wire [31:0] cart_readout_id_s;
@@ -1553,9 +1553,9 @@ always @(*) begin
         bridge_rd_data <= cart_readout_st_s;
     end
     32'hF4000008: begin
-        bridge_rd_data <= {31'd0, cart_eeprom_fault_s};
+        bridge_rd_data <= cart_debug_host[63:32];   // p6-flashcarts: second FC word
     end
-    32'hF4000014: bridge_rd_data <= cart_debug_host;
+    32'hF4000014: bridge_rd_data <= cart_debug_host[31:0];
     default: begin
         bridge_rd_data <= 0;
     end
@@ -2185,22 +2185,34 @@ wire [31:0] ee_debug = (cart_eeprom_fault_why != 32'd0) ? cart_eeprom_fault_why
 // p6-flashcarts brings the carts up. Layout in docs/BOOT-DEBUG.md.
 reg  [5:0]  fc_io_cnt  = 6'd0;
 reg  [23:0] fc_io_addr = 24'd0;
+reg  [15:0] fc_io_wdata = 16'd0;
 reg         fc_io_rnw  = 1'b0;
+reg  [3:0]  fc_io_pc   = 4'd0;     // PC region when the last access was made
+reg  [7:0]  fc_rom_cnt = 8'd0;     // cart ROM reads since then, saturating
 always @(posedge clk_sys) begin
     if (!cart_ctl_reset_n) begin
         fc_io_cnt  <= 6'd0;
         fc_io_addr <= 24'd0;
+        fc_io_wdata <= 16'd0;
         fc_io_rnw  <= 1'b0;
+        fc_io_pc   <= 4'd0;
+        fc_rom_cnt <= 8'd0;
     end else if (cart_io_req && cart_rom_mode) begin
         fc_io_cnt  <= fc_io_cnt + 6'd1;
         fc_io_addr <= cart_io_addr;
         fc_io_rnw  <= cart_io_rnw;
+        fc_io_pc   <= gba_debug_pc[27:24];
+        fc_rom_cnt <= 8'd0;
+        if (!cart_io_rnw) fc_io_wdata <= cart_io_wdata;
+    end else if (romsrc_cart_rd_req && fc_rom_cnt != 8'hFF) begin
+        fc_rom_cnt <= fc_rom_cnt + 8'd1;
     end
 end
-wire [31:0] fc_debug = {gba_debug_pc[27:24], gba_debug_mixed[0], fc_io_rnw, fc_io_cnt,
-                        fc_io_addr[23:20], fc_io_addr[15:0]};
+wire [63:0] fc_debug = {fc_io_wdata, fc_rom_cnt, gba_debug_pc[23:16],
+                        gba_debug_pc[27:24], gba_debug_mixed[0], fc_io_rnw, fc_io_cnt,
+                        fc_io_pc, fc_io_addr[23:16], fc_io_addr[7:0]};
 
-cart_debug_snapshot #(.WIDTH(32)) boot_debug (
+cart_debug_snapshot #(.WIDTH(64)) boot_debug (
     .clk_host(clk_74a), .clk_sys(clk_sys), .host_menu(osnotify_inmenu),
     .sys_debug(fc_debug),
     .host_debug(cart_debug_host), .page()

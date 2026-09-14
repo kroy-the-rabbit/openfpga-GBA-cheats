@@ -5,8 +5,10 @@ plus `CG:`, `CS:` and `SF:`.
 
 ## The `EE:` word on `p6-flashcarts`
 
-On this branch the `EE:` field carries the flash-cart word instead, taken
-when the core menu opens:
+On this branch `EE:` and `SF:` carry the flash-cart words instead, taken
+together when the core menu opens.
+
+`EE:`
 
 | Bits | Meaning |
 |---|---|
@@ -14,12 +16,22 @@ when the core menu opens:
 | 27 | CPU halted (waiting for an interrupt) |
 | 26 | The last flash-cart access was a read |
 | 25:20 | Flash-cart accesses so far, modulo 64 |
-| 19:16 | Halfword address bits 23:20 of the last access |
-| 15:0 | Halfword address bits 15:0 of the last access |
+| 19:16 | Top nibble of the PC when the last access was made |
+| 15:8 | Halfword address bits 23:16 of the last access |
+| 7:0 | Halfword address bits 7:0 of the last access |
 
-EverDrive registers read as `F00nn`, `nn` the register number (`09`
-SD_DAT, `01` STATUS, `0A` SD_CFG). Omega DE registers read as `A0000`
-(SD ctl), `F0000` (SD data and status). Close and reopen the menu: a rising
+`SF:`
+
+| Bits | Meaning |
+|---|---|
+| 31:16 | Data of the last flash-cart write |
+| 15:8 | Cart ROM reads since the last access, saturating at `FF` |
+| 7:0 | PC bits 23:16 now |
+
+EverDrive registers read as `FEnn` in `EE:` bits 15:0, `nn` the register
+number (`00` CFG, `01` STATUS, `09` SD_DAT, `0A` SD_CFG, `5A` KEY); `FF00`
+is its EEPROM port. Omega DE registers read as `A000` (SD ctl), `C400`
+(ROM page), `F000` (SD data and status). Close and reopen the menu: a rising
 count with the same address is a poll; a fixed count is a CPU that stopped
 talking to the cart.
 
