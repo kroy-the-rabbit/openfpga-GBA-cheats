@@ -41,6 +41,13 @@ module eeprom_bridge_case #(parameter ADDR_BITS=14, parameter PROGRAM_BUSY_POLLS
     cart_eeprom_model #(.ADDR_BITS(ADDR_BITS), .BUSY_POLLS(PROGRAM_BUSY_POLLS)) cart (
         .cs_n(bank0[4]), .rd_n(bank0[5]), .wr_n(bank0[6]), .a23(bank1[7]), .d0(bank3[0])
     );
+    // A flash cart's FPGA may decode the whole EEPROM address: every session
+    // must latch FFFF80, the address games use, with the host driving AD.
+    always @(negedge bank0[4]) begin
+        #2;
+        if ({bank1, bank2, bank3} !== 24'hFFFF80)
+            $fatal(1, "FAIL EEPROM session latched %h, expected FFFF80", {bank1, bank2, bank3});
+    end
     task automatic bit_access(input rnw,input din,input dma,input last,input [16:0] count,output dout);
         integer timeout;
         begin

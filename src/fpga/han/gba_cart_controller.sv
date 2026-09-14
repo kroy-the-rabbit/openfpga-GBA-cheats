@@ -297,6 +297,13 @@ module gba_cart_controller #(
     // AD released before RD# falls on an IO read, as ROM profile Turnaround.
     localparam integer IO_TURN = 4;
 
+    // kroy: a new EEPROM session latches the address games use, 0DFFFF00,
+    // which reaches the cart as FFFF80. A real EEPROM looks at A23 alone;
+    // a flash cart's FPGA can decode the whole address, and the EZ-Flash
+    // Omega DE did not answer an access that latched 80xxxx. The bit form
+    // (AD released, D0 driven) follows once CS# is low, with its own setup.
+    localparam integer EEPROM_SESS_SETUP = 2 * EEPROM_ADDR_SETUP + 2;
+
     localparam S_IDLE      = 4'd0;
     localparam S_ROM_CS    = 4'd1;   // drive address, then assert CS1#
     localparam S_ROM_DATA  = 4'd2;   // release AD, strobe RD#, sample 16-bit
@@ -469,7 +476,7 @@ module gba_cart_controller #(
                         cs2_n         <= 1'b0;
                         cs_n          <= 1'b0;    // ROMCS stays low (EEPROM /CS)
                         cs2_n         <= 1'b1;    // pin30 stays RES# high
-                        out_bank1     <= 8'h80;   // A23 = 1
+                        out_bank1     <= 8'hFF;   // A23 = 1, as at 0DFFFF00
                         out_bank1_dir <= 1'b1;
                         if (eeprom_sess_cnt == EEPROM_SESS_TIMEOUT - 1) begin
                             eeprom_sess <= 1'b0;   // release next cycle
@@ -747,19 +754,31 @@ module gba_cart_controller #(
                 // driven by one 16-bit DMA access (RD# for reads, WR# for
                 // writes), data on AD0. /CS is ROMCS (Pin 5), not CS2#.
                 // We forward one bit per request.
-                S_EEPROM: begin
+                S_EEPROM: begin : eeprom_bit
                     // A23 (=bank1[7]) stays HIGH during the whole transfer,
                     // as on the real GBA bus when addressing 0x0Dxxxxxx.
-                    out_bank1     <= 8'h80;
+                    // The first bit of a session, before and at CS# falling,
+                    // drives the whole address FFFF80 on A[23:16] and AD.
+                    reg [7:0] bit_at;   // acc_cnt at which the bit pulse starts
+                    bit_at = eeprom_continue ? EEPROM_ADDR_SETUP + 2 : EEPROM_SESS_SETUP;
+                    out_bank1     <= 8'hFF;
                     out_bank1_dir <= 1'b1;
-                    out_bank2_dir <= 1'b0;
                     cs2_n         <= 1'b1;   // pin30 stays RES# high
-                    if (eeprom_rnw_r) begin
+                    if (!eeprom_continue && acc_cnt <= EEPROM_ADDR_SETUP) begin
+                        out_bank2     <= 8'hFF;
+                        out_bank2_dir <= 1'b1;
+                        out_bank3     <= 8'h80;
+                        out_bank3_dir <= 1'b1;
+                        rd_n          <= 1'b1;
+                        wr_n          <= 1'b1;
+                    end else if (eeprom_rnw_r) begin
+                        out_bank2_dir <= 1'b0;
                         out_bank3_dir <= 1'b0;
                         wr_n          <= 1'b1;
                     end else begin
                         // Write bit: D0 driven from the very first cycle so it
                         // is stable long before WR# falls.
+                        out_bank2_dir <= 1'b0;
                         out_bank3     <= {7'b0, eeprom_din_r};
                         out_bank3_dir <= 1'b1;
                         rd_n          <= 1'b1;
@@ -786,8 +805,9 @@ module gba_cart_controller #(
                         rd_n  <= 1'b1;
                         wr_n  <= 1'b1;
                         acc_cnt <= acc_cnt + 1'b1;
-                    end else if (acc_cnt < EEPROM_ADDR_SETUP + 2) begin
-                        // Hold CS# low one cycle before starting the bit pulse
+                    end else if (acc_cnt < bit_at) begin
+                        // Hold CS# low one cycle before starting the bit pulse;
+                        // on a new session, the bit form's own setup instead.
                         rd_n  <= 1'b1;
                         wr_n  <= 1'b1;
                         acc_cnt <= acc_cnt + 1'b1;
@@ -796,10 +816,10 @@ module gba_cart_controller #(
                         // raises it. This matches the hardware-qualified
                         // pocket-cartridge bus and needs no post-edge hold
                         // from the EEPROM or the level translators.
-                        if (acc_cnt < EEPROM_ADDR_SETUP + EEPROM_HALF_CYCLE - 1) begin
+                        if (acc_cnt < bit_at + EEPROM_HALF_CYCLE - 3) begin
                             rd_n <= 1'b0;
                             acc_cnt <= acc_cnt + 1'b1;
-                        end else if (acc_cnt == EEPROM_ADDR_SETUP + EEPROM_HALF_CYCLE - 1) begin
+                        end else if (acc_cnt == bit_at + EEPROM_HALF_CYCLE - 3) begin
                             eeprom_dout <= cart_tran_bank3[0];
                             rd_n <= 1'b1;   // rising edge
                             acc_cnt <= acc_cnt + 1'b1;
@@ -809,7 +829,7 @@ module gba_cart_controller #(
                         end
                     end else begin
                         // Write bit: WR# low pulse (D0 held through the edge)
-                        if (acc_cnt < EEPROM_ADDR_SETUP + EEPROM_HALF_CYCLE - 1) begin
+                        if (acc_cnt < bit_at + EEPROM_HALF_CYCLE - 3) begin
                             wr_n <= 1'b0;
                             acc_cnt <= acc_cnt + 1'b1;
                         end else begin
@@ -827,7 +847,7 @@ module gba_cart_controller #(
                 // cycles, then let S_EEPROM pull it low again for the read
                 // burst (S_EEPROM keeps /CS low when eeprom_sess is active).
                 S_EEPROM_RESET: begin
-                    out_bank1     <= 8'h80;      // A23 stays HIGH
+                    out_bank1     <= 8'hFF;      // A23 stays HIGH
                     out_bank1_dir <= 1'b1;
                     out_bank2_dir <= 1'b0;
                     out_bank3_dir <= 1'b0;
@@ -1057,7 +1077,7 @@ module gba_cart_controller #(
                             // Keep /CS LOW and A23 HIGH across consecutive
                             // EEPROM bit accesses (GBATEK requirement for DMA3).
                             cs_n          <= 1'b0;
-                            out_bank1     <= 8'h80;
+                            out_bank1     <= 8'hFF;
                             out_bank1_dir <= 1'b1;
                         end else begin
                             // Standalone access (or DMA burst finished):

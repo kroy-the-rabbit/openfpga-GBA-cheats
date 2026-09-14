@@ -23,7 +23,7 @@ new cheats or a cartridge that has not been qualified.
 | Interrupted-transfer guard | Covered in simulation; not hardware-qualified |
 | Empty or partially inserted slot | Not hardware-qualified |
 | Cartridge RTC/GPIO, solar and gyro | Not routed |
-| Flash carts: EZ-Flash Omega DE, EverDrive | `p6-flashcarts`; Omega DE boots on Turnaround, EverDrive boots and runs games on Slow |
+| Flash carts: EZ-Flash Omega DE, EverDrive | `p6-flashcarts`; Omega DE boots and runs games on Turnaround, EverDrive boots and runs games on Slow |
 | Savestates, sleep and link cable | Removed |
 
 ## Quick start
@@ -153,6 +153,10 @@ read comes back as ROM data; the EverDrive shows a red screen.
   cart too unless the game's quirk selects the emulated RTC. The EverDrive OS
   reads its clock there and reported a dead battery while the reads came
   from the ROM cache.
+- An EEPROM session latches the address games use, `0DFFFF00`, which
+  reaches the cart as `FFFF80`, with the host driving AD before CS# falls. A
+  real EEPROM looks at A23 alone; the Omega DE's FPGA did not answer a
+  session that latched `80xxxx`, and Minish Cap reported its save corrupt.
 - Cheat-engine traffic is not forwarded, so a ROM-patch cheat never writes
   to a cart or consumes a register read.
 - The GPIO emulation at `080000C4..080000C8` keeps its writes when the game's
@@ -181,6 +185,10 @@ the fill needs a strobe as long as a real GBA's. On **Slow** (RD# low about
 between EverDrive runs: a core reset leaves the cart with PSRAM mapped and its
 registers locked, so the header probe reads garbage and the BIOS stops at a
 white screen.
+
+The Omega DE on Turnaround loads and runs Minish Cap (`10a7163`); the game
+reported its EEPROM save corrupt and could not create one, see the EEPROM
+address note above.
 
 `tools/sim/run_cart_rom.py` replays each cart's own register sequences, from
 `ez-flash/omega-de-kernel`, the EverDrive X5 driver in
