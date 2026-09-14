@@ -18,7 +18,8 @@
 //             takes one halfword.
 //
 // Checked: every value the software would read, exactly one RD# pulse per IO
-// read and one WR# pulse per IO write, no RD# during a write, no FIFO read
+// read and one WR# pulse per IO write, a turnaround before every RD#, no RD#
+// during a write, no FIFO read
 // consumed by anything but the CPU's own reads, and that 8-byte ROM line reads
 // still work against the same cart after it has been written to.
 `timescale 1ns / 1ps
@@ -29,6 +30,8 @@ module flashcart_model #(parameter EVERDRIVE = 0) (
     inout  wire [7:0] bank3,      // AD[7:0]
     inout  wire [7:0] bank1,      // A[23:16]
     inout  wire [3:0] bank0,      // [0]=CS1# [1]=RD# [2]=WR# [3]=PHI#
+    input  wire       bank2_dir,  // 1 = host drives AD[15:8]
+    input  wire       bank3_dir,  // 1 = host drives AD[7:0]
     output integer    rd_pulses,
     output integer    wr_pulses,
     output integer    fifo_pops
@@ -79,9 +82,18 @@ module flashcart_model #(parameter EVERDRIVE = 0) (
         #2 addr = {bank1, bank2, bank3};
     end
 
+    // The Pocket's translators need a turnaround: AD released well before
+    // RD# falls. A strobe on the clock AD was released is ROM profile Fast,
+    // which failed on a real cart.
+    realtime released = 0;
+    always @(negedge bank2_dir or negedge bank3_dir) released = $realtime;
     reg [15:0] dout;
     always @(negedge rd_n) begin
         rd_pulses = rd_pulses + 1;
+        if (bank2_dir !== 1'b0 || bank3_dir !== 1'b0)
+            $fatal(1, "FAIL RD# fell while the host still drove AD");
+        if ($realtime - released < 35.0)
+            $fatal(1, "FAIL RD# fell %0.1f ns after AD was released, no turnaround", $realtime - released);
         dout = read_value(addr);
     end
     always @(posedge rd_n) if (cs_n === 1'b0) begin
@@ -196,6 +208,7 @@ module tb_cart_flashcart;
     integer rd_pulses, wr_pulses, fifo_pops;
     flashcart_model #(.EVERDRIVE(EVERDRIVE)) cart (
         .bank2(b2), .bank3(b3), .bank1(b1), .bank0(b0),
+        .bank2_dir(b2d), .bank3_dir(b3d),
         .rd_pulses(rd_pulses), .wr_pulses(wr_pulses), .fifo_pops(fifo_pops)
     );
 

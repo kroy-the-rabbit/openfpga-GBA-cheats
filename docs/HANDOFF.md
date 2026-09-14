@@ -36,7 +36,9 @@ ROM-patch opcodes and encrypted codes need conversion to supported raw codes.
 Flash-cart support: CPU writes to ROM space reach the cart, and register reads
 at `09E00000..09FFFFFF` bypass the cache after the first write. Baseline on
 `f2a86db`: the Omega DE bootloops at a popup, most likely its firmware update prompt, and the
-EverDrive shows a red screen. Simulation passes; no fit or hardware test yet.
+EverDrive shows a red screen. `1a7e841` (seed 3 on kira, +0.092 ns) boots both
+on Turnaround; the EverDrive then fails to mount its SD card. The next build
+adds a turnaround to register reads.
 See [CARTRIDGE.md](CARTRIDGE.md#flash-carts).
 
 ## Release preparation

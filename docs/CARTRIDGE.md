@@ -23,7 +23,7 @@ new cheats or a cartridge that has not been qualified.
 | Interrupted-transfer guard | Covered in simulation; not hardware-qualified |
 | Empty or partially inserted slot | Not hardware-qualified |
 | Cartridge RTC/GPIO, solar and gyro | Not routed |
-| Flash carts: EZ-Flash Omega DE, EverDrive | `p6-flashcarts`; simulated, not hardware-tested |
+| Flash carts: EZ-Flash Omega DE, EverDrive | `p6-flashcarts`; boot on Turnaround, EverDrive SD not yet working |
 | Savestates, sleep and link cable | Removed |
 
 ## Quick start
@@ -154,8 +154,16 @@ read comes back as ROM data; the EverDrive shows a red screen.
 - The GPIO emulation at `080000C4..080000C8` keeps its writes when the game's
   quirk enables it.
 
+- A register read releases AD four clocks before RD# falls, as the
+  Turnaround ROM profile does. `1a7e841` strobed RD# on the same clock and the
+  EverDrive booted but could not mount its SD card.
+
 **Do not accept the Omega DE's firmware update prompt** on any build unless
 the version it reports is known to be correct.
+
+On `1a7e841`, 2026-09-14: with ROM Timing on **GBA Power-On** the Omega DE's
+BIOS logo is corrupt and it does not boot. On **Turnaround** it boots, and the
+EverDrive boots but fails to mount its FAT32 card.
 
 `tools/sim/run_cart_rom.py` replays each cart's own register sequences, from
 `ez-flash/omega-de-kernel` and the EverDrive X5 driver in

@@ -290,6 +290,9 @@ module gba_cart_controller #(
         endcase
     end
 
+    // AD released before RD# falls on an IO read, as ROM profile Turnaround.
+    localparam integer IO_TURN = 4;
+
     localparam S_IDLE      = 4'd0;
     localparam S_ROM_CS    = 4'd1;   // drive address, then assert CS1#
     localparam S_ROM_DATA  = 4'd2;   // release AD, strobe RD#, sample 16-bit
@@ -854,14 +857,25 @@ module gba_cart_controller #(
                     if (acc_cnt < ADDR_SETUP) begin
                         rd_n <= 1'b1;
                         acc_cnt <= acc_cnt + 1'b1;
-                    end else if (acc_cnt == ADDR_SETUP) begin
-                        // Release AD bus (GPIO data comes from cart on AD[3:0])
-                        // and start the read strobe.
+                    end else if (acc_cnt < ADDR_SETUP + IO_TURN) begin
+                        // kroy: turnaround, AD released and RD# still high.
+                        // Releasing AD on the clock RD# fell is the ROM
+                        // profile Fast, which failed on a real cart through
+                        // the Pocket's translators; every profile with a
+                        // turnaround booted. Flash-cart register reads take
+                        // this path, and the EverDrive's SD card is nothing
+                        // but register reads.
+                        out_bank2_dir <= 1'b0;
+                        out_bank3_dir <= 1'b0;
+                        rd_n <= 1'b1;
+                        acc_cnt <= acc_cnt + 1'b1;
+                    end else if (acc_cnt == ADDR_SETUP + IO_TURN) begin
+                        // Start the read strobe (data comes from the cart on AD).
                         out_bank2_dir <= 1'b0;
                         out_bank3_dir <= 1'b0;
                         rd_n <= 1'b0;
                         acc_cnt <= acc_cnt + 1'b1;
-                    end else if (acc_cnt < ADDR_SETUP + SAVE_WAIT - 1) begin
+                    end else if (acc_cnt < ADDR_SETUP + IO_TURN + SAVE_WAIT - 1) begin
                         rd_n <= 1'b0;
                         acc_cnt <= acc_cnt + 1'b1;
                     end else begin
