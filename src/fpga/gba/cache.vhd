@@ -17,10 +17,11 @@ entity cache is
    (
       clk               : in  std_logic;
       gb_on             : in  std_logic;
-      -- Drop every tag at the next idle moment. rom_patch.sv pulses this
-      -- when its table changes, so lines cached before the cheat file
-      -- arrived are fetched again through the patch. A request arriving
-      -- during the clear is held and served afterwards.
+      -- Drop every tag before the next read is served. rom_patch.sv pulses
+      -- this when its table changes, so lines cached before the cheat file
+      -- arrived are fetched again through the patch, and a flash-cart write
+      -- pulses it because the cart may now map different ROM. A request
+      -- arriving with or during the clear is held and served afterwards.
       invalidate        : in  std_logic := '0';
                         
       read_enable       : in  std_logic;
@@ -132,7 +133,7 @@ begin
    addrsave_addr_a  <= to_integer(unsigned(read_addr(SIZEBITS downto 1)));
    
    read_done_buffer <= '1' when state = READCACHE_OUT and (addrsave_dataout = '0' & upperbits) else '0';
-   -- A live request wins over one held through a clear; they never coincide.
+   -- A live request and one held through a clear never coincide.
    req_now          <= read_addr when read_enable = '1' else req_addr_l;
    read_data        <= memory_dataout(31 downto 0) when up_low_select = '0' else memory_dataout(63 downto 32);
    read_full        <= memory_dataout;
@@ -146,7 +147,11 @@ begin
          
          mem_read_ena      <= '0';
 
-         if (invalidate = '1') then
+         -- A clear already running covers an invalidate that lands during
+         -- it: no read is served until it ends, so nothing it has already
+         -- dropped can be refilled. A burst of flash-cart writes costs one
+         -- clear, not one per write.
+         if (invalidate = '1' and state /= CLEARCACHE) then
             inval_pending <= '1';
          end if;
 
@@ -174,7 +179,17 @@ begin
                   addrsave_we     <= '1';
             
                when IDLE =>
-                  if (read_enable = '1' or req_pending = '1') then
+                  -- The clear goes first. A read that follows a flash-cart
+                  -- write must not be served from a tag the write made stale.
+                  if (inval_pending = '1') then
+                     inval_pending   <= '0';
+                     state           <= CLEARCACHE;
+                     clear_counter   <= 0;
+                     if (read_enable = '1') then
+                        req_pending <= '1';
+                        req_addr_l  <= read_addr;
+                     end if;
+                  elsif (read_enable = '1' or req_pending = '1') then
                      req_pending     <= '0';
                      mem_read_addr   <= std_logic_vector(to_unsigned(Softmap_GBA_Gamerom_ADDR, 25) + unsigned(req_now));
                      memory_addr_b   <= to_integer(unsigned(req_now(SIZEBITS downto 1)));
@@ -183,10 +198,6 @@ begin
                      upperbits       <= req_now(SIZEBASEBITS-1 downto SIZEBITS);
                      up_low_select   <= req_now(0);
                      state           <= READCACHE_OUT;
-                  elsif (inval_pending = '1') then
-                     inval_pending   <= '0';
-                     state           <= CLEARCACHE;
-                     clear_counter   <= 0;
                   end if;
                   
    

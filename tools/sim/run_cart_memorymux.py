@@ -24,7 +24,8 @@ def main():
          "--ieee-asserts=disable-at-0", "--stop-time=300us"],
         cwd=BUILD, check=True, capture_output=True, text=True)
     output = result.stdout + result.stderr
-    if "PASS cartridge memorymux" not in output or "PASS BMXE ROM header" not in output:
+    if ("PASS cartridge memorymux" not in output or "PASS BMXE ROM header" not in output
+            or "PASS flash cart" not in output):
         raise RuntimeError("Memorymux bench did not reach PASS:\n" + output)
     for line in output.splitlines():
         if "PASS" in line:

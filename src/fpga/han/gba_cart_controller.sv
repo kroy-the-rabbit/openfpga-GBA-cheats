@@ -18,6 +18,8 @@
 //                  RD#/WR# pulse with data on D3..D0. The register block is
 //                  inside the cart's ROM chip, so no protocol is emulated -
 //                  we only drive the bus cycles.
+//   - IO access  : kroy, the GPIO bus cycle at any ROM-space halfword with
+//                  16-bit data, for flash-cart registers.
 //
 // Timing is modeled on the measured cartridge protocol from
 //   https://github.com/jojolebarjos/gba-cartridge
@@ -175,6 +177,21 @@ module gba_cart_controller #(
     input  wire [3:0]  gpio_din,           // write data (D3..D0)
     output reg  [3:0]  gpio_dout,          // read data (D3..D0)
     output reg         gpio_done,
+
+    // ---- kroy: 16-bit ROM-space access, any address ----
+    // The GPIO access with the address and data widened. A flash cart is
+    // driven through its ROM space: the EZ-Flash Omega and the EverDrive
+    // unlock, select pages and talk to their SD card with halfword writes
+    // and reads there. A write is one CS#-latched address and a WR# pulse;
+    // a read is one RD# pulse, never a burst, because a register that pops
+    // a FIFO must be read exactly as often as the CPU reads it. No GPIO
+    // recovery wait follows either.
+    input  wire        io_req,
+    input  wire        io_rnw,             // 1 = read, 0 = write
+    input  wire [23:0] io_addr,            // halfword address, A[23:0]
+    input  wire [15:0] io_din,
+    output reg  [15:0] io_dout,
+    output reg         io_done,
     // GPIO write-timing mode select (0..5), written by the diag ROM via
     // 0x400030A so one bitstream can sweep several write timings:
     //   0: addr-hold 8, data-setup 4, WR#-low 16 (default)
@@ -302,8 +319,9 @@ module gba_cart_controller #(
     reg [15:0] words [0:3];
     reg [16:0] save_addr_r;
     reg        save_is_write;
-    reg [15:0] gpio_abs_addr;      // 0x00C4 + {gpio_addr,1'b0}
-    reg [3:0]  gpio_din_r;
+    reg [23:0] gpio_abs_addr;      // halfword address, GPIO or io_addr
+    reg [15:0] gpio_din_r;
+    reg        io_is_gpio;         // GPIO access: done on gpio_done, then recover
     reg        gpio_rnw_r;         // latched R/W direction at request accept
     // Selected GPIO write timing (combinational from gpio_timing_mode)
     reg [7:0]  gpio_wr_addr_hold, gpio_wr_data_setup, gpio_wr_low;
@@ -377,8 +395,11 @@ module gba_cart_controller #(
             save_is_write   <= 1'b0;
             eeprom_dout     <= 1'b0;
             eeprom_done     <= 1'b0;
-            gpio_abs_addr   <= 16'd0;
-            gpio_din_r      <= 4'd0;
+            gpio_abs_addr   <= 24'd0;
+            gpio_din_r      <= 16'd0;
+            io_is_gpio      <= 1'b0;
+            io_dout         <= 16'd0;
+            io_done         <= 1'b0;
             gpio_rnw_r      <= 1'b0;
             gpio_dout       <= 4'd0;
             gpio_done       <= 1'b0;
@@ -411,6 +432,7 @@ module gba_cart_controller #(
             save_done <= 1'b0;
             eeprom_done <= 1'b0;
             gpio_done <= 1'b0;
+            io_done   <= 1'b0;
             // Live PHI status for the diag ROM (0x4000308 bit15-8):
             // bit4 = enabled by WAITCNT, bit5 = PHYSICAL pin level read back
             // from the slot. If an external driver (Pocket slot circuitry)
@@ -481,14 +503,23 @@ module gba_cart_controller #(
                             state   <= S_EEPROM;
                         end
                         eeprom_rnw_prev <= eeprom_rnw;
+                    end else if (io_req) begin
+                        eeprom_sess   <= 1'b0;
+                        gpio_abs_addr <= io_addr;
+                        gpio_din_r    <= io_din;
+                        gpio_rnw_r    <= io_rnw;
+                        io_is_gpio    <= 1'b0;
+                        acc_cnt       <= 8'd0;
+                        state         <= S_GPIO_A;
                     end else if (gpio_req) begin
                         eeprom_sess     <= 1'b0;
                         // Halfword address: 0x080000C4..0x080000C8 (byte) >> 1
                         // = 0x04000062..0x04000064. The cartridge bus always
                         // carries halfword addresses for ROM-space access.
-                        gpio_abs_addr <= 16'h0062 + {14'd0, gpio_addr};
-                        gpio_din_r    <= gpio_din;
+                        gpio_abs_addr <= 24'h000062 + {22'd0, gpio_addr};
+                        gpio_din_r    <= {12'd0, gpio_din};
                         gpio_rnw_r    <= gpio_rnw;   // latch R/W with the request
+                        io_is_gpio    <= 1'b1;
                         acc_cnt       <= 8'd0;
                         state         <= S_GPIO_A;
                     end
@@ -795,7 +826,7 @@ module gba_cart_controller #(
                     // 0x000062 => A[23:16] = 0x00. Driving A18 high here put
                     // the address outside the ROM-chip GPIO decode window and
                     // the GPIO registers never responded.
-                    out_bank1     <= 8'h00;      // A[23:16] of halfword address
+                    out_bank1     <= gpio_abs_addr[23:16];  // 0 for GPIO
                     out_bank2     <= gpio_abs_addr[15:8];
                     out_bank3     <= gpio_abs_addr[7:0];
                     out_bank1_dir <= 1'b1;
@@ -839,6 +870,7 @@ module gba_cart_controller #(
                         // RD# low phase and tri-states after RD# rises.
                         // Sampling after the rising edge reads a stale bus.
                         gpio_dout <= cart_tran_bank3[3:0];
+                        io_dout   <= {cart_tran_bank2, cart_tran_bank3};
                         gpio_diag[3] <= 1'b1;   // read sampled
                         rd_n <= 1'b1;
                         acc_cnt <= 8'd0;
@@ -862,8 +894,8 @@ module gba_cart_controller #(
                         // Drive the write data first and hold WR# high during
                         // a setup phase, so the GPIO registers sample stable
                         // data when WR# falls.
-                        out_bank2     <= 8'h00;  // AD[15:8] = data high byte
-                        out_bank3     <= {4'b0, gpio_din_r};
+                        out_bank2     <= gpio_din_r[15:8];  // AD[15:8] = data high byte
+                        out_bank3     <= gpio_din_r[7:0];
                         out_bank3_dir <= 1'b1;
                         gpio_diag[6]  <= 1'b1;   // write data driven
                         wr_n    <= 1'b1;
@@ -874,8 +906,8 @@ module gba_cart_controller #(
                             // Mode 3: drive the data on the same cycle WR#
                             // falls, so the GPIO registers sample the bus at
                             // the WR# edge with zero data setup.
-                            out_bank2     <= 8'h00;
-                            out_bank3     <= {4'b0, gpio_din_r};
+                            out_bank2     <= gpio_din_r[15:8];
+                            out_bank3     <= gpio_din_r[7:0];
                             gpio_diag[6]  <= 1'b1;
                         end
                         wr_n <= 1'b0;      // WR# low pulse
@@ -908,8 +940,9 @@ module gba_cart_controller #(
                     end else begin
                         out_bank2_dir <= 1'b0;
                         out_bank3_dir <= 1'b0;
-                        gpio_done     <= 1'b1;
-                        state         <= S_GPIO_RECOVER;
+                        gpio_done     <= io_is_gpio;
+                        io_done       <= !io_is_gpio;
+                        state         <= io_is_gpio ? S_GPIO_RECOVER : S_IDLE;
                         acc_cnt       <= 8'd0;
                     end
                 end

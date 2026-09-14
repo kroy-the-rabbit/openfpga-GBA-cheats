@@ -87,6 +87,23 @@ entity gba_memorymux is
       cart_eeprom_count    : out    std_logic_vector(16 downto 0) := (others => '0');
       cart_eeprom_dout     : in     std_logic := '1';
       cart_eeprom_done     : in     std_logic := '0';
+      -- Flash-cart traffic on a physical cartridge: one halfword read or
+      -- write in ROM space per request, at a halfword address. Writes to
+      -- ROM space reach the cart instead of being dropped, and once one has,
+      -- reads from 09E00000..09FFFFFF bypass the ROM cache, because that is
+      -- where the Omega and the EverDrive keep registers whose value changes
+      -- between reads.
+      -- The request comes from the cheat engine or another host-side
+      -- master, not the CPU or DMA. Its ROM-space writes stay dropped and its
+      -- reads never reach a cart register: a cheat must not program a flash
+      -- cart or consume an SD FIFO read.
+      mem_bus_host         : in     std_logic := '0';
+      cart_io_req          : out    std_logic := '0';
+      cart_io_rnw          : out    std_logic := '1';
+      cart_io_addr         : out    std_logic_vector(23 downto 0) := (others => '0');
+      cart_io_wdata        : out    std_logic_vector(15 downto 0) := (others => '0');
+      cart_io_rdata        : in     std_logic_vector(15 downto 0) := (others => '1');
+      cart_io_done         : in     std_logic := '0';
       mem_bus_dma3          : in     std_logic := '0';
       dma3_active           : in     std_logic := '0';
       dma_eepromcount      : in     unsigned(16 downto 0);
@@ -186,7 +203,8 @@ architecture arch of gba_memorymux is
       FLASH_BLOCKWAIT,
       CART_SAVE_WAIT,
       CART_EEPROM_START,
-      CART_EEPROM_WAIT
+      CART_EEPROM_WAIT,
+      CART_IO_WAIT
    );
    signal state : tState := IDLE;
    
@@ -229,6 +247,15 @@ architecture arch of gba_memorymux is
    signal sdram_buf_hit_32   : std_logic := '0';
    signal sdram_read_done_1  : std_logic := '0';
    
+   -- flash cart
+   signal cartio_seen        : std_logic := '0';   -- a ROM-space write reached the cart
+   signal host_save          : std_logic := '0';
+   signal cartio_addr_r      : std_logic_vector(23 downto 0) := (others => '0');
+   signal cartio_invalidate  : std_logic := '0';
+   signal cartio_second      : std_logic := '0';   -- a 32-bit access has its upper halfword left
+   signal cartio_low         : std_logic_vector(15 downto 0) := (others => '0');
+   signal cache_inval_any    : std_logic;
+
    -- gamepak cache
    signal cache_read_enable  : std_logic := '0';
    signal cache_read_addr    : std_logic_vector(22 downto 0);
@@ -339,6 +366,9 @@ begin
    end generate;
    
    smallram_addr_r <= to_integer(unsigned(adr_save(14 downto 2)));
+
+   cache_inval_any <= cache_invalidate or cartio_invalidate;
+   cart_io_addr    <= cartio_addr_r;
    
    
    i_gamepak_cache : entity work.cache
@@ -353,7 +383,7 @@ begin
    (
       clk               => clk100,
       gb_on             => gb_on,
-      invalidate        => cache_invalidate,
+      invalidate        => cache_inval_any,
                        
       read_enable       => cache_read_enable,
       read_addr         => cache_read_addr,  
@@ -449,6 +479,11 @@ begin
          -- default pulse regs
          cart_save_req    <= '0';
          cart_eeprom_req  <= '0';
+         cart_io_req      <= '0';
+         cartio_invalidate <= '0';
+         if (reset = '1' or gb_on = '0' or cart_save_mode = '0') then
+            cartio_seen <= '0';
+         end if;
          if (reset = '1' or dma3_active = '0') then
             cart_eeprom_index <= (others => '0');
          end if;
@@ -491,6 +526,7 @@ begin
                   Dout_save <= mem_bus_dout;
                   rnw_save  <= mem_bus_rnw;
                   dma_save  <= mem_bus_dma3;
+                  host_save <= mem_bus_host;
                   if (mem_bus_Adr(31 downto 28) /= x"0") then
                      upper_nonzero <= '1';
                   else
@@ -567,7 +603,18 @@ begin
                            state         <= READOAMRAM;
 
                         when x"8" | x"9" | x"A" | x"B" | x"C" =>
-                           if (unsigned(adr_save(24 downto 2)) >= unsigned(MaxPakAddr)) then
+                           if (cart_save_mode = '1' and cartio_seen = '1' and host_save = '0' and adr_save(24 downto 21) = "1111") then
+                              cart_io_rnw   <= '1';
+                              if (acc_save = ACCESS_32BIT) then
+                                 cartio_addr_r <= adr_save(24 downto 2) & '0';
+                                 cartio_second <= '1';
+                              else
+                                 cartio_addr_r <= adr_save(24 downto 1);
+                                 cartio_second <= '0';
+                              end if;
+                              cart_io_req   <= '1';
+                              state         <= CART_IO_WAIT;
+                           elsif (unsigned(adr_save(24 downto 2)) >= unsigned(MaxPakAddr)) then
                               state       <= READAFTERPAK;
                            elsif (specialmodule = '1' and unsigned(adr_save) >= 16#80000C4# and unsigned(adr_save) <= 16#80000C8#) then
                               state             <= READ_GPIO;
@@ -642,15 +689,29 @@ begin
                         when x"5" => state <= WRITE_PALETTE;   mem_bus_done <= '1';
                         when x"6" => state <= WRITE_VRAM;      mem_bus_done <= not vram_blocked or adr_save(16); vramwait <= vram_blocked;
                         when x"7" => state <= WRITE_OAM;       mem_bus_done <= '1';
-                        when x"8" =>
-                           mem_bus_done <= '1';
-                           state        <= IDLE;
-                           if (specialmodule = '1') then
-                              if (unsigned(adr_save) >= 16#80000C4# and unsigned(adr_save) <= 16#80000C8#) then
-                                 GPIO_writeEna <= '1';
-                                 GPIO_addr     <= std_logic_vector(to_unsigned(to_integer(unsigned(adr_save(3 downto 1))) - 4 / 2, 2));
-                                 GPIO_Dout     <= Dout_save(3 downto 0);
+                        when x"8" | x"9" | x"A" | x"B" | x"C" =>
+                           if (specialmodule = '1' and unsigned(adr_save) >= 16#80000C4# and unsigned(adr_save) <= 16#80000C8#) then
+                              mem_bus_done  <= '1';
+                              state         <= IDLE;
+                              GPIO_writeEna <= '1';
+                              GPIO_addr     <= std_logic_vector(to_unsigned(to_integer(unsigned(adr_save(3 downto 1))) - 4 / 2, 2));
+                              GPIO_Dout     <= Dout_save(3 downto 0);
+                           elsif (cart_save_mode = '1' and host_save = '0') then
+                              cartio_seen   <= '1';
+                              cart_io_rnw   <= '0';
+                              cart_io_wdata <= Dout_save(15 downto 0);
+                              if (acc_save = ACCESS_32BIT) then
+                                 cartio_addr_r <= adr_save(24 downto 2) & '0';
+                                 cartio_second <= '1';
+                              else
+                                 cartio_addr_r <= adr_save(24 downto 1);
+                                 cartio_second <= '0';
                               end if;
+                              cart_io_req   <= '1';
+                              state         <= CART_IO_WAIT;
+                           else
+                              mem_bus_done <= '1';
+                              state        <= IDLE;
                            end if;
 
                         when x"D" => state <= EEPROMWRITE;
@@ -1148,6 +1209,32 @@ begin
                   else
                      mem_bus_done <= '1';
                      state <= IDLE;
+                  end if;
+               end if;
+
+            when CART_IO_WAIT =>
+               if (cart_io_done = '1') then
+                  if (read_operation = '0') then
+                     -- The cart may now map different ROM: drop both caches.
+                     cartio_invalidate <= '1';
+                     sdram_addr_buf    <= (others => '1');
+                  end if;
+                  if (cartio_second = '1') then
+                     cartio_second <= '0';
+                     cartio_low    <= cart_io_rdata;
+                     cartio_addr_r <= std_logic_vector(unsigned(cartio_addr_r) + 1);
+                     cart_io_wdata <= Dout_save(31 downto 16);
+                     cart_io_req   <= '1';
+                  elsif (read_operation = '0') then
+                     mem_bus_done <= '1';
+                     state        <= IDLE;
+                  else
+                     if (acc_save = ACCESS_32BIT) then
+                        rotate_data <= cart_io_rdata & cartio_low;
+                     else
+                        rotate_data <= cart_io_rdata & cart_io_rdata;
+                     end if;
+                     state <= ROTATE;
                   end if;
                end if;
 

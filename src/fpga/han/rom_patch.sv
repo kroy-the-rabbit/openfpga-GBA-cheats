@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // ROM patches on the read side. A cartridge's mask ROM cannot be written and
-// the memory bus drops writes to the ROM region, so a code that patches ROM,
+// the memory bus drops the cheat engine's writes to the ROM region (a CPU
+// write reaches a physical cart, for flash carts), so a code that patches ROM,
 // the Action Replay "ROM patch" pair or a CodeBreaker write to 08xxxxxx, has
 // nowhere to land. This sits between rom_source_mux and the cache and
 // substitutes the patched bytes as the line is fetched, so the CPU sees the

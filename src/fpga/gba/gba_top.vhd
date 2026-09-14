@@ -102,6 +102,13 @@ entity gba_top is
       cart_eeprom_count    : out    std_logic_vector(16 downto 0) := (others => '0');
       cart_eeprom_dout     : in     std_logic := '1';
       cart_eeprom_done     : in     std_logic := '0';
+      -- Flash-cart halfword reads and writes in ROM space, see gba_memorymux.
+      cart_io_req          : out    std_logic := '0';
+      cart_io_rnw          : out    std_logic := '1';
+      cart_io_addr         : out    std_logic_vector(23 downto 0) := (others => '0');
+      cart_io_wdata        : out    std_logic_vector(15 downto 0) := (others => '0');
+      cart_io_rdata        : in     std_logic_vector(15 downto 0) := (others => '1');
+      cart_io_done         : in     std_logic := '0';
       -- save memory used
       save_eeprom           : out    std_logic;
       save_sram             : out    std_logic;
@@ -638,6 +645,13 @@ begin
       cart_eeprom_count     => cart_eeprom_count,
       cart_eeprom_dout      => cart_eeprom_dout,
       cart_eeprom_done      => cart_eeprom_done,
+      mem_bus_host          => debug_bus_active,
+      cart_io_req           => cart_io_req,
+      cart_io_rnw           => cart_io_rnw,
+      cart_io_addr          => cart_io_addr,
+      cart_io_wdata         => cart_io_wdata,
+      cart_io_rdata         => cart_io_rdata,
+      cart_io_done          => cart_io_done,
       mem_bus_dma3         => mem_bus_dma3,
       dma3_active          => dma3_active,
       dma_eepromcount      => dma_eepromcount,

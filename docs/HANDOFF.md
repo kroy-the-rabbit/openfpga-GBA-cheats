@@ -31,6 +31,14 @@ handling and Fast Burst on more cartridges need hardware qualification.
 Cartridge GPIO/RTC, solar and gyro are disconnected. Native Action Replay
 ROM-patch opcodes and encrypted codes need conversion to supported raw codes.
 
+## Branch `p6-flashcarts`
+
+Flash-cart support: CPU writes to ROM space reach the cart, and register reads
+at `09E00000..09FFFFFF` bypass the cache after the first write. Baseline on
+`f2a86db`: the Omega DE bootloops at a popup, most likely its firmware update prompt, and the
+EverDrive shows a red screen. Simulation passes; no fit or hardware test yet.
+See [CARTRIDGE.md](CARTRIDGE.md#flash-carts).
+
 ## Release preparation
 
 Use a signed `v0.9999.YYYYMMDD` tag whose commit is on `main`. Publish

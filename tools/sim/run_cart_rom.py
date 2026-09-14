@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Cartridge ROM read path: src/fpga/han/gba_cart_controller.sv.
 
-Ten passes.
+Twelve passes.
 
 1. sim/han/tb_gba_cart_controller.sv, Wokann's whole-controller bench,
    vendored verbatim. It covers SRAM, GPIO and EEPROM as well as ROM, so it
@@ -43,6 +43,10 @@ Ten passes.
 
 10. The header variant of the mux/arbiter bench reads the verified BMXE
     header from the cartridge pin model and checks the passive diagnostic.
+
+11, 12. sim/han/tb_cart_flashcart.sv runs an EZ-Flash Omega DE's and an
+    EverDrive's own register sequences through the arbiter and controller
+    against pin-level models of each cart.
 
 ROM_BURST is a module parameter with no port, and iverilog's -P only reaches
 root modules, so pass 1 gets a copy of the controller with the parameter
@@ -89,10 +93,11 @@ def no_burst_copy() -> str:
 
 
 def run(name: str, exe: str, sources: list, top: str | None = None,
-        allow_missing: bool = False) -> bool:
+        allow_missing: bool = False, params: dict | None = None) -> bool:
     select = ["-s", top] if top else []
     omit_unrelated = ["-i"] if allow_missing else []
-    subprocess.run(["iverilog", "-g2012", "-o", exe] + select + omit_unrelated + sources, check=True)
+    overrides = [f"-P{top}.{k}={v}" for k, v in (params or {}).items()]
+    subprocess.run(["iverilog", "-g2012", "-o", exe] + select + omit_unrelated + overrides + sources, check=True)
     result = subprocess.run([exe], capture_output=True, text=True)
     out = result.stdout + result.stderr
     ok = result.returncode == 0 and "PASS" in out and "FAIL" not in out
@@ -151,8 +156,14 @@ def main() -> int:
                    os.path.join(ROOT, "src", "fpga", "han", "cart_bus_arbiter.sv"),
                    os.path.join(ROOT, "src", "fpga", "han", "cart_header_check.sv")],
                   top="tb_rom_header_integration")
-    print(f"\n{passes}/10 benches pass")
-    return 0 if passes == 10 else 1
+    for everdrive, cart in ((0, "EZ-Flash Omega DE"), (1, "EverDrive")):
+        passes += run(f"{cart} register traffic through arbiter and controller",
+                      os.path.join(BUILD, f"tb_cart_flashcart_{everdrive}"),
+                      [os.path.join(ROOT, "sim", "han", "tb_cart_flashcart.sv"),
+                       os.path.join(ROOT, "src", "fpga", "han", "cart_bus_arbiter.sv"), CTRL],
+                      top="tb_cart_flashcart", params={"EVERDRIVE": everdrive})
+    print(f"\n{passes}/12 benches pass")
+    return 0 if passes == 12 else 1
 
 
 if __name__ == "__main__":

@@ -16,6 +16,11 @@ module cart_bus_arbiter (
     output wire save_done,
     input wire ee_req, ee_rnw, ee_din, ee_dma,
     output wire ee_done,
+    // Flash-cart register traffic: one halfword read or write in ROM space.
+    input wire io_req, io_rnw,
+    input wire [23:0] io_addr,
+    input wire [15:0] io_din,
+    output wire io_done,
     output reg ctl_rom_req,
     output reg [24:0] ctl_rom_addr,
     input wire ctl_rom_done,
@@ -26,13 +31,20 @@ module cart_bus_arbiter (
     input wire ctl_save_done,
     output reg ctl_ee_req, ctl_ee_rnw, ctl_ee_din, ctl_ee_dma,
     input wire ctl_ee_done,
+    output reg ctl_io_req, ctl_io_rnw,
+    output reg [23:0] ctl_io_addr,
+    output reg [15:0] ctl_io_din,
+    input wire ctl_io_done,
     output wire busy
 );
-    localparam IDLE=2'd0, ROM=2'd1, SAVE=2'd2, EEPROM=2'd3;
-    reg [1:0] active;
+    localparam IDLE=3'd0, ROM=3'd1, SAVE=3'd2, EEPROM=3'd3, IO=3'd4;
+    reg [2:0] active;
     reg active_probe;
     reg probe_prev;
-    reg p_rom, p_probe, p_save, p_ee;
+    reg p_rom, p_probe, p_save, p_ee, p_io;
+    reg io_rnw_q;
+    reg [23:0] io_addr_q;
+    reg [15:0] io_din_q;
     reg [24:0] rom_addr_q;
     reg [16:0] save_addr_q;
     reg save_rnw_q;
@@ -46,14 +58,17 @@ module cart_bus_arbiter (
     assign rom_done = active == ROM && !active_probe && ctl_rom_done;
     assign save_done = active == SAVE && ctl_save_done;
     assign ee_done = active == EEPROM && ctl_ee_done;
-    assign busy = active != IDLE || p_rom || p_save || p_ee;
+    assign io_done = active == IO && ctl_io_done;
+    assign busy = active != IDLE || p_rom || p_save || p_ee || p_io;
 
     always @(posedge clk or negedge reset_n) begin
         if (!reset_n) begin
             active <= IDLE;
             active_probe <= 0;
             probe_prev <= 0;
-            p_rom <= 0; p_probe <= 0; p_save <= 0; p_ee <= 0;
+            p_rom <= 0; p_probe <= 0; p_save <= 0; p_ee <= 0; p_io <= 0;
+            io_rnw_q <= 1; io_addr_q <= 0; io_din_q <= 0;
+            ctl_io_req <= 0; ctl_io_rnw <= 1; ctl_io_addr <= 0; ctl_io_din <= 0;
             rom_addr_q <= 0; save_addr_q <= 0; save_rnw_q <= 1;
             save_din_q <= 0; ee_rnw_q <= 1; ee_din_q <= 0; ee_dma_q <= 0;
             ctl_rom_req <= 0; ctl_save_req <= 0; ctl_ee_req <= 0;
@@ -62,7 +77,7 @@ module cart_bus_arbiter (
             ctl_ee_rnw <= 1; ctl_ee_din <= 0; ctl_ee_dma <= 0;
         end else begin
             probe_prev <= probe_req;
-            ctl_rom_req <= 0; ctl_save_req <= 0; ctl_ee_req <= 0;
+            ctl_rom_req <= 0; ctl_save_req <= 0; ctl_ee_req <= 0; ctl_io_req <= 0;
             if (probe_pulse || rom_req) begin
                 p_rom <= 1;
                 p_probe <= probe_pulse;
@@ -77,6 +92,10 @@ module cart_bus_arbiter (
             if (ee_req) begin
                 p_ee <= 1;
                 ee_rnw_q <= ee_rnw; ee_din_q <= ee_din; ee_dma_q <= ee_dma;
+            end
+            if (io_req) begin
+                p_io <= 1;
+                io_rnw_q <= io_rnw; io_addr_q <= io_addr; io_din_q <= io_din;
             end
             case (active)
                 IDLE: begin
@@ -97,6 +116,13 @@ module cart_bus_arbiter (
                         ctl_save_rnw <= save_rnw_q;
                         ctl_save_din <= save_din_q;
                         ctl_save_req <= 1;
+                    end else if (p_io) begin
+                        p_io <= 0;
+                        active <= IO;
+                        ctl_io_rnw <= io_rnw_q;
+                        ctl_io_addr <= io_addr_q;
+                        ctl_io_din <= io_din_q;
+                        ctl_io_req <= 1;
                     end else if (p_rom) begin
                         p_rom <= 0;
                         active <= ROM;
@@ -108,6 +134,8 @@ module cart_bus_arbiter (
                 ROM: if (ctl_rom_done) active <= IDLE;
                 SAVE: if (ctl_save_done) active <= IDLE;
                 EEPROM: if (ctl_ee_done) active <= IDLE;
+                IO: if (ctl_io_done) active <= IDLE;
+                default: active <= IDLE;
             endcase
         end
     end

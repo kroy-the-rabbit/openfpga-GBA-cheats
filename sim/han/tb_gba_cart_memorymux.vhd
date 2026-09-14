@@ -51,6 +51,18 @@ architecture test of tb_gba_cart_memorymux is
    signal io_done : std_logic := '1';
    signal io_data : std_logic_vector(31 downto 0) := x"963CA571";
    signal io_writes : natural := 0;
+   -- flash-cart halfword traffic
+   signal cart_io_req, cart_io_done : std_logic := '0';
+   signal cart_io_rnw : std_logic := '1';
+   signal cart_io_addr : std_logic_vector(23 downto 0);
+   signal cart_io_wdata : std_logic_vector(15 downto 0);
+   signal cart_io_rdata : std_logic_vector(15 downto 0) := (others => '0');
+   signal cio_reads, cio_writes : natural := 0;
+   type cio_log is array(0 to 1) of std_logic_vector(39 downto 0);
+   signal cio_last : cio_log := (others => (others => '0'));   -- addr & wdata, newest in 0
+   signal cio_wait : natural range 0 to 3 := 0;
+   signal mem_bus_host : std_logic := '0';
+   signal rom_far : boolean := false;   -- a host read of 09E00000's line
 begin
    clk <= not clk after 5 ns;
    gb_bus.done <= io_done;
@@ -115,6 +127,13 @@ begin
       cart_eeprom_count => cart_eeprom_count,
       cart_eeprom_dout => cart_eeprom_dout,
       cart_eeprom_done => cart_eeprom_done,
+      mem_bus_host => mem_bus_host,
+      cart_io_req => cart_io_req,
+      cart_io_rnw => cart_io_rnw,
+      cart_io_addr => cart_io_addr,
+      cart_io_wdata => cart_io_wdata,
+      cart_io_rdata => cart_io_rdata,
+      cart_io_done => cart_io_done,
       mem_bus_dma3 => mem_bus_dma3,
       dma3_active => dma3_active,
       dma_eepromcount => dma_eepromcount,
@@ -163,10 +182,30 @@ begin
    begin
       if rising_edge(clk) then
          rom_done <= '0';
+         cart_io_done <= '0';
+         if cart_io_req = '1' then
+            assert cio_wait = 0 report "Overlapping flash-cart request" severity failure;
+            assert cart_save_mode = '1' report "Flash-cart request outside cartridge mode" severity failure;
+            cio_wait <= 2;
+            cio_last(1) <= cio_last(0);
+            cio_last(0) <= cart_io_addr & cart_io_wdata;
+            if cart_io_rnw = '1' then
+               cio_reads <= cio_reads + 1;
+               -- Every read answers differently, so a cached answer shows.
+               cart_io_rdata <= std_logic_vector(to_unsigned(16#C000# + cio_reads, 16));
+            else
+               cio_writes <= cio_writes + 1;
+            end if;
+         elsif cio_wait > 0 then
+            cio_wait <= cio_wait - 1;
+            if cio_wait = 1 then cart_io_done <= '1'; end if;
+         end if;
          if rom_req = '1' then
-            assert unsigned(rom_addr) < 48 report "Unexpected ROM request outside header" severity failure;
+            rom_far <= unsigned(rom_addr) = 16#780000#;
+            assert unsigned(rom_addr) < 48 or unsigned(rom_addr) = 16#780000#
+               report "Unexpected ROM request outside header" severity failure;
             assert rom_wait = 0 report "Overlapping ROM request" severity failure;
-            rom_word <= to_integer(unsigned(rom_addr));
+            if unsigned(rom_addr) < 48 then rom_word <= to_integer(unsigned(rom_addr)); else rom_word <= 0; end if;
             rom_wait <= 3;
             rom_requests <= rom_requests + 1;
          elsif rom_wait > 0 then
@@ -176,6 +215,7 @@ begin
                rom_first <= header(rom_word);
                if rom_word mod 2 = 0 then rom_second <= header(rom_word + 1);
                else rom_second <= header(rom_word - 1); end if;
+               if rom_far then rom_first <= x"0BADF00D"; rom_second <= x"0BADF00D"; end if;
             end if;
          end if;
          cart_save_done <= cart_save_req;
@@ -307,6 +347,62 @@ begin
       access_bus(x"04000090", '1', x"00000000", ACCESS_32BIT);
       assert mem_bus_din = io_data report "Delayed I/O reply mismatch" severity failure;
       report "PASS I/O reply sampling: readable/unreadable lanes, widths, writes and delayed reads";
+      -- Flash carts. A ROM-space write reaches the cart as halfwords and
+      -- completes only when the cart has taken it.
+      access_bus(x"09FE0000", '0', x"0000D200", ACCESS_16BIT);
+      assert cio_writes = 1 and cio_last(0) = x"FF0000" & x"D200"
+         report "16-bit ROM-space write did not reach the cart" severity failure;
+      access_bus(x"08000000", '0', x"87651500", ACCESS_32BIT);
+      assert cio_writes = 3 and cio_last(1) = x"000000" & x"1500" and cio_last(0) = x"000001" & x"8765"
+         report "32-bit ROM-space write was not two halfwords, low first" severity failure;
+      access_bus(x"0A020000", '0', x"0000D200", ACCESS_16BIT);
+      assert cio_writes = 4 and cio_last(0) = x"010000" & x"D200"
+         report "ROM mirror write did not reach the cart" severity failure;
+      -- After a write, 09E00000..09FFFFFF is read from the cart every time.
+      before_count := rom_requests;
+      access_bus(x"09E00000", '1', x"00000000", ACCESS_16BIT);
+      assert cio_last(0)(39 downto 16) = x"F00000" and mem_bus_din = x"0000C000"
+         report "Register read did not come from the cart" severity failure;
+      access_bus(x"09E00000", '1', x"00000000", ACCESS_16BIT);
+      assert mem_bus_din = x"0000C001" report "Register read was served from a cache" severity failure;
+      access_bus(x"09FC0010", '1', x"00000000", ACCESS_32BIT);
+      assert cio_last(1)(39 downto 16) = x"FE0008" and cio_last(0)(39 downto 16) = x"FE0009"
+         and mem_bus_din = x"C003C002"
+         report "32-bit register read was not two halfwords, low first" severity failure;
+      access_bus(x"09FC0013", '1', x"00000000", ACCESS_8BIT);
+      assert cio_last(0)(39 downto 16) = x"FE0009" and mem_bus_din = x"000000C0"
+         report "8-bit register read took the wrong halfword or lane" severity failure;
+      assert cio_reads = 5 and rom_requests = before_count
+         report "Register reads touched the ROM cache" severity failure;
+      -- A write drops both caches: a line already cached, and the 8-byte
+      -- line held beside the cache, are fetched again.
+      access_bus(x"08000010", '1', x"00000000", ACCESS_16BIT);
+      access_bus(x"08000012", '1', x"00000000", ACCESS_16BIT);
+      before_count := rom_requests;
+      access_bus(x"08000012", '1', x"00000000", ACCESS_16BIT);
+      assert rom_requests = before_count report "ROM line was not cached before the write" severity failure;
+      access_bus(x"09880000", '0', x"00000200", ACCESS_16BIT);
+      access_bus(x"08000012", '1', x"00000000", ACCESS_16BIT);
+      assert rom_requests = before_count + 1 and mem_bus_din = x"0000" & header(4)(31 downto 16)
+         report "ROM line was served stale after a flash-cart write" severity failure;
+      -- The cheat engine's writes stay dropped, and its reads of a register
+      -- window come from ROM, never from the cart's register.
+      mem_bus_host <= '1'; before_count := cio_writes;
+      access_bus(x"09FE0000", '0', x"0000D200", ACCESS_16BIT);
+      assert cio_writes = before_count report "Cheat-engine ROM write reached the cartridge" severity failure;
+      before_count := cio_reads;
+      access_bus(x"09E00000", '1', x"00000000", ACCESS_16BIT);
+      assert cio_reads = before_count and mem_bus_din = x"0000F00D"
+         report "Cheat-engine read reached a cartridge register" severity failure;
+      mem_bus_host <= '0';
+      -- A restart forgets the cart was written, and SD mode never forwards.
+      gb_on <= '0'; wait for 30 ns; gb_on <= '1';
+      for i in 0 to 1030 loop wait until falling_edge(clk); end loop;
+      cart_save_mode <= '0'; before_count := cio_writes;
+      access_bus(x"09FE0000", '0', x"0000D200", ACCESS_16BIT);
+      assert cio_writes = before_count report "SD ROM write reached the cartridge" severity failure;
+      cart_save_mode <= '1';
+      report "PASS flash cart: ROM-space writes as halfwords, uncached register reads after a write, both caches dropped, cheat engine kept off the cart, SD mode untouched";
       -- Raw Flash unlock, bank and ID command bytes must reach the chip,
       -- with no emulated ID substitution or bank-address translation.
       access_bus(x"0E005555", '0', x"000000AA");

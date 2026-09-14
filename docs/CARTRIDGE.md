@@ -23,6 +23,7 @@ new cheats or a cartridge that has not been qualified.
 | Interrupted-transfer guard | Covered in simulation; not hardware-qualified |
 | Empty or partially inserted slot | Not hardware-qualified |
 | Cartridge RTC/GPIO, solar and gyro | Not routed |
+| Flash carts: EZ-Flash Omega DE, EverDrive | `p6-flashcarts`; simulated, not hardware-tested |
 | Savestates, sleep and link cable | Removed |
 
 ## Quick start
@@ -131,6 +132,36 @@ holds sixteen ROM patches. Conditional ROM codes are ignored.
 
 Browse to the `.cht` or `.chtbin` once through **Cheats**. Loading a file
 does not reset the game or enable cheats. See [CHEATS.md](CHEATS.md).
+
+## Flash carts
+
+Branch `p6-flashcarts`. Flash carts are driven through ROM space: they unlock,
+select pages and reach their SD card with halfword writes and reads there.
+The released core drops CPU writes to ROM space. On `f2a86db` the Omega DE
+bootloops at a popup, most likely its firmware update prompt, since its version
+read comes back as ROM data; the EverDrive shows a red screen.
+
+- A CPU or DMA write to `08000000..0CFFFFFF` reaches the cart as one CS#-latched
+  halfword write per halfword. The ROM cache and the 8-byte line beside it
+  are dropped afterwards, since the cart may now map different ROM.
+- After the first such write, reads from `09E00000..09FFFFFF` go to the cart
+  one halfword at a time, uncached and never as a burst. The Omega DE keeps
+  its version, SD status and sector data at `09E00000`; the EverDrive keeps
+  its registers, including the SD_DAT FIFO, at `09FC0000`. The latch clears
+  on reset.
+- Cheat-engine traffic is not forwarded, so a ROM-patch cheat never writes
+  to a cart or consumes a register read.
+- The GPIO emulation at `080000C4..080000C8` keeps its writes when the game's
+  quirk enables it.
+
+**Do not accept the Omega DE's firmware update prompt** on any build unless
+the version it reports is known to be correct.
+
+`tools/sim/run_cart_rom.py` replays each cart's own register sequences, from
+`ez-flash/omega-de-kernel` and the EverDrive X5 driver in
+`afska/gba-flashcartio`, against pin models of both carts.
+`tools/sim/run_cart_memorymux.py` checks forwarding, uncached reads, cache
+invalidation and cheat-engine isolation through the real memorymux and cache.
 
 ## ROM timing
 

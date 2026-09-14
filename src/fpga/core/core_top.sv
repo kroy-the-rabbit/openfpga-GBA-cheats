@@ -254,6 +254,10 @@ wire [16:0] cart_save_addr;
 wire [7:0] cart_save_din, cart_save_dout;
 wire       cart_eeprom_req, cart_eeprom_rnw, cart_eeprom_din;
 wire       cart_eeprom_dma, cart_eeprom_last, cart_eeprom_dout, cart_eeprom_done;
+// Flash-cart halfword traffic in ROM space: gba_top -> arbiter -> controller.
+wire        cart_io_req, cart_io_rnw, cart_io_done;
+wire [23:0] cart_io_addr;
+wire [15:0] cart_io_wdata, cart_io_rdata;
 wire [16:0] cart_eeprom_count;
 wire       cart_eeprom_dma_active;
 wire       cart_eeprom_fault, cart_eeprom_fault_s;
@@ -1880,6 +1884,12 @@ gba_top #(
     .cart_eeprom_last    ( cart_eeprom_last ),
     .cart_eeprom_dout    ( cart_eeprom_dout ),
     .cart_eeprom_done    ( cart_eeprom_done ),
+    .cart_io_req         ( cart_io_req ),
+    .cart_io_rnw         ( cart_io_rnw ),
+    .cart_io_addr        ( cart_io_addr ),
+    .cart_io_wdata       ( cart_io_wdata ),
+    .cart_io_rdata       ( cart_io_rdata ),
+    .cart_io_done        ( cart_io_done ),
     .GBA_lockspeed       ( ~fast_forward ),
     .GBA_stable_ff_video ( ff_video_stable_s ),
     .GBA_cputurbo        ( 1'b0 ),
@@ -1995,7 +2005,8 @@ gba_top #(
 // conservative bus timing. Physical save traffic is queued alongside ROM
 // reads. EEPROM read commands pass a prefix filter in read-only mode;
 // destructive save commands require the Cartridge Saves menu setting.
-// GPIO/RTC remains disconnected.
+// GPIO/RTC remains disconnected. Writes to ROM space reach the cart as
+// halfword accesses, for flash carts; see gba_memorymux.
 
 // Held in reset outside a powered Play Cartridge launch. This restores the
 // slot to the idle posture the pre-cartridge core used, and it is a property
@@ -2031,6 +2042,9 @@ wire [16:0] ctl_save_addr;
 wire [7:0]  ctl_save_din;
 wire        ctl_ee_req, ctl_ee_rnw, ctl_ee_din, ctl_ee_dma;
 wire        ctl_ee_done, ctl_ee_dout;
+wire        ctl_io_req, ctl_io_rnw, ctl_io_done;
+wire [23:0] ctl_io_addr;
+wire [15:0] ctl_io_din;
 wire        ee_bridge_req, ee_bridge_rnw, ee_bridge_din, ee_bridge_dma, ee_bridge_done;
 wire        arb_save_done;
 
@@ -2061,7 +2075,11 @@ cart_bus_arbiter cart_arb (
     .ctl_save_req(ctl_save_req), .ctl_save_addr(ctl_save_addr),
     .ctl_save_rnw(ctl_save_rnw), .ctl_save_din(ctl_save_din), .ctl_save_done(ctl_save_done),
     .ctl_ee_req(ctl_ee_req), .ctl_ee_rnw(ctl_ee_rnw), .ctl_ee_din(ctl_ee_din),
-    .ctl_ee_dma(ctl_ee_dma), .ctl_ee_done(ctl_ee_done), .busy()
+    .ctl_ee_dma(ctl_ee_dma), .ctl_ee_done(ctl_ee_done),
+    .io_req(cart_io_req && cart_rom_mode), .io_rnw(cart_io_rnw),
+    .io_addr(cart_io_addr), .io_din(cart_io_wdata), .io_done(cart_io_done),
+    .ctl_io_req(ctl_io_req), .ctl_io_rnw(ctl_io_rnw), .ctl_io_addr(ctl_io_addr),
+    .ctl_io_din(ctl_io_din), .ctl_io_done(ctl_io_done), .busy()
 );
 
 gba_cart_controller cart_ctl (
@@ -2103,6 +2121,13 @@ gba_cart_controller cart_ctl (
     .eeprom_dma             ( ctl_ee_dma ),
     .eeprom_dout            ( ctl_ee_dout ),
     .eeprom_done            ( ctl_ee_done ),
+
+    .io_req                 ( ctl_io_req ),
+    .io_rnw                 ( ctl_io_rnw ),
+    .io_addr                ( ctl_io_addr ),
+    .io_din                 ( ctl_io_din ),
+    .io_dout                ( cart_io_rdata ),
+    .io_done                ( ctl_io_done ),
 
     .gpio_req               ( 1'b0 ),
     .gpio_rnw               ( 1'b1 ),
