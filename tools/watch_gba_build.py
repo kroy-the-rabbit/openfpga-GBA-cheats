@@ -207,9 +207,13 @@ def main():
                         raise RuntimeError('Post-fit analysis failed: ' + errors[0])
                 raise RuntimeError(f'Build exited {state["build_rc"]}; see {folder / "build.log"}')
             core = json.loads(source(args.commit, 'pkg/Cores/kroy.GBA/core.json'))
-            version = core['core']['metadata']['version'] + '.' + args.commit[:7]
             bitname = core['core']['cores'][0]['filename']
-            artifacts = [bitname, f'kroy.GBA_{version}.zip']
+            # The package is named for the UTC date it was built on
+            # (tools/podman/version.sh), which only the runner knows.
+            packages = run(SSH + [f'cd {remote} && ls kroy.GBA_*.zip']).split()
+            if len(packages) != 1:
+                raise RuntimeError(f'Expected one package on the runner, found {packages}')
+            artifacts = [bitname, packages[0]]
             if not args.baseline and not analysis_exists:
                 raise ValueError('Missing post-fit path analysis log')
             for name in artifacts:
