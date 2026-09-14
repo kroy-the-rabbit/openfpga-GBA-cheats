@@ -42,8 +42,9 @@ register-read turnaround and still fails the mount. `10a7163` reads DMA copies
 from cart registers as one burst: the EverDrive mounts, loads its OS and runs
 games on ROM Timing **Slow** (its PSRAM fill needs the long strobe). The
 `EE:`/`SF:` menu fields carry a flash-cart diagnostic on this branch, see
-[BOOT-DEBUG.md](BOOT-DEBUG.md). Next: RTC port reads to the cart (the EverDrive
-OS reported a dead battery), then an Omega DE game load.
+[BOOT-DEBUG.md](BOOT-DEBUG.md). Omega DE runs games on Turnaround; an EEPROM
+session now latches the full `FFFF80` so the Omega answers Minish Cap's save.
+The EverDrive battery warning is still open.
 See [CARTRIDGE.md](CARTRIDGE.md#flash-carts).
 
 ## Release preparation

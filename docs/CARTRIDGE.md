@@ -149,10 +149,9 @@ read comes back as ROM data; the EverDrive shows a red screen.
   its version, SD status and sector data at `09E00000`; the EverDrive keeps
   its registers, including the SD_DAT FIFO, at `09FC0000`. The latch clears
   on reset.
-- After that first write, reads of the RTC port at `080000C4..C8` go to the
-  cart too unless the game's quirk selects the emulated RTC. The EverDrive OS
-  reads its clock there and reported a dead battery while the reads came
-  from the ROM cache.
+- The RTC port at `080000C4..C8` is **not** forwarded to the cart on a flash
+  cart: a flash cart maps real ROM there. Forwarding it garbled the EverDrive
+  OS boot code and Minish Cap's tiles on the Omega (2026-09-14).
 - An EEPROM session latches the address games use, `0DFFFF00`, which
   reaches the cart as `FFFF80`, with the host driving AD before CS# falls. A
   real EEPROM looks at A23 alone; the Omega DE's FPGA did not answer a

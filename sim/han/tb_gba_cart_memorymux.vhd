@@ -207,8 +207,7 @@ begin
          end if;
          if rom_req = '1' then
             rom_far <= unsigned(rom_addr) = 16#780000#;
-            -- The header, the line beside the RTC port, or the far line.
-            assert unsigned(rom_addr) < 52 or unsigned(rom_addr) = 16#780000#
+            assert unsigned(rom_addr) < 48 or unsigned(rom_addr) = 16#780000#
                report "Unexpected ROM request outside header" severity failure;
             assert rom_wait = 0 report "Overlapping ROM request" severity failure;
             if unsigned(rom_addr) < 48 then rom_word <= to_integer(unsigned(rom_addr)); else rom_word <= 0; end if;
@@ -384,17 +383,6 @@ begin
          report "8-bit register read took the wrong halfword or lane" severity failure;
       assert cio_reads = 5 and rom_requests = before_count
          report "Register reads touched the ROM cache" severity failure;
-      -- The RTC port answers from the cart too, but the ROM beside it is ROM.
-      access_bus(x"080000C4", '1', x"00000000", ACCESS_16BIT);
-      assert cio_last(0)(39 downto 16) = x"000062" and mem_bus_din = x"0000C005"
-         report "RTC port read did not come from the cart" severity failure;
-      access_bus(x"080000C8", '1', x"00000000", ACCESS_16BIT);
-      assert cio_last(0)(39 downto 16) = x"000064" and mem_bus_din = x"0000C006"
-         report "RTC control read did not come from the cart" severity failure;
-      before_count := cio_reads;
-      access_bus(x"080000C2", '1', x"00000000", ACCESS_16BIT);
-      access_bus(x"080000CA", '1', x"00000000", ACCESS_16BIT);
-      assert cio_reads = before_count report "ROM beside the RTC port was read from the cart" severity failure;
       -- A DMA copy from a register is one sequential burst on the cart: the
       -- hold stays up across its reads and drops at the CPU's next access.
       mem_bus_dma <= '1';
