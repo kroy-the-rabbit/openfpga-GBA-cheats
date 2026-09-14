@@ -79,7 +79,8 @@ def validate(folder, commit, *, baseline=False):
             if path == core_path:
                 parsed = json.loads(actual)
                 metadata = parsed['core']['metadata']
-                if metadata['version'] != core['core']['metadata']['version'] + '.' + commit[:7]:
+                stamp = metadata['date_release'].replace('-', '')
+                if not re.fullmatch(r'\d{8}', stamp) or metadata['version'] != core['core']['metadata']['version'] + '.' + stamp:
                     raise ValueError('Package version does not match source')
                 metadata['version'] = core['core']['metadata']['version']
                 metadata['date_release'] = core['core']['metadata']['date_release']
