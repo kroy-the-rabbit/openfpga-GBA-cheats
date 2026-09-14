@@ -256,6 +256,7 @@ wire       cart_eeprom_req, cart_eeprom_rnw, cart_eeprom_din;
 wire       cart_eeprom_dma, cart_eeprom_last, cart_eeprom_dout, cart_eeprom_done;
 // Flash-cart halfword traffic in ROM space: gba_top -> arbiter -> controller.
 wire        cart_io_req, cart_io_rnw, cart_io_done, cart_io_hold;
+wire [31:0] gba_debug_pc, gba_debug_mixed;
 wire [23:0] cart_io_addr;
 wire [15:0] cart_io_wdata, cart_io_rdata;
 wire [16:0] cart_eeprom_count;
@@ -1992,8 +1993,8 @@ gba_top #(
     .sound_out_left      ( sound_out_left ),
     .sound_out_right     ( sound_out_right ),
     // Debug outputs
-    .debug_cpu_pc        (),
-    .debug_cpu_mixed     (),
+    .debug_cpu_pc        ( gba_debug_pc ),
+    .debug_cpu_mixed     ( gba_debug_mixed ),
     .debug_irq           (),
     .debug_dma           (),
     .debug_mem           ()
@@ -2176,12 +2177,32 @@ always @(posedge clk_sys) begin
         if (cart_eeprom_done && cart_eeprom_rnw) ee_last <= {ee_last[14:0], cart_eeprom_dout};
     end
 end
+// Not shown while FC has the snapshot; put back on the merge to main.
 wire [31:0] ee_debug = (cart_eeprom_fault_why != 32'd0) ? cart_eeprom_fault_why
                                                         : {ee_host_cnt, ee_ctl_cnt, ee_last};
 
+// FC: where the CPU is and what it last asked a flash cart, while
+// p6-flashcarts brings the carts up. Layout in docs/BOOT-DEBUG.md.
+reg  [5:0]  fc_io_cnt  = 6'd0;
+reg  [23:0] fc_io_addr = 24'd0;
+reg         fc_io_rnw  = 1'b0;
+always @(posedge clk_sys) begin
+    if (!cart_ctl_reset_n) begin
+        fc_io_cnt  <= 6'd0;
+        fc_io_addr <= 24'd0;
+        fc_io_rnw  <= 1'b0;
+    end else if (cart_io_req && cart_rom_mode) begin
+        fc_io_cnt  <= fc_io_cnt + 6'd1;
+        fc_io_addr <= cart_io_addr;
+        fc_io_rnw  <= cart_io_rnw;
+    end
+end
+wire [31:0] fc_debug = {gba_debug_pc[27:24], gba_debug_mixed[0], fc_io_rnw, fc_io_cnt,
+                        fc_io_addr[23:20], fc_io_addr[15:0]};
+
 cart_debug_snapshot #(.WIDTH(32)) boot_debug (
     .clk_host(clk_74a), .clk_sys(clk_sys), .host_menu(osnotify_inmenu),
-    .sys_debug(ee_debug),
+    .sys_debug(fc_debug),
     .host_debug(cart_debug_host), .page()
 );
 
