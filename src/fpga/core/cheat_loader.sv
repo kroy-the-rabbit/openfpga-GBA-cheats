@@ -360,6 +360,19 @@ module cheat_loader #(
   localparam EW = 68;
   reg [EW-1:0] gbuf [0:2*MAX_ENTRIES-1];
 
+  // The delimiter stage. A delimiter registers the decoded token here and the
+  // collector commits it on the next clock. Decode, collector update and the
+  // bank flip in one clock was the design's worst setup path once flash-cart
+  // logic joined the fit, -0.512 ns on 2026-09-14: tok_len through pairing,
+  // the type decode and the 28-bit range checks into nx_len, cg_len and the
+  // bank registers. Bytes arrive at most one in four clocks, so the next
+  // byte cannot land before the commit.
+  reg          dl_go;        // a decoded token is waiting to be committed
+  reg          dl_end;       // its delimiter also ended the value
+  reg          dl_add;
+  reg [3:0]    dl_optype;
+  reg [EW-1:0] dl_entry;
+
   reg          bank;         // the bank the collector is writing
   reg [CW-1:0] buf_len;
   reg [CW-1:0] cond_at;      // index of a compare entry with nothing after it yet
@@ -379,8 +392,8 @@ module cheat_loader #(
     nx_done    = group_done;
     nx_bad     = group_bad;
     nx_wr      = 1'b0;
-    if (d_add && !group_done) begin
-      if (has_cond && (d_optype != OPT_ALWAYS)) begin
+    if (dl_go && dl_add && !group_done) begin
+      if (has_cond && (dl_optype != OPT_ALWAYS)) begin
         // Two compares in a row. skip_next suppresses exactly one entry, so a
         // chain cannot be expressed; the alternative is a write that runs when
         // it should not. Drop back to the compare and close the cheat.
@@ -393,7 +406,7 @@ module cheat_loader #(
       end else begin
         nx_wr      = 1'b1;
         nx_len     = buf_len + 1'b1;
-        nx_hascond = (d_optype != OPT_ALWAYS);
+        nx_hascond = (dl_optype != OPT_ALWAYS);
         nx_cond    = buf_len;
       end
     end
@@ -470,6 +483,8 @@ module cheat_loader #(
       pend_bad     <= 1'b0;
       eof_flush    <= 1'b0;  eof_bank   <= 1'b0;  eof_len      <= 0;
       eof_bad      <= 1'b0;
+      dl_go        <= 1'b0;  dl_end     <= 1'b0;  dl_add       <= 1'b0;
+      dl_optype    <= 4'd0;  dl_entry   <= 0;
       req_valid    <= 1'b0;  req_bank   <= 1'b0;  req_len      <= 0;
       fl_idx       <= 0;     fl_len     <= 0;     fl_bank      <= 1'b0;
       fl_state     <= 2'd0;  fl_q       <= 0;     eof_seen     <= 1'b0;
@@ -531,6 +546,41 @@ module cheat_loader #(
       if (wr) idle <= 0;
       else if (!idle_done && (pend_valid || collecting)) idle <= idle + 1'b1;
 
+      // ------------------------------------------------- delimiter commit --
+      // Before byte arrival, so a delimiter landing here re-arms dl_go.
+      if (dl_go) begin
+        dl_go      <= 1'b0;
+        buf_len    <= nx_len;
+        cond_at    <= nx_cond;
+        has_cond   <= nx_hascond;
+        group_done <= nx_done;
+        group_bad  <= nx_bad;
+        if (nx_wr) gbuf[{bank, buf_len[AW-1:0]}] <= dl_entry;
+
+        if (dl_end) begin
+          // End of the value: park this cheat until its enable is known.
+          collecting <= 1'b0;
+          have_op1   <= 1'b0;
+          buf_len    <= 0;
+          cond_at    <= 0;
+          has_cond   <= 1'b0;
+          group_done <= 1'b0;
+          group_bad  <= 1'b0;
+          if (cg_len != 0) begin
+            // Structurally there can be nothing parked here: the opening
+            // quote of this cheat handed the previous one over. Raised
+            // rather than silently overwritten, so the invariant is
+            // checkable in simulation instead of assumed.
+            if (pend_valid) overrun <= 1'b1;
+            pend_valid <= 1'b1;
+            pend_bank  <= bank;
+            pend_len   <= cg_len;
+            pend_bad   <= nx_bad;
+            bank       <= ~bank;
+          end
+        end
+      end
+
       // ------------------------------------------------------ byte arrival --
       if (wr) begin
         // Counts every byte handed over, parsed or not. Distinguishes "the file
@@ -558,36 +608,12 @@ module cheat_loader #(
             end
             if (d_encrypt && pair_v) encrypted <= 1'b1;
 
-            buf_len    <= nx_len;
-            cond_at    <= nx_cond;
-            has_cond   <= nx_hascond;
-            group_done <= nx_done;
-            group_bad  <= nx_bad;
-            if (nx_wr) gbuf[{bank, buf_len[AW-1:0]}] <=
-                         {d_mask, d_optype, d_addr, d_val};
-
-            if (is_quote || is_nl) begin
-              // End of the value: park this cheat until its enable is known.
-              collecting <= 1'b0;
-              have_op1   <= 1'b0;
-              buf_len    <= 0;
-              cond_at    <= 0;
-              has_cond   <= 1'b0;
-              group_done <= 1'b0;
-              group_bad  <= 1'b0;
-              if (cg_len != 0) begin
-                // Structurally there can be nothing parked here: the opening
-                // quote of this cheat handed the previous one over. Raised
-                // rather than silently overwritten, so the invariant is
-                // checkable in simulation instead of assumed.
-                if (pend_valid) overrun <= 1'b1;
-                pend_valid <= 1'b1;
-                pend_bank  <= bank;
-                pend_len   <= cg_len;
-                pend_bad   <= nx_bad;
-                bank       <= ~bank;
-              end
-            end
+            // The collector takes it on the next clock.
+            dl_go     <= 1'b1;
+            dl_end    <= is_quote || is_nl;
+            dl_add    <= d_add;
+            dl_optype <= d_optype;
+            dl_entry  <= {d_mask, d_optype, d_addr, d_val};
           end
         end else if (in_str) begin
           if (is_quote) begin
@@ -674,7 +700,18 @@ module cheat_loader #(
             pend_code    <= 1'b0;  pend_desc <= 1'b0;  pend_enable <= 1'b0;
           end
         end
-      end else if (at_eof && (pend_valid || collecting)) begin
+      end else if (at_eof && !dl_go && collecting && tok_len != 5'd0) begin
+        // A token left half read when the file ended still counts, exactly as
+        // a delimiter would have flushed it: through the delimiter stage, then
+        // the end of file is taken with nothing left in the token.
+        tok_len   <= 5'd0;
+        tok_ovf   <= 1'b0;
+        dl_go     <= 1'b1;
+        dl_end    <= 1'b0;
+        dl_add    <= d_add;
+        dl_optype <= d_optype;
+        dl_entry  <= {d_mask, d_optype, d_addr, d_val};
+      end else if (at_eof && !dl_go && (pend_valid || collecting)) begin
         // Nothing more is coming. An unterminated value ends here, and whatever
         // is parked goes out with no enable key, which means on.
         idle       <= 0;
@@ -688,9 +725,6 @@ module cheat_loader #(
         has_cond   <= 1'b0;
         group_done <= 1'b0;
         group_bad  <= 1'b0;
-        // A token left half read when the file ended still counts, exactly as
-        // a delimiter would have flushed it.
-        if (nx_wr) gbuf[{bank, buf_len[AW-1:0]}] <= {d_mask, d_optype, d_addr, d_val};
         if (pend_valid) begin
           pend_valid <= 1'b0;
           eof_flush  <= 1'b1;

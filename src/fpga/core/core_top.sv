@@ -2086,7 +2086,10 @@ cart_bus_arbiter cart_arb (
 gba_cart_controller cart_ctl (
     .clk                    ( clk_sys ),
     .reset_n                ( cart_ctl_reset_n ),
-    .phi_sel                ( cart_cfg_s[1:0] ),
+    // The menu writes only cart_cfg[7:5]. PHI and the GPIO write-timing sweep
+    // are held at their defaults as constants: the IO access that flash carts
+    // use is on the critical path, and a constant lets its compares fold.
+    .phi_sel                ( 2'd0 ),
     .rom_profile            ( cart_cfg_s[7:5] ),
 
     .cart_tran_bank2        ( cart_tran_bank2 ),
@@ -2136,7 +2139,7 @@ gba_cart_controller cart_ctl (
     .gpio_din               ( 4'd0 ),
     .gpio_dout              (),
     .gpio_done              (),
-    .gpio_timing_mode       ( cart_cfg_s[4:2] ),
+    .gpio_timing_mode       ( 3'd0 ),
     .gpio_recover_set       ( 14'd10000 ),
     .gpio_diag              (),
 
