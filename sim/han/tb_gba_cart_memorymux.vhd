@@ -207,7 +207,9 @@ begin
          end if;
          if rom_req = '1' then
             rom_far <= unsigned(rom_addr) = 16#780000#;
-            assert unsigned(rom_addr) < 48 or unsigned(rom_addr) = 16#780000#
+            -- Header, the RTC-port line (byte 0x0C4 = word 0x31) when GPIO
+            -- reads are disabled, or the far line.
+            assert unsigned(rom_addr) < 64 or unsigned(rom_addr) = 16#780000#
                report "Unexpected ROM request outside header" severity failure;
             assert rom_wait = 0 report "Overlapping ROM request" severity failure;
             if unsigned(rom_addr) < 48 then rom_word <= to_integer(unsigned(rom_addr)); else rom_word <= 0; end if;
@@ -406,6 +408,20 @@ begin
       access_bus(x"08000012", '1', x"00000000", ACCESS_16BIT);
       assert rom_requests = before_count + 1 and mem_bus_din = x"0000" & header(4)(31 downto 16)
          report "ROM line was served stale after a flash-cart write" severity failure;
+      -- The RTC/GPIO port at 080000C4..C8 reaches the cart only once the
+      -- game has enabled GPIO reads (0C8 bit0); before that it is ROM, so a
+      -- flash cart's boot code in that range still executes.
+      before_count := cio_reads;
+      access_bus(x"080000C4", '1', x"00000000", ACCESS_16BIT);
+      assert cio_reads = before_count report "RTC port read reached the cart before it was enabled" severity failure;
+      access_bus(x"080000C8", '0', x"00000001", ACCESS_16BIT);   -- enable GPIO reads
+      access_bus(x"080000C4", '1', x"00000000", ACCESS_16BIT);
+      assert cio_last(0)(39 downto 16) = x"000062" and cio_reads = before_count + 1
+         report "RTC port read did not reach the cart once enabled" severity failure;
+      before_count := cio_reads;
+      access_bus(x"080000C8", '0', x"00000000", ACCESS_16BIT);   -- disable GPIO reads
+      access_bus(x"080000C4", '1', x"00000000", ACCESS_16BIT);
+      assert cio_reads = before_count report "RTC port read reached the cart after it was disabled" severity failure;
       -- The cheat engine's writes stay dropped, and its reads of a register
       -- window come from ROM, never from the cart's register.
       mem_bus_host <= '1'; before_count := cio_writes;

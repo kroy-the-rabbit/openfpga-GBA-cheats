@@ -149,9 +149,12 @@ read comes back as ROM data; the EverDrive shows a red screen.
   its version, SD status and sector data at `09E00000`; the EverDrive keeps
   its registers, including the SD_DAT FIFO, at `09FC0000`. The latch clears
   on reset.
-- The RTC port at `080000C4..C8` is **not** forwarded to the cart on a flash
-  cart: a flash cart maps real ROM there. Forwarding it garbled the EverDrive
-  OS boot code and Minish Cap's tiles on the Omega (2026-09-14).
+- The GBA GPIO/RTC port at `080000C4..C8` reaches the cart only once the game
+  has enabled GPIO reads (a write to `080000C8` with bit 0 set, the standard
+  read-enable). Before that, and always for an emulated-RTC quirk game, those
+  addresses are ROM, so a flash cart's boot code in that range still executes.
+  The EverDrive's own Seiko S-3511 RTC answers there once enabled; forwarding
+  it unconditionally garbled the EverDrive boot and Minish Cap's tiles.
 - An EEPROM session latches the address games use, `0DFFFF00`, which
   reaches the cart as `FFFF80`, with the host driving AD before CS# falls. A
   real EEPROM looks at A23 alone; the Omega DE's FPGA did not answer a

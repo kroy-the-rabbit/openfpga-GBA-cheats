@@ -254,6 +254,7 @@ architecture arch of gba_memorymux is
    
    -- flash cart
    signal cartio_seen        : std_logic := '0';   -- a ROM-space write reached the cart
+   signal rtc_port_en        : std_logic := '0';   -- OS enabled GPIO reads at 080000C8
    signal host_save          : std_logic := '0';
    signal cartio_addr_r      : std_logic_vector(23 downto 0) := (others => '0');
    signal cartio_invalidate  : std_logic := '0';
@@ -492,6 +493,7 @@ begin
          if (reset = '1' or gb_on = '0' or cart_save_mode = '0') then
             cartio_seen <= '0';
             cartio_hold <= '0';
+            rtc_port_en <= '0';
          end if;
          if (reset = '1' or dma3_active = '0') then
             cart_eeprom_index <= (others => '0');
@@ -616,7 +618,18 @@ begin
                            state         <= READOAMRAM;
 
                         when x"8" | x"9" | x"A" | x"B" | x"C" =>
-                           if (cart_save_mode = '1' and cartio_seen = '1' and host_save = '0' and adr_save(24 downto 21) = "1111") then
+                           -- Register window 09E00000..09FFFFFF, or the GBA
+                           -- GPIO/RTC port 080000C4..C8 once the game enabled
+                           -- GPIO reads (0C8 bit0). A flash cart's own RTC
+                           -- (EverDrive Seiko S-3511) answers there; before
+                           -- the enable, and always for an emulated-RTC quirk
+                           -- game, those addresses are ROM.
+                           if (cart_save_mode = '1' and cartio_seen = '1' and host_save = '0' and
+                               (adr_save(24 downto 21) = "1111" or
+                                (rtc_port_en = '1' and specialmodule = '0' and
+                                 adr_save(27 downto 24) = x"8" and
+                                 unsigned(adr_save(23 downto 1)) >= 16#62# and
+                                 unsigned(adr_save(23 downto 1)) <= 16#64#))) then
                               cart_io_rnw   <= '1';
                               if (acc_save = ACCESS_32BIT) then
                                  cartio_addr_r <= adr_save(24 downto 2) & '0';
@@ -713,6 +726,11 @@ begin
                               GPIO_Dout     <= Dout_save(3 downto 0);
                            elsif (cart_save_mode = '1' and host_save = '0') then
                               cartio_seen   <= '1';
+                              -- Snoop the GPIO read-enable so later reads of
+                              -- the RTC port go to the cart, not ROM.
+                              if (specialmodule = '0' and adr_save = x"80000C8") then
+                                 rtc_port_en <= Dout_save(0);
+                              end if;
                               cart_io_rnw   <= '0';
                               cartio_hold   <= '0';
                               cart_io_wdata <= Dout_save(15 downto 0);

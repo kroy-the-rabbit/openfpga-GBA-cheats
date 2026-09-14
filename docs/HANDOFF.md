@@ -43,8 +43,11 @@ from cart registers as one burst: the EverDrive mounts, loads its OS and runs
 games on ROM Timing **Slow** (its PSRAM fill needs the long strobe). The
 `EE:`/`SF:` menu fields carry a flash-cart diagnostic on this branch, see
 [BOOT-DEBUG.md](BOOT-DEBUG.md). Omega DE runs games on Turnaround; an EEPROM
-session now latches the full `FFFF80` so the Omega answers Minish Cap's save.
-The EverDrive battery warning is still open.
+session now latches the full `FFFF80`. The GPIO/RTC port `080000C4..C8`
+forwards to the cart once the game enables GPIO reads (`0C8` bit0), so the
+EverDrive's Seiko RTC answers and the battery warning should clear. Open:
+Omega DE save writes do not persist (both save types); see
+[[flashcart-status]].
 See [CARTRIDGE.md](CARTRIDGE.md#flash-carts).
 
 ## Release preparation
