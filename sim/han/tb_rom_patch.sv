@@ -6,11 +6,13 @@ module tb_rom_patch;
     reg clk=0; always #5 clk=~clk;
     reg load_reset=1, cheat_on=0; reg [127:0] cheat_in=0;
     reg rd_req=0; reg [24:0] rd_addr=0; reg [31:0] din_first=32'h11223344, din_second=32'h55667788;
+    reg rd_ready=0; wire rd_ready_out;
     wire [31:0] dout_first, dout_second; wire [4:0] count; wire changed; integer changes=0, n=0;
     always @(posedge clk) if (changed) changes=changes+1;
     rom_patch dut(.clk(clk),.load_reset(load_reset),.cheat_on(cheat_on),.cheat_in(cheat_in),
         .rd_req(rd_req),.rd_addr(rd_addr),.din_first(din_first),.din_second(din_second),
-        .dout_first(dout_first),.dout_second(dout_second),.count(count),.changed(changed));
+        .rd_ready(rd_ready),.dout_first(dout_first),.dout_second(dout_second),
+        .rd_ready_out(rd_ready_out),.count(count),.changed(changed));
     task push(input [27:0] addr, input [31:0] val, input [3:0] be, input [3:0] opt);
         begin
             @(negedge clk); cheat_in={24'd0,be,opt,4'd0,addr,32'd0,val};
@@ -20,10 +22,19 @@ module tb_rom_patch;
         end
     endtask
     // Request, then move the address on as the cache may, before the data.
+    // The first line is registered on the source's ready and the done comes
+    // a clock later; the second follows a clock after that, as SDRAM's does.
+    // Both inputs are then disturbed, so a combinational output would show.
     task read(input [24:0] a);
         begin
             rd_addr=a; rd_req=1; @(negedge clk); rd_req=0;
             rd_addr=a+25'd7; @(negedge clk); @(negedge clk);
+            rd_ready=1; @(negedge clk); rd_ready=0;
+            if (rd_ready_out!==1'b1) $fatal(1,"FAIL done was not delayed exactly one clock");
+            @(negedge clk);
+            if (rd_ready_out!==1'b0) $fatal(1,"FAIL done lasted more than one clock");
+            din_first=~din_first; din_second=~din_second; @(negedge clk);
+            din_first=~din_first; din_second=~din_second;
         end
     endtask
     initial begin
@@ -78,7 +89,7 @@ module tb_rom_patch;
         if (dout_first!==32'h11CC5544)
             $fatal(1,"FAIL lowest slot did not win the lane: %h", dout_first);
 
-        $display("PASS rom_patch: fill from the push, both words, byte lanes, RAM and conditional entries ignored, reset, 16 slots, no overrun, lowest slot wins");
+        $display("PASS rom_patch: fill from the push, both words, byte lanes, RAM and conditional entries ignored, reset, 16 slots, no overrun, lowest slot wins, registered line and one-clock done");
         $finish;
     end
     initial begin #200000; $fatal(1,"rom_patch watchdog"); end

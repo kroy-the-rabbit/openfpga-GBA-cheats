@@ -772,6 +772,7 @@ wire        sdram_rd_req_mux  = ss_serving_active ? ss_sdram_rd_req     : romsrc
 wire [24:0] sdram_rd_addr_mux = ss_serving_active ? ss_sdram_rd_addr    : romsrc_sdram_rd_addr;
 
 wire        romsrc_gba_rd_ready, romsrc_sdram_rd_req;
+wire        rom_patch_rd_ready;     // romsrc_gba_rd_ready a clock later, with the patched line
 wire [24:0] romsrc_sdram_rd_addr;
 wire [31:0] romsrc_gba_rd_data, romsrc_gba_rd_data_second;
 wire        romsrc_cart_rd_req;
@@ -1930,7 +1931,7 @@ gba_top #(
     .cheats_active       (),
     // SDRAM (ROM reads — muxed with staging in sdram_pocket section)
     .sdram_read_ena      ( sdram_read_req_gba ),
-    .sdram_read_done     ( romsrc_gba_rd_ready ),
+    .sdram_read_done     ( rom_patch_rd_ready ),
     .sdram_read_addr     ( sdram_read_addr_gba ),
     .sdram_read_data     ( romsrc_gba_rd_data ),
     .sdram_second_dword  ( romsrc_gba_rd_data_second ),
@@ -2411,8 +2412,10 @@ rom_patch rom_patches (
     .rd_addr    ( sdram_read_addr_gba ),
     .din_first  ( romsrc_gba_rd_data_raw ),
     .din_second ( romsrc_gba_rd_data_second_raw ),
+    .rd_ready   ( romsrc_gba_rd_ready ),
     .dout_first ( romsrc_gba_rd_data ),
     .dout_second( romsrc_gba_rd_data_second ),
+    .rd_ready_out( rom_patch_rd_ready ),
     .count      ( rom_patch_count ),
     .changed    ( rom_patch_changed )
 );

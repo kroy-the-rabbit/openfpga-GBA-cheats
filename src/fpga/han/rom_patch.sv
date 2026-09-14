@@ -20,6 +20,13 @@
 // address is latched on the request, as rom_source_mux latches its word
 // order, because the cache is free to move on to its next address before
 // the data comes back; the hit flags are registered from that latch.
+//
+// The substituted line is registered, and the read's done is delayed a clock
+// to match. The slot walk straight into gba_memorymux's mem_bus_din was the
+// core's worst setup path once flash-cart logic joined it, about 10 ns. The
+// sources keep their spacing: SDRAM's second DWORD arrives a clock after its
+// done, so it is registered a clock after the first. A cache miss costs one
+// clock more, against a 480 to 720 ns cartridge line.
 `default_nettype none
 module rom_patch #(
     // A real GBA ROM hack is a run of consecutive halfword writes, not one
@@ -47,8 +54,10 @@ module rom_patch #(
     input  wire [24:0]  rd_addr,
     input  wire [31:0]  din_first,
     input  wire [31:0]  din_second,
-    output wire [31:0]  dout_first,
-    output wire [31:0]  dout_second,
+    input  wire         rd_ready,     // from the source: din_first valid now
+    output reg  [31:0]  dout_first,
+    output reg  [31:0]  dout_second,
+    output reg          rd_ready_out, // rd_ready a clock later, dout_first valid
 
     output reg  [4:0]   count,       // slots in use
     output reg          changed      // one clock per table write: invalidate the cache
@@ -121,8 +130,14 @@ module rom_patch #(
         end
     endfunction
 
-    assign dout_first  = apply(din_first,  hit_first);
-    assign dout_second = apply(din_second, hit_second);
+    initial begin
+        dout_first = 32'd0; dout_second = 32'd0; rd_ready_out = 1'b0;
+    end
+    always @(posedge clk) begin
+        rd_ready_out <= rd_ready;
+        if (rd_ready)     dout_first  <= apply(din_first,  hit_first);
+        if (rd_ready_out) dout_second <= apply(din_second, hit_second);
+    end
 endmodule
 
 `default_nettype wire
