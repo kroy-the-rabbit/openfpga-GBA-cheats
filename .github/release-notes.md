@@ -1,62 +1,80 @@
-Physical GBA cartridges now boot with cheats, named overlays and read-side
-ROM patches. Minish Cap and Zero Mission gameplay and existing saves are
-confirmed on hardware. A new Zero Mission save was read back through
-Analogue's own cartridge mode.
+## Flash carts, boot timing and cartridge audio
 
-The tested source is `f2a86db`, seed 3. The package includes direct `.cht`
-loading, the overlay title fix and sixteen ROM-patch slots. Both six-patch
-Zero Mission midair cheats work together. `.chtbin` remains supported, with
-`CHEAT nn` in place of names.
+**EverDrive GBA Mini now runs through Play Cartridge with cheats and saves.**
+Set **ROM Timing** to **Slow** to get past boot, then switch back to
+**Fast Burst** for the same audio fixes as physical cartridges, including
+Zero Mission. The ultimate in meta: a flash cart running inside an
+openFPGA GBA core, with the core applying cheats. A new Minish Cap EEPROM save
+persisted, and gameplay, cheats and saves are confirmed on the Pocket.
 
-**Download `kroy.GBA_<version>.zip`**, not the source archives. Merge its
-`Assets`, `Cores` and `Platforms` into the SD root, preserving existing files.
-On macOS, copy the contents into existing folders rather than replacing them.
-Pocket firmware **1.2 or newer** and a separately supplied 16,384-byte
-`Assets/gba/common/gba_bios.bin` are required. Power cycle after installation
-before checking the displayed core version.
+This update forwards flash-cart register writes and reads and preserves
+sequential DMA transfers from the cart's SD interface, letting the EverDrive
+mount its card and load games. Timing profiles matter at the physical slot:
 
-## Using cheats and cartridges
+| Cartridge | ROM Timing | Hardware result |
+|---|---|---|
+| EverDrive GBA Mini | **Slow** for boot, then **Fast Burst** | Games, cheats and saves work; Fast Burst fixes audio as on retail carts |
+| EZ-Flash Omega DE | **Turnaround** | Games and existing saves load; new saves do not persist |
+| Metroid: Zero Mission retail cartridge | **Fast Burst**, opt-in | Fixes the audio slowdown observed in earlier hardware testing |
 
-- For SD ROMs, place `Game.gba.cht` beside `Game.gba`. Enable the desired
-  `cheatN_enable` entries in the file.
-- In **Play Cartridge** mode, browse to the file through **Cheats** once.
-  Choose `.cht` explicitly when both text and binary files are present.
-- **Cheats Enabled** and **Cheat Overlay** start off and are not persisted.
-  Loading a file does not reset gameplay or turn cheats on.
-- Cartridge saves access the physical chip directly. There is no Read Only
-  toggle and no SD save import/export in this mode. Back up saves before
-  experimenting with cheats; game-memory writes can be saved by the game.
-- **ROM Timing** defaults to **Turnaround**. **Fast Burst** fixes audio
-  slowdown on the tested Zero Mission cartridge and remains opt-in.
+**Turnaround remains the default** and should let many physical games boot
+without issue. Fast Burst runs faster than a real GBA
+bus and is not qualified across other cartridges. Fully power off the Pocket
+between flash-cart runs; a core reset can leave the cart's mapping unchanged.
+
+## Install and use
+
+Download **`kroy.GBA_0.9999.20260915.zip`** and merge its `Assets`, `Cores` and
+`Platforms` into the SD root, preserving existing files. Supply a 16,384-byte
+`Assets/gba/common/gba_bios.bin`. Pocket firmware 1.2 or newer is required.
+Power cycle after installation before checking the displayed version.
+
+For SD ROMs, put `Game.gba.cht` beside the ROM. For cartridge play, choose
+**Play Cartridge**, then browse to the matching file through **Cheats**.
+Enable the desired codes in the file and turn on **Cheats Enabled** in the
+menu. **Cheat Overlay** displays names from `.cht`; `.chtbin` remains
+supported without names. Both switches start off. Loading cheats does not
+reset the game or enable them. Limits remain 32 entries and 16 ROM patches.
 
 ## Limits
 
-Savestates, sleep and link cable were removed. RTC remains available for SD
-ROMs; cartridge RTC/GPIO, solar and gyro are disconnected. Physical SRAM/Flash
-save writes, interrupted-transfer protection and empty-slot handling still
-need hardware qualification. Fast Burst has been tried on one cartridge.
-Encrypted codes are not decrypted. The load limit is 32 entries, with a
-separate sixteen-slot limit for ROM patches. 64 MB video carts are unsupported.
+- **Omega DE new saves do not persist**, for either tested EEPROM or SRAM
+  save type. Existing saves load.
+- Cartridge mode routes saves to the cartridge, with no Pocket SD save
+  import/export. A flash cart manages its own save storage. Back up saves
+  before using cheats.
+- Cartridge RTC and the EverDrive battery-warning behavior are not verified.
+- Physical retail SRAM/Flash writes, interrupted transfers and empty-slot
+  handling still need hardware qualification. Savestates, sleep, link cable,
+  solar, gyro, encrypted cheat decryption and 64 MB video carts are unsupported.
+- The text loader has four known database mismatches, unchanged from the
+  previous release: Final Fantasy VI Advance (Code Breaker), Mother 3,
+  Pokemon FireRed Rev 1, and Yu-Gi-Oh! Ultimate Masters. Decoded entries
+  in these files differ from the desktop decoder when all cheats are enabled.
+  See the [cheat guide](https://github.com/kroy-the-rabbit/openfpga-GBA-cheats/blob/main/docs/CHEATS.md).
 
-## Verification and sources
+## Tested build and credits
 
-The seed-3 fit uses 16,080 / 18,480 ALMs (87 %) and 278 RAM blocks. Every
-timing category passes, with +0.092 ns setup and +0.121 ns hold. The tested
-bitstream SHA-256 is
-`489904ea59dea4e1408c770cbe8e853a67741f5817d1884d59e57e77b7d3f31b`.
-The release carries the ZIP, `report.txt` and `SHA256SUMS`:
+The package preserves the installed **`cfbfa81`, seed 1** bitstream:
+`1c11b22d840fd5dee28d0c71b95575f4096224b9fbe8ff0461c7517f3fcd7685`.
+Quartus Lite 25.1std build 1129, 15,996 ALMs (87 %), 278 RAM blocks,
++0.075 ns setup and +0.101 ns hold. Every timing category passes.
+`BUILD.json`, `report.txt` and `SHA256SUMS` accompany the package.
+
+Based on [mincer-ray's Pocket GBA core](https://github.com/mincer-ray/openfpga-GBA)
+and [GBA_MiSTer](https://github.com/MiSTer-devel/GBA_MiSTer), with the cartridge
+controller from [Wokann/openfpga-GBA](https://github.com/Wokann/openfpga-GBA)
+and APF declaration reference from [Rai/openfpga-GBA](https://github.com/Rai/openfpga-GBA).
+See the [cartridge guide](https://github.com/kroy-the-rabbit/openfpga-GBA-cheats/blob/main/docs/CARTRIDGE.md).
+
+## Verify the downloads
+
+Artifacts are signed with Kroy's normal key,
+`7268DF1E6F75DA7731A46B65888C35858FEACF72`. The release includes its public
+key and detached signatures for the ZIPs, provenance and timing report.
 
 ```sh
+gpg --import RELEASE-KEY.asc
+gpg --verify SHA256SUMS.asc SHA256SUMS
 sha256sum -c SHA256SUMS
 ```
-
-This is [mincer-ray's Pocket GBA core](https://github.com/mincer-ray/openfpga-GBA),
-derived from [GBA_MiSTer](https://github.com/MiSTer-devel/GBA_MiSTer), with
-cheat and cartridge integration. The controller comes from
-[Wokann/openfpga-GBA](https://github.com/Wokann/openfpga-GBA), with APF
-declaration reference from [Rai/openfpga-GBA](https://github.com/Rai/openfpga-GBA).
-It installs alongside `mincer_ray.GBA` as `kroy.GBA`; SD saves are shared by
-platform, while settings are separate. The
-[desktop picker](https://github.com/kroy-the-rabbit/pocket-tools) writes cheat
-files and installs cores. [Cheat documentation](https://github.com/kroy-the-rabbit/openfpga-GBA-cheats/blob/main/docs/CHEATS.md)
-covers supported raw codes and loading.

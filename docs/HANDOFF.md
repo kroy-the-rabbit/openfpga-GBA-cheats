@@ -1,71 +1,45 @@
 # Development status
 
-## Current state
+## Current release
 
-`main` contains the cartridge work from `p5-cartridge` and is pushed.
-Release `v0.9999.20260913` contains the cartridge update. Its tested build is **`f2a86db`**, seed 3, installed on 2026-09-10.
-`f5de823` adds only documentation to that source; the main-alignment changes
-update documentation and simulation CI, not the FPGA design or package.
+Release `v0.9999.20260915` on `main` packages tested build **`cfbfa81`, seed 1**. Its bitstream
+matches the mounted Pocket card by SHA-256 on 2026-09-15. The maintainer
+confirmed EverDrive GBA Mini gameplay, cheats and saves, using **Slow** timing
+to get past boot, then Fast Burst for the same audio fixes as retail
+cartridges, including Zero Mission. A new Minish Cap EEPROM save persisted.
 
-| Tested build | Result |
+| Measure | Result |
 |---|---|
 | Quartus | Lite 25.1std build 1129, STANDARD FIT |
-| ALMs / RAM blocks | 16,080 / 18,480 (87 %); 278 / 308 |
-| Setup / hold | +0.092 / +0.121 ns; all timing categories pass |
-| Bitstream SHA-256 | `489904ea59dea4e1408c770cbe8e853a67741f5817d1884d59e57e77b7d3f31b` |
+| ALMs / RAM blocks | 15,996 / 18,480 (87 %); 278 / 308 |
+| Setup / hold | +0.075 / +0.101 ns; every timing category passes |
+| Bitstream SHA-256 | `1c11b22d840fd5dee28d0c71b95575f4096224b9fbe8ff0461c7517f3fcd7685` |
 
-**On hardware:** Minish Cap and Zero Mission cartridge gameplay and existing
-saves; a new Zero Mission save read back through Analogue's own mode; direct
-`.cht`, named overlay, RAM conditions and read-side ROM patches. Both midair
-cheats work together, using twelve of sixteen ROM-patch slots. Fast Burst
-gives clean audio on the tested Zero Mission cart; Turnaround stays default.
+The source package and report are in
+`build/watch/pocket-gba-gba-rtcgpio-s1-cfbfa819589c/`. Later release-preparation
+changes are documentation and test fixtures only. Preserve these tested
+bitstream bytes and record their original build commit in `BUILD.json`.
 
-**Behavior:** cheats and overlay start off and are not persisted. Loading
-cheats neither resets the game nor enables the switch. Slot 7 accepts `.cht`
-and `.chtbin`; cartridge games require browsing to the file. Physical saves
-read and write the cartridge directly, with no Read Only mode or SD save.
-Savestates, sleep and link cable are removed. RTC remains for SD ROMs.
+**Limits:** Omega DE runs games and loads existing saves on Turnaround, but
+new EEPROM and SRAM saves do not persist. GPIO forwarding after read-enable
+is implemented; cartridge RTC and the EverDrive battery-warning behavior
+remain unverified. Four text-cheat corpus mismatches reproduce identically
+on the September 13 release and this candidate; see [CHEATS.md](CHEATS.md).
 
-**Remaining:** SRAM/Flash write persistence, interrupted transfers, empty-slot
-handling and Fast Burst on more cartridges need hardware qualification.
-Cartridge GPIO/RTC, solar and gyro are disconnected. Native Action Replay
-ROM-patch opcodes and encrypted codes need conversion to supported raw codes.
+The previous public release is `v0.9999.20260913`, built from `f2a86db`, seed 3.
+Its retail-cartridge results include Minish Cap and Zero Mission gameplay and
+existing saves, a new Zero Mission save read through Analogue's own mode,
+cheats and named overlays, and Fast Burst correcting Zero Mission audio.
+See [HARDWARE.md](HARDWARE.md), [CARTRIDGE.md](CARTRIDGE.md) and
+[BASELINE.md](BASELINE.md) for the evidence and limits.
 
-## Branch `p6-flashcarts`
+## Publication
 
-Flash-cart support: CPU writes to ROM space reach the cart, and register reads
-at `09E00000..09FFFFFF` bypass the cache after the first write. Baseline on
-`f2a86db`: the Omega DE bootloops at a popup, most likely its firmware update prompt, and the
-EverDrive shows a red screen. `1a7e841` (seed 3 on kira, +0.092 ns) boots both
-on Turnaround; the EverDrive then fails to mount its SD card. `8f18fa8` adds a
-register-read turnaround and still fails the mount. `10a7163` reads DMA copies
-from cart registers as one burst: the EverDrive mounts, loads its OS and runs
-games on ROM Timing **Slow** (its PSRAM fill needs the long strobe). The
-`EE:`/`SF:` menu fields carry a flash-cart diagnostic on this branch, see
-[BOOT-DEBUG.md](BOOT-DEBUG.md). Omega DE runs games on Turnaround; an EEPROM
-session now latches the full `FFFF80`. The GPIO/RTC port `080000C4..C8`
-forwards to the cart once the game enables GPIO reads (`0C8` bit0), so the
-EverDrive's Seiko RTC answers and the battery warning should clear. Open:
-Omega DE save writes do not persist (both save types); see
-[[flashcart-status]].
-See [CARTRIDGE.md](CARTRIDGE.md#flash-carts).
-
-## Release preparation
-
-Use a signed `v0.9999.YYYYMMDD` tag whose commit is on `main`. Publish
-the tested bitstream with dated package metadata, `BUILD.json`, `report.txt`
-and `SHA256SUMS`. A package built from
-`f2a86db` retains that source identity even when later docs are on `main`.
-Check the workflow at the tagged commit before publication; the workflow on
-`main` may be newer. Current CI runs `make sim-image` and `make test`, then
-verifies release assets. Quartus runs only through `tools/runner-build` on
-controlled runners; CI does not build or replace bitstreams.
-
-Prepared assets are under `build/releases/0.9999.20260913/`, copied from
-`build/watch/pocket-gba-gba-slots16-s3-f2a86db59fa9/`. Ignore stale
-`build/gba/sd` and old top-level packages when selecting release assets.
-See [HARDWARE.md](HARDWARE.md), [BUILD-RUNNER.md](BUILD-RUNNER.md) and
-[BASELINE.md](BASELINE.md).
-
+Release notes are in `.github/release-notes.md`. The signed dated tag is on
+`main`. The release ZIP carries dated package metadata, the unchanged tested
+bitstream, `BUILD.json`, `report.txt` and `SHA256SUMS`. `BUILD.json` records
+build and release commits separately. CI tests the source and verifies the
+published package; it does not synthesize or replace the bitstream. Quartus
+runs through `tools/runner-build` only.
 
 [Engineering history](https://github.com/kroy-the-rabbit/pocket-engineering/blob/main/gba/docs/HANDOFF.md) (private).

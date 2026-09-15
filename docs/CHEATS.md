@@ -142,6 +142,17 @@ address window for ambiguous raw codes would admit encrypted junk.
   patch also consumes a loaded entry. Do not select more than 16 ROM entries.
 * 1 MB of file.
 
+### Known text-loader differences
+
+The 513-file libretro corpus check reports four files whose decoded entries
+in the text loader differ from the Python model: **Final Fantasy VI Advance
+(USA, Europe) (Code Breaker)**, **Mother 3 (Japan)**, **Pokemon - FireRed
+Version (USA, Europe) (Rev 1)**, and **Yu-Gi-Oh! Ultimate Masters - World
+Championship Tournament 2006**. These occur with all cheats enabled; 509
+files match. The four mismatches and loader totals reproduce identically on
+build `cfbfa81` and the September 13 release. The full corpus test remains a
+failing check; this release does not fix those differences.
+
 ## What is confirmed on hardware
 
 The following paths have been exercised on a real Zero Mission

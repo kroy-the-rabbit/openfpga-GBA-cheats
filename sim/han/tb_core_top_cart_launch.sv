@@ -10,6 +10,8 @@ module tb_core_top_cart_launch;
     reg bridge_wr=0,bridge_rd=0;
     wire [31:0] bridge_rd_data;
     reg detected=0;
+    reg io_req=0, rom_req=0;
+    reg [31:0] cpu_pc=32'h08040000;
     core_top dut(.clk_74a(clk),.clk_74b(clk),.bridge_addr(bridge_addr),
         .bridge_wr(bridge_wr),.bridge_wr_data(bridge_wr_data),
         .bridge_rd(bridge_rd),.bridge_rd_data(bridge_rd_data));
@@ -23,6 +25,13 @@ module tb_core_top_cart_launch;
         force dut.flash_1m_s=0;
         force dut.rtc_active=0;
         force dut.cart_detect=detected;
+        force dut.cart_io_req=io_req;
+        force dut.cart_io_addr=24'hfc00a0;
+        force dut.cart_io_rnw=0;
+        force dut.cart_io_wdata=16'h1234;
+        force dut.romsrc_cart_rd_req=rom_req;
+        force dut.gba_debug_pc=cpu_pc;
+        force dut.gba_debug_mixed=32'd1;
     end
     task write_word(input [31:0] addr,input [31:0] data);
         begin
@@ -58,16 +67,19 @@ module tb_core_top_cart_launch;
                 $fatal(1,"FAIL top SD-save size %h",dut.save_size_bytes);
         end
     endtask
-    task expect_debug(input [31:0] status);
+    task expect_debug(input [63:0] status);
         integer word_index;
-        reg [31:0] expected;
+        reg [31:0] expected, address;
         begin
-            for(word_index=0;word_index<4;word_index=word_index+1) begin
+            for(word_index=0;word_index<5;word_index=word_index+1) begin
                 case(word_index)
-                    1: expected=status;
-                    default: expected=0; // Retired readouts must not expose stale state.
+                    0: begin expected=status[63:32]; address=32'hf4000008; end
+                    1: begin expected=status[31:0]; address=32'hf4000014; end
+                    2: begin expected=0; address=32'hf4000010; end
+                    3: begin expected=0; address=32'hf4000018; end
+                    4: begin expected=0; address=32'hf400001c; end
                 endcase
-                @(negedge clk);bridge_addr=32'hf4000010+word_index*4;bridge_rd=1;
+                @(negedge clk);bridge_addr=address;bridge_rd=1;
                 @(negedge clk);
                 if(bridge_rd_data!==expected)
                     $fatal(1,"FAIL top debug word%0d got%h expected%h",word_index,bridge_rd_data,expected);
@@ -75,15 +87,16 @@ module tb_core_top_cart_launch;
             end
         end
     endtask
-    reg [31:0] captured_header=0, stable_header=0;
+    reg [63:0] captured_header=0, stable_header=0;
     integer header_samples=0;
-    // The snapshot's payload is the EEPROM abort word. Drive it directly:
-    // the bridge's own faulting is covered by tb_cart_eeprom_abort.
-    reg [31:0] ee_why=0;
-    initial force dut.cart_eeprom_fault_why=ee_why;
-    task bad_header_read;
+    // Drive the omitted CPU's bus outputs. The real top packs the flash-cart
+    // access and CPU position into the two diagnostic words.
+    task flashcart_write;
         begin
-            ee_why=32'h12345678;
+            @(negedge clk);io_req=1;
+            @(negedge clk);io_req=0;rom_req=1;
+            repeat(3) @(negedge clk);
+            rom_req=0;
             repeat(6) @(negedge clk);
         end
     endtask
@@ -115,26 +128,26 @@ module tb_core_top_cart_launch;
         expect_mode(1,1,0,1,0); // failed probe must not run stale SDRAM game
         command(16'h00b1,32'h00010000);expect_mode(0,0,0,0,1);
         command(16'h00b1,0);expect_mode(0,0,0,0,1);
-        // Actual checker and snapshot. Supply only the external ROM bus,
-        // never force checker results or CPU debug signals.
+        // Actual flash-cart counters, packing and snapshot. Supply the bus
+        // outputs of the omitted CPU and memory subsystem.
         detected=1;
         command(16'h00b1,32'h01010000);
         force dut.reset_gba=1;
-        bad_header_read();
+        flashcart_write();
         expect_debug(0); // Not captured yet.
         command(16'h00b0,1);
-        expect_debug(32'h12345678);
+        expect_debug(64'h12340304_8818fca0);
         stable_header = captured_header;
-        ee_why=32'hcafe0001;
+        cpu_pc=32'h02050000;
         command(16'h00b0,1); // Already open: retain the same snapshot.
         expect_debug(stable_header);
         if (captured_header !== stable_header) $fatal(1,"FAIL recaptured while menu open");
         command(16'h00b0,0);
         command(16'h00b0,1);
-        expect_debug(32'hcafe0001); // reopened: the current abort word
+        expect_debug(64'h12340305_2818fca0); // reopened: current CPU position
         if (header_samples != 2) $fatal(1,"FAIL capture count %0d",header_samples);
         $display("PASS core_top cartridge launch: real APF notification, synchronization, reset/probe gating, SD-save isolation and stale-menu immunity");
-        $display("PASS core_top debug packing, live header mismatch, retired addresses zero and stable APF menu snapshots during GBA reset");
+        $display("PASS core_top debug packing, flash-cart access and CPU position, retired addresses zero and stable APF menu snapshots during GBA reset");
         $finish;
     end
     initial begin #100000; $fatal(1,"FAIL top cartridge launch watchdog"); end

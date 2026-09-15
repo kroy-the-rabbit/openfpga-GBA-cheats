@@ -26,9 +26,10 @@ See [docs/CHEATS.md](docs/CHEATS.md) and [docs/CARTRIDGE.md](docs/CARTRIDGE.md).
 
 ## What works
 
-The cartridge update is on `main`, with hardware-tested build `f2a86db`
-installed on 2026-09-10. The latest published release, `v0.9999`, predates
-cartridge support and reads only `.chtbin` cheats.
+Release `v0.9999.20260915` uses hardware-tested build `cfbfa81`. EverDrive GBA
+Mini boots with **ROM Timing: Slow** and runs games with cheats and saves.
+The earlier `v0.9999.20260913` release supports retail cartridges and direct
+`.cht` loading; this update adds the flash-cart register and DMA paths.
 
 | Feature | Status |
 |---|---|
@@ -38,9 +39,12 @@ cartridge support and reads only `.chtbin` cheats.
 | Physical cartridge gameplay and existing saves | Minish Cap and Zero Mission confirmed |
 | Physical save persistence | A new Zero Mission save was read back by Analogue's own cartridge mode |
 | Fast Burst cartridge timing | Clean audio on the tested Zero Mission cartridge; opt-in |
+| EverDrive GBA Mini | Gameplay, cheats and saves confirmed; use Slow timing to get past boot |
+| EZ-Flash Omega DE | Games and existing saves load on Turnaround; new saves do not persist |
 | SD-ROM RTC, fast forward, button turbo and display filters | Retained from upstream |
 | Savestates, sleep and link cable | Removed |
-| Cartridge RTC/GPIO, solar and gyro | Not connected |
+| Cartridge RTC/GPIO | Read-enabled GPIO forwarding implemented; RTC and the EverDrive battery warning need verification |
+| Cartridge solar and gyro | Unsupported |
 | Physical SRAM/Flash save writes, interrupted-transfer guard, empty-slot handling | Not hardware-qualified |
 | Encrypted cheat codes | No decryption; supply supported raw codes |
 | 64 MB video carts | Unsupported |
@@ -109,9 +113,19 @@ to `.chtbin` is optional; [docs/CHEATS.md](docs/CHEATS.md) covers raw code
 formats, the 32-entry limit and the separate sixteen-slot ROM-patch limit.
 Encrypted codes need decoding before use; neither loader decrypts them.
 
-For cartridge audio, **ROM Timing** defaults to **Turnaround**. **Fast Burst**
-fixes slowdown on the tested Zero Mission cartridge but runs the bus faster
-than a real GBA and remains opt-in.
+**ROM Timing** matters for both booting and audio:
+
+- **Turnaround** is the default, should boot many physical games without
+  issue, and runs the tested EZ-Flash Omega DE.
+- **Slow** gets the EverDrive GBA Mini through boot and runs games with
+  cheats and saves. Switch back to **Fast Burst** after boot for the same
+  audio fixes as retail cartridges, including Zero Mission. Fully power off
+  between flash-cart runs; a core reset
+  does not reset the cart's mapping.
+- **Fast Burst** fixes audio slowdown on the tested Zero Mission retail
+  cartridge. It runs the bus faster than a real GBA and remains opt-in.
+
+These profiles are cartridge-specific; a faster setting is not always better.
 
 ### Fast forward
 

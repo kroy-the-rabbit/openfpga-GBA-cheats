@@ -1,6 +1,19 @@
 # Build measurements
 
-## Tested build: `f2a86db`
+## Current tested build: `cfbfa81`
+
+Quartus Lite 25.1std build 1129, STANDARD FIT, seed 1 on sisko2.
+The installed bitstream matches this build by SHA-256 on 2026-09-15.
+
+| ALMs | RAM blocks | Setup | Hold | Recovery | Removal | Minimum pulse width |
+|---|---|---|---|---|---|---|
+| 15,996 (87 %) | 278 | +0.075 ns | +0.101 ns | +3.873 ns | +1.056 ns | +0.827 ns |
+
+24,402 registers, 26 DSP blocks, 979 s elapsed. Bitstream SHA-256:
+`1c11b22d840fd5dee28d0c71b95575f4096224b9fbe8ff0461c7517f3fcd7685`.
+Hardware results and limits are in [HARDWARE.md](HARDWARE.md).
+
+## Previous release build: `f2a86db`
 
 Quartus Lite 25.1std build 1129, STANDARD FIT. Seed 3 is the installed,
 hardware-tested build; seed 1 is an independent passing fit.

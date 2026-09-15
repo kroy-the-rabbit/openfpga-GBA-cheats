@@ -1,8 +1,10 @@
 # Hardware validation
 
-The tested build is `f2a86db`, seed 3, installed on 2026-09-10.
-Later changes through `f5de823` are documentation only. This document records
-hardware evidence; simulation and timing results are separate checks.
+The current tested build is `cfbfa81`, seed 1. Its bitstream matches the
+mounted Pocket card by SHA-256 on 2026-09-15, when the maintainer reconfirmed
+EverDrive GBA Mini gameplay, cheats and saves with Slow timing for boot.
+The retail-cartridge results below were recorded on `f2a86db`, seed 3,
+installed on 2026-09-10; they are not fresh tests of every path on `cfbfa81`.
 
 ## Recorded results
 
@@ -17,6 +19,8 @@ hardware evidence; simulation and timing results are separate checks.
 | EWRAM, IWRAM and IO reads | Guarded HUD-counter writes exercise each region |
 | Read-side ROM patches | Entry-word test plus both six-patch midair cheats together on `f2a86db` |
 | Fast Burst timing | Clean cartridge audio on the tested Zero Mission cartridge |
+| EverDrive GBA Mini | Boot on Slow; gameplay, cheats and saves confirmed. Fast Burst after boot provides the retail-cartridge audio fixes, including Zero Mission. A new Minish Cap EEPROM save persisted |
+| EZ-Flash Omega DE on Turnaround | Games and existing EEPROM/SRAM saves load; new saves do not persist |
 
 The twelve midair patches fit within the sixteen-slot ROM table.
 Fast Burst remains opt-in; Turnaround is the default.
@@ -26,7 +30,9 @@ Fast Burst remains opt-in; Turnaround is the default.
 - Physical SRAM/Flash save-write persistence, the interrupted-transfer guard,
   and empty or partially inserted cartridges still need hardware checks.
 - Fast Burst has been exercised on one cartridge, not a range of ROM chips.
-- Cartridge GPIO/RTC, solar and gyro are disconnected.
+- Cartridge GPIO is forwarded after read-enable; RTC and the EverDrive
+  battery-warning behavior need verification. Solar and gyro are unsupported.
+- New EZ-Flash Omega DE saves do not persist for either tested save type.
 - Savestates, sleep and link cable are removed. Sleep is not a pending feature test.
 - The malformed-binary cases pass simulation; no new on-device malformed-file
   result is recorded. A normal `.cht` is supported and should load cheats.
@@ -58,15 +64,15 @@ Fast Burst remains opt-in; Turnaround is the default.
 
 ## Candidate fit
 
-`f2a86db`, Quartus Lite 25.1std build 1129, STANDARD FIT, seed 3:
+`cfbfa81`, Quartus Lite 25.1std build 1129, STANDARD FIT, seed 1:
 
 | Measure | Result |
 |---|---|
-| ALMs | 16,080 / 18,480 (87 %) |
+| ALMs | 15,996 / 18,480 (87 %) |
 | RAM blocks | 278 / 308 |
-| Worst setup / hold | +0.092 / +0.121 ns |
-| Recovery / removal / minimum pulse width | +2.935 / +0.966 / +0.827 ns |
-| Bitstream SHA-256 | `489904ea59dea4e1408c770cbe8e853a67741f5817d1884d59e57e77b7d3f31b` |
+| Worst setup / hold | +0.075 / +0.101 ns |
+| Recovery / removal / minimum pulse width | +3.873 / +1.056 / +0.827 ns |
+| Bitstream SHA-256 | `1c11b22d840fd5dee28d0c71b95575f4096224b9fbe8ff0461c7517f3fcd7685` |
 
 The complete simulation suite is `make test`. Its two corpus checks require
 `CHT_DB`; without a mounted corpus they report skips.

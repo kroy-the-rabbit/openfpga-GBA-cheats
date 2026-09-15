@@ -1,9 +1,10 @@
 # Cartridges on the Pocket GBA core
 
-The tested build is `f2a86db`, installed on 2026-09-10. **Play Cartridge**
-boots Minish Cap and Zero Mission, loads their existing physical saves and
-plays with cheats. A new Zero Mission save written by this core was read back
-by Analogue's own cartridge mode.
+The current tested build is `cfbfa81`: EverDrive GBA Mini boots on **Slow**
+timing and runs games with cheats and saves. A new Minish Cap EEPROM save
+persisted on the EverDrive. Earlier retail-cartridge tests on `f2a86db`
+confirmed Minish Cap and Zero Mission gameplay and existing saves, plus a new
+Zero Mission save read back by Analogue's own cartridge mode.
 
 Cartridge saves access the physical chip directly. The Read Only mode and
 its menu entry were removed; there is no save-write enable toggle. No SD
@@ -22,8 +23,10 @@ new cheats or a cartridge that has not been qualified.
 | Physical SRAM/Flash write persistence | Not hardware-qualified |
 | Interrupted-transfer guard | Covered in simulation; not hardware-qualified |
 | Empty or partially inserted slot | Not hardware-qualified |
-| Cartridge RTC/GPIO, solar and gyro | Not routed |
-| Flash carts: EZ-Flash Omega DE, EverDrive | `p6-flashcarts`; Omega DE boots and runs games on Turnaround, EverDrive boots and runs games on Slow |
+| Cartridge RTC/GPIO | Forwarded after GPIO read-enable; RTC and battery-warning behavior need verification |
+| Cartridge solar and gyro | Unsupported |
+| EverDrive GBA Mini | Boots on Slow; gameplay, cheats and saves confirmed |
+| EZ-Flash Omega DE | Games and existing saves load on Turnaround; new writes do not persist |
 | Savestates, sleep and link cable | Removed |
 
 ## Quick start
@@ -36,7 +39,8 @@ new cheats or a cartridge that has not been qualified.
    overlay names. This selection persists; filename-based autoload does not
    run in cartridge mode.
 4. Turn on **Cheats Enabled** and, if wanted, **Cheat Overlay**. Both start off.
-5. Keep **ROM Timing** at **Turnaround** unless testing another profile.
+5. Use **Slow** for the EverDrive GBA Mini and **Turnaround** for the Omega DE.
+   **Turnaround** remains the default for retail cartridges.
    **Fast Burst** fixes the tested Zero Mission audio slowdown but exceeds
    real GBA bus speed and is not qualified on every cartridge.
 
@@ -135,9 +139,10 @@ does not reset the game or enable cheats. See [CHEATS.md](CHEATS.md).
 
 ## Flash carts
 
-Branch `p6-flashcarts`. Flash carts are driven through ROM space: they unlock,
-select pages and reach their SD card with halfword writes and reads there.
-The released core drops CPU writes to ROM space. On `f2a86db` the Omega DE
+Flash carts are driven through ROM space: they unlock, select pages and reach
+their SD card with halfword writes and reads there. Build `cfbfa81` includes
+the register forwarding and sequential DMA reads needed for these operations.
+The earlier `v0.9999.20260913` release drops CPU writes to ROM space. On `f2a86db` the Omega DE
 bootloops at a popup, most likely its firmware update prompt, since its version
 read comes back as ROM data; the EverDrive shows a red screen.
 
@@ -188,9 +193,18 @@ between EverDrive runs: a core reset leaves the cart with PSRAM mapped and its
 registers locked, so the header probe reads garbage and the BIOS stops at a
 white screen.
 
-The Omega DE on Turnaround loads and runs Minish Cap (`10a7163`); the game
-reported its EEPROM save corrupt and could not create one, see the EEPROM
-address note above.
+**Hardware results:** the EverDrive GBA Mini runs games with cheats and saves,
+including a new Minish Cap EEPROM save that persisted. The maintainer
+reconfirmed gameplay, cheats and saves on 2026-09-15; the installed bitstream
+matches `cfbfa81` by SHA-256. After boot on Slow, switching back to Fast Burst provides the same audio
+fixes as retail cartridges, including Zero Mission, as confirmed by the
+maintainer on 2026-09-15.
+
+The Omega DE on Turnaround loads games and existing Minish Cap EEPROM and
+Zero Mission SRAM saves, but new writes do not persist for either type.
+The full EEPROM-address fix did not resolve that limitation. The EverDrive
+battery warning was observed during development; the later GPIO forwarding
+change has no recorded RTC or battery-warning verification.
 
 `tools/sim/run_cart_rom.py` replays each cart's own register sequences, from
 `ez-flash/omega-de-kernel`, the EverDrive X5 driver in
