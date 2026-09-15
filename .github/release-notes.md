@@ -43,9 +43,10 @@ reset the game or enable them. Limits remain 32 entries and 16 ROM patches.
 - Cartridge mode routes saves to the cartridge, with no Pocket SD save
   import/export. A flash cart manages its own save storage. Back up saves
   before using cheats.
-- Cartridge RTC and the EverDrive battery-warning behavior are not verified.
-- Physical retail SRAM/Flash writes, interrupted transfers and empty-slot
-  handling still need hardware qualification. Savestates, sleep, link cable,
+- Cartridge RTC operation and the EverDrive battery-warning fix are verified.
+  Save writes are confirmed on EverDrive, Minish Cap, Metroid: Zero Mission
+  and other tested cartridges.
+- Interrupted transfers and empty-slot handling still need hardware qualification. Savestates, sleep, link cable,
   solar, gyro, encrypted cheat decryption and 64 MB video carts are unsupported.
 - The text loader has four known database mismatches, unchanged from the
   previous release: Final Fantasy VI Advance (Code Breaker), Mother 3,

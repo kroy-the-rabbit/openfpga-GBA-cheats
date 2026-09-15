@@ -75,16 +75,28 @@ jobs:
       # The published package, checked rather than produced. `gh` reads the
       # release; nothing here writes one.
       - name: Verify the published package
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          fi
+          source tools/podman/version.sh
+          pocket_version "$tag"
+          git merge-base --is-ancestor "$tag" HEAD
           version="${tag#v}"
           zip="kroy.GBA_${version}.zip"
           mkdir -p dist && cd dist
-          gh release download "$tag" -p "$zip" -p BUILD.json -p SHA256SUMS -p report.txt
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY"
           sha256sum -c SHA256SUMS
+          gpg --batch --import RELEASE-KEY.asc
+          gpg --batch --status-fd 1 --verify SHA256SUMS.asc SHA256SUMS \
+            | command grep -F '[GNUPG:] VALIDSIG 7268DF1E6F75DA7731A46B65888C35858FEACF72 '
+          for signature in *.sig; do
+            gpg --batch --verify "$signature" "${signature%.sig}"
+          done
           unzip -p "$zip" Cores/kroy.GBA/core.json \
             | python3 -c "import json,sys; v=json.load(sys.stdin)['core']['metadata']['version']; print('stamped', v); sys.exit(v != '$version')"
           echo "$tag: package present, checksums verified, version stamped."

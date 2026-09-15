@@ -17,13 +17,12 @@ new cheats or a cartridge that has not been qualified.
 |---|---|
 | Play Cartridge, header probe, ROM reads and gameplay | Minish Cap and Zero Mission confirmed |
 | Existing EEPROM saves | Both cartridges confirmed |
-| Physical save persistence | Zero Mission write read back through Analogue's cartridge mode |
+| Physical save writes | EverDrive, Minish Cap, Metroid: Zero Mission and other tested cartridges confirmed |
 | RAM cheats, conditional pairs, named overlay and ROM patches | Confirmed on hardware |
 | Fast Burst timing | Clean audio on the tested Zero Mission cartridge; opt-in |
-| Physical SRAM/Flash write persistence | Not hardware-qualified |
 | Interrupted-transfer guard | Covered in simulation; not hardware-qualified |
 | Empty or partially inserted slot | Not hardware-qualified |
-| Cartridge RTC/GPIO | Forwarded after GPIO read-enable; RTC and battery-warning behavior need verification |
+| Cartridge RTC/GPIO | Forwarded after GPIO read-enable; RTC and the EverDrive battery-warning fix verified |
 | Cartridge solar and gyro | Unsupported |
 | EverDrive GBA Mini | Boots on Slow; gameplay, cheats and saves confirmed |
 | EZ-Flash Omega DE | Games and existing saves load on Turnaround; new writes do not persist |
@@ -202,9 +201,10 @@ maintainer on 2026-09-15.
 
 The Omega DE on Turnaround loads games and existing Minish Cap EEPROM and
 Zero Mission SRAM saves, but new writes do not persist for either type.
-The full EEPROM-address fix did not resolve that limitation. The EverDrive
-battery warning was observed during development; the later GPIO forwarding
-change has no recorded RTC or battery-warning verification.
+The full EEPROM-address fix did not resolve that limitation. The later GPIO forwarding
+change has verified RTC operation and the EverDrive battery-warning fix.
+Save writes are confirmed on EverDrive, Minish Cap, Metroid: Zero Mission
+and other tested cartridges.
 
 `tools/sim/run_cart_rom.py` replays each cart's own register sequences, from
 `ez-flash/omega-de-kernel`, the EverDrive X5 driver in
@@ -291,6 +291,6 @@ halfword address and wraps every 128K, so a read crossing that boundary falls
 back to re-driving the address. If a cartridge turns out not to honour its own
 counter, `ROM_BURST=0` in the controller restores the original path exactly.
 
-**Remaining qualification:** physical SRAM/Flash save-write persistence,
-interrupted transfers, empty-slot handling and Fast Burst across more
+**Remaining qualification:** interrupted transfers, empty-slot handling
+and Fast Burst across more
 cartridges. There is no save-write toggle. See [HARDWARE.md](HARDWARE.md).

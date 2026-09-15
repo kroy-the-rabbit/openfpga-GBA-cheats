@@ -13,7 +13,7 @@ installed on 2026-09-10; they are not fresh tests of every path on `cfbfa81`.
 | SD ROMs, `.chtbin` loading, visible cheat effect and live global switch | Confirmed on the earlier v0.6.4 core |
 | Physical cartridge gameplay | Minish Cap and Zero Mission boot and play |
 | Existing physical saves | Both cartridges load their existing saves |
-| New physical save | Zero Mission wrote a save that Analogue's own cartridge mode read back |
+| Physical save writes | EverDrive, Minish Cap, Metroid: Zero Mission and other tested cartridges confirmed; a Zero Mission save was also read back through Analogue's mode |
 | Direct `.cht` and named overlay | Confirmed on a real cartridge; the first-character alignment fix is included |
 | RAM writes and conditional pairs | Visible Zero Mission counter tests, including inverted conditions |
 | EWRAM, IWRAM and IO reads | Guarded HUD-counter writes exercise each region |
@@ -21,17 +21,17 @@ installed on 2026-09-10; they are not fresh tests of every path on `cfbfa81`.
 | Fast Burst timing | Clean cartridge audio on the tested Zero Mission cartridge |
 | EverDrive GBA Mini | Boot on Slow; gameplay, cheats and saves confirmed. Fast Burst after boot provides the retail-cartridge audio fixes, including Zero Mission. A new Minish Cap EEPROM save persisted |
 | EZ-Flash Omega DE on Turnaround | Games and existing EEPROM/SRAM saves load; new saves do not persist |
+| Cartridge RTC / EverDrive battery warning | RTC operation and the battery-warning fix verified |
 
 The twelve midair patches fit within the sixteen-slot ROM table.
 Fast Burst remains opt-in; Turnaround is the default.
 
 ## Not qualified or unsupported
 
-- Physical SRAM/Flash save-write persistence, the interrupted-transfer guard,
-  and empty or partially inserted cartridges still need hardware checks.
+- The interrupted-transfer guard and empty or partially inserted cartridges
+  still need hardware checks.
 - Fast Burst has been exercised on one cartridge, not a range of ROM chips.
-- Cartridge GPIO is forwarded after read-enable; RTC and the EverDrive
-  battery-warning behavior need verification. Solar and gyro are unsupported.
+- Solar and gyro are unsupported.
 - New EZ-Flash Omega DE saves do not persist for either tested save type.
 - Savestates, sleep and link cable are removed. Sleep is not a pending feature test.
 - The malformed-binary cases pass simulation; no new on-device malformed-file

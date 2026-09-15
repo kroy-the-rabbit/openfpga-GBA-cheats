@@ -21,9 +21,9 @@ changes are documentation and test fixtures only. Preserve these tested
 bitstream bytes and record their original build commit in `BUILD.json`.
 
 **Limits:** Omega DE runs games and loads existing saves on Turnaround, but
-new EEPROM and SRAM saves do not persist. GPIO forwarding after read-enable
-is implemented; cartridge RTC and the EverDrive battery-warning behavior
-remain unverified. Four text-cheat corpus mismatches reproduce identically
+new EEPROM and SRAM saves do not persist. Cartridge RTC operation and the EverDrive battery-warning fix are verified.
+Save writes are confirmed on EverDrive, Minish Cap, Metroid: Zero Mission
+and other tested cartridges. Four text-cheat corpus mismatches reproduce identically
 on the September 13 release and this candidate; see [CHEATS.md](CHEATS.md).
 
 The previous public release is `v0.9999.20260913`, built from `f2a86db`, seed 3.

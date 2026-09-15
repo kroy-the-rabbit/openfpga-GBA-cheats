@@ -30,15 +30,15 @@ The earlier `v0.9999.20260913` release supports retail cartridges and direct
 | Overlay showing cheat names | Confirmed; `.cht` supplies names, `.chtbin` shows `CHEAT nn` |
 | Sixteen read-side ROM-patch slots | Confirmed on a Zero Mission cartridge, including two midair cheats together |
 | Physical cartridge gameplay and existing saves | Minish Cap and Zero Mission confirmed |
-| Physical save persistence | A new Zero Mission save was read back by Analogue's own cartridge mode |
+| Physical save writes | Confirmed on EverDrive, Minish Cap, Metroid: Zero Mission and other tested cartridges |
 | Fast Burst cartridge timing | Clean audio on the tested Zero Mission cartridge; opt-in |
 | EverDrive GBA Mini | Gameplay, cheats and saves confirmed; use Slow timing to get past boot |
 | EZ-Flash Omega DE | Games and existing saves load on Turnaround; new saves do not persist |
 | SD-ROM RTC, fast forward, button turbo and display filters | Retained from upstream |
 | Savestates, sleep and link cable | Removed |
-| Cartridge RTC/GPIO | Read-enabled GPIO forwarding implemented; RTC and the EverDrive battery warning need verification |
+| Cartridge RTC/GPIO | RTC operation and the EverDrive battery-warning fix verified |
 | Cartridge solar and gyro | Unsupported |
-| Physical SRAM/Flash save writes, interrupted-transfer guard, empty-slot handling | Not hardware-qualified |
+| Interrupted-transfer guard and empty-slot handling | Not hardware-qualified |
 | Encrypted cheat codes | No decryption; supply supported raw codes |
 | 64 MB video carts | Unsupported |
 
@@ -178,8 +178,9 @@ hundred database files by hand is tedious.
 
 * Fast forward shows screen tearing. Fixing it needs a frame buffer.
 * 64 MB video carts do not work.
-* Cartridge RTC/GPIO is disconnected. Flash save writes, the interrupted-transfer
-  guard and empty-slot handling still need hardware qualification.
+* Cartridge RTC and save writes are verified on the tested cartridges.
+  The interrupted-transfer guard and empty-slot handling still need hardware
+  qualification.
 * Savestates, sleep and link cable are unavailable.
 * Fast Burst has been tested on one cartridge; Turnaround remains the default.
 
