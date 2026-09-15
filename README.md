@@ -1,18 +1,11 @@
 # Game Boy Advance for Analogue Pocket, with cheats
 
-A Pocket core for the Game Boy Advance that can apply cheat codes to a running
-game.
+Play Game Boy Advance ROMs and physical cartridges on the Pocket with
+cheats, named overlays and read-side ROM patches. Load `.cht` files directly
+or use packed `.chtbin` files. Cartridge timing profiles cover retail games
+and tested flash carts, including the EverDrive GBA Mini.
 
-**Based on [mincer-ray/openfpga-GBA](https://github.com/mincer-ray/openfpga-GBA)
-by mincer-ray**, which is a Pocket port of
-[GBA_MiSTer](https://github.com/MiSTer-devel/GBA_MiSTer). The GBA machine and
-Pocket framework come from those projects.
-
-The fork restores MiSTer's cheat engine and adds direct `.cht` loading,
-named cheat overlays, read-side ROM patches and physical cartridge support.
-The cartridge controller comes from [Wokann/openfpga-GBA](https://github.com/Wokann/openfpga-GBA),
-with Pocket launch plumbing informed by [Rai/openfpga-GBA](https://github.com/Rai/openfpga-GBA).
-See [docs/CHEATS.md](docs/CHEATS.md) and [docs/CARTRIDGE.md](docs/CARTRIDGE.md).
+See [cheats](docs/CHEATS.md) and [cartridge support](docs/CARTRIDGE.md).
 
 > **Cheats can corrupt save files.** A cheat is a write into the memory of a
 > running game, made once a frame, and a game builds its save data out of that
@@ -220,13 +213,13 @@ make test        # complete simulation suite
 Optional cheat-corpus checks need `CHT_DB=/path/to/cht`. Without it, both
 corpus passes report a skip; the fixture and integration suites still run.
 
-The tested `f2a86db` seed-3 build uses 16,080 of 18,480 ALMs (87 %) and
-278 RAM blocks. Worst setup is +0.092 ns and hold +0.121 ns; all timing
+The tested `cfbfa81` seed-1 build uses 15,996 of 18,480 ALMs (87 %) and
+278 RAM blocks. Worst setup is +0.075 ns and hold +0.101 ns; all timing
 categories pass. [docs/BASELINE.md](docs/BASELINE.md) carries the fit evidence.
 `tools/podman/report.sh` rejects negative slack even when Quartus exits zero.
 
-Releases use a signed `v0.9999.<built-commit>` tag on `main`, the tested
-package, `report.txt` and `SHA256SUMS`. CI verifies them and never synthesises
+Releases use a signed `v0.9999.YYYYMMDD` tag on `main`, the tested
+package, `BUILD.json`, `report.txt`, checksums and detached signatures. CI verifies them and never synthesises
 or replaces the bitstream. A later documentation commit does not change the
 source commit recorded for the tested package.
 
